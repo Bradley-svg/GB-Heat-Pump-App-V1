@@ -8,7 +8,7 @@
     "deploy": "wrangler deploy",
     "d1:create": "wrangler d1 create GREENBRO_DB",
     "d1:migrate": "wrangler d1 migrations apply GREENBRO_DB",
-    "d1:console": "wrangler d1 execute GREENBRO_DB --command \".tables\""
+    "d1:console": "wrangler d1 execute GREENBRO_DB --command \"SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY 1;\""
   },
   "dependencies": {
     "jose": "5.9.3"

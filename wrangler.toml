@@ -10,7 +10,7 @@ workers_dev = true
 binding = "DB"
 database_name = "GREENBRO_DB"
 # Replace with your real D1 database ID after `npm run d1:create`
-database_id = "<D1_DATABASE_ID>"
+database_id = "ee7ad98b-3629-4985-bd7d-a60c401953a7"
 
 [vars]
 # Non-secret app constants
