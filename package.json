@@ -1,0 +1,21 @@
+{
+  "name": "gb-heat-pump-app-v1",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "d1:init": "wrangler d1 execute GREENBRO_DB --file=./migrations/001_init.sql",
+    "format": "prettier -w ."
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241022.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3",
+    "wrangler": "^3.81.0"
+  },
+  "dependencies": {
+    "jose": "^5.3.0"
+  }
+}
