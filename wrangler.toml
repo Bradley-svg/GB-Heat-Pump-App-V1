@@ -1,0 +1,23 @@
+name = "gb-heat-pump-app-v1"
+main = "src/app.ts"
+compatibility_date = "2025-10-25"
+
+# Use workers.dev (no DNS needed)
+workers_dev = true
+
+# Bind D1
+[[d1_databases]]
+binding = "DB"
+database_name = "GREENBRO_DB"
+# Replace with your real D1 database ID after `npm run d1:create`
+database_id = "<D1_DATABASE_ID>"
+
+[vars]
+# Non-secret app constants
+APP_BASE_URL = "https://<YOUR_WORKER>.workers.dev"
+RETURN_DEFAULT = "https://www.greenbro.co.za/"
+TIMEZONE = "Africa/Johannesburg"
+
+# Store these as secrets (see commands below)
+# ACCESS_AUD        (string)
+# ACCESS_JWKS_URL   (string)
