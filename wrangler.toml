@@ -14,7 +14,7 @@ database_id = "ee7ad98b-3629-4985-bd7d-a60c401953a7"
 
 [vars]
 # Non-secret app constants
-APP_BASE_URL = "https://<YOUR_WORKER>.workers.dev"
+APP_BASE_URL = "https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev"
 RETURN_DEFAULT = "https://www.greenbro.co.za/"
 TIMEZONE = "Africa/Johannesburg"
 
