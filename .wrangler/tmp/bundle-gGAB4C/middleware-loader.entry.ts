@@ -3,12 +3,12 @@
 // export dynamically through wrangler, or we can potentially let users directly
 // add them as a sort of "plugin" system.
 
-import ENTRY, { __INTERNAL_WRANGLER_MIDDLEWARE__ } from "D:\\Work\\GREENBRO\\GB-Heat-Pump-App-V1\\.wrangler\\tmp\\bundle-sic2LT\\middleware-insertion-facade.js";
+import ENTRY, { __INTERNAL_WRANGLER_MIDDLEWARE__ } from "D:\\Work\\GREENBRO\\GB-Heat-Pump-App-V1\\.wrangler\\tmp\\bundle-gGAB4C\\middleware-insertion-facade.js";
 import { __facade_invoke__, __facade_register__, Dispatcher } from "D:\\Work\\GREENBRO\\GB-Heat-Pump-App-V1\\node_modules\\wrangler\\templates\\middleware\\common.ts";
-import type { WorkerEntrypointConstructor } from "D:\\Work\\GREENBRO\\GB-Heat-Pump-App-V1\\.wrangler\\tmp\\bundle-sic2LT\\middleware-insertion-facade.js";
+import type { WorkerEntrypointConstructor } from "D:\\Work\\GREENBRO\\GB-Heat-Pump-App-V1\\.wrangler\\tmp\\bundle-gGAB4C\\middleware-insertion-facade.js";
 
 // Preserve all the exports from the worker
-export * from "D:\\Work\\GREENBRO\\GB-Heat-Pump-App-V1\\.wrangler\\tmp\\bundle-sic2LT\\middleware-insertion-facade.js";
+export * from "D:\\Work\\GREENBRO\\GB-Heat-Pump-App-V1\\.wrangler\\tmp\\bundle-gGAB4C\\middleware-insertion-facade.js";
 
 class __Facade_ScheduledController__ implements ScheduledController {
 	readonly #noRetry: ScheduledController["noRetry"];
