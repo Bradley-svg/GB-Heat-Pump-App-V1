@@ -1373,30 +1373,6 @@ function createRemoteJWKSet(url, options) {
 }
 __name(createRemoteJWKSet, "createRemoteJWKSet");
 
-// src/rbac.ts
-function deriveUserFromClaims(claims) {
-  const email = claims.email || claims.sub || "unknown@unknown";
-  const raw = Array.isArray(claims.roles) ? claims.roles : Array.isArray(claims.groups) ? claims.groups : [];
-  const roles = /* @__PURE__ */ new Set();
-  for (const r of raw) {
-    const v = String(r).toLowerCase();
-    if (v.includes("admin")) roles.add("admin");
-    else if (v.includes("contractor")) roles.add("contractor");
-    else if (v.includes("client")) roles.add("client");
-  }
-  if (roles.size === 0) roles.add("client");
-  const clientIds = Array.isArray(claims.clientIds) ? claims.clientIds : [];
-  return { email, roles: Array.from(roles), clientIds };
-}
-__name(deriveUserFromClaims, "deriveUserFromClaims");
-function landingFor(user) {
-  if (user.roles.includes("admin")) return "/app/overview";
-  if (user.roles.includes("client")) return "/app/compact";
-  if (user.roles.includes("contractor")) return "/app/devices";
-  return "/app/unauthorized";
-}
-__name(landingFor, "landingFor");
-
 // src/app.ts
 var JSON_CT = "application/json;charset=utf-8";
 var HTML_CT = "text/html;charset=utf-8";
@@ -1454,26 +1430,50 @@ function nowISO() {
   return (/* @__PURE__ */ new Date()).toISOString();
 }
 __name(nowISO, "nowISO");
+function maskId(id) {
+  if (!id) return "";
+  if (id.length <= 4) return "****";
+  return id.slice(0, 3) + "\u2026" + id.slice(-2);
+}
+__name(maskId, "maskId");
+function deriveUserFromClaims(claims) {
+  const email = claims.email || claims.sub || "unknown@unknown";
+  const raw = Array.isArray(claims.roles) ? claims.roles : Array.isArray(claims.groups) ? claims.groups : [];
+  const roles = /* @__PURE__ */ new Set();
+  for (const r of raw) {
+    const v = String(r).toLowerCase();
+    if (v.includes("admin")) roles.add("admin");
+    else if (v.includes("contractor")) roles.add("contractor");
+    else if (v.includes("client")) roles.add("client");
+  }
+  if (roles.size === 0) roles.add("client");
+  const clientIds = Array.isArray(claims.clientIds) ? claims.clientIds : [];
+  return { email, roles: Array.from(roles), clientIds };
+}
+__name(deriveUserFromClaims, "deriveUserFromClaims");
+function landingFor(user) {
+  if (user.roles.includes("admin")) return "/app/overview";
+  if (user.roles.includes("client")) return "/app/compact";
+  if (user.roles.includes("contractor")) return "/app/devices";
+  return "/app/unauthorized";
+}
+__name(landingFor, "landingFor");
 var jwksCache2 = /* @__PURE__ */ new Map();
 function getJwks(env) {
-  if (!jwksCache2.has(env.ACCESS_JWKS_URL)) {
-    jwksCache2.set(
-      env.ACCESS_JWKS_URL,
-      createRemoteJWKSet(new URL(env.ACCESS_JWKS_URL))
-    );
+  const url = env.ACCESS_JWKS_URL;
+  if (!jwksCache2.has(url)) {
+    jwksCache2.set(url, createRemoteJWKSet(new URL(url)));
   }
-  return jwksCache2.get(env.ACCESS_JWKS_URL);
+  return jwksCache2.get(url);
 }
 __name(getJwks, "getJwks");
 async function requireAccessUser(req, env) {
   const jwt = req.headers.get("Cf-Access-Jwt-Assertion");
   if (!jwt) return null;
   try {
-    const { payload } = await jwtVerify(jwt, getJwks(env), {
-      audience: env.ACCESS_AUD
-    });
+    const { payload } = await jwtVerify(jwt, getJwks(env), { audience: env.ACCESS_AUD });
     return deriveUserFromClaims(payload);
-  } catch (_e) {
+  } catch {
     return null;
   }
 }
@@ -1506,19 +1506,20 @@ async function handleMe(req, env) {
   return json(user);
 }
 __name(handleMe, "handleMe");
-async function handleLatest(_req, env, deviceId) {
+async function handleLatest(req, env, deviceId) {
+  const user = await requireAccessUser(req, env);
+  if (!user) return json({ error: "Unauthorized" }, { status: 401 });
   const row = await env.DB.prepare(
     `SELECT * FROM latest_state WHERE device_id = ?1`
   ).bind(deviceId).first();
   if (!row) return json({ error: "Not found" }, { status: 404 });
-  return json({ device_id: deviceId, latest: row });
+  const maskedDeviceId = user.roles.includes("admin") ? deviceId : maskId(deviceId);
+  return json({ device_id: maskedDeviceId, latest: row });
 }
 __name(handleLatest, "handleLatest");
 async function verifyDeviceKey(env, deviceId, keyHeader) {
   if (!keyHeader) return false;
-  const row = await env.DB.prepare(
-    `SELECT device_key_hash FROM devices WHERE device_id = ?1`
-  ).bind(deviceId).first();
+  const row = await env.DB.prepare(`SELECT device_key_hash FROM devices WHERE device_id = ?1`).bind(deviceId).first();
   if (!row || !row.device_key_hash) return false;
   const hash = await sha256Hex(keyHeader);
   return hash.toLowerCase() === String(row.device_key_hash).toLowerCase();
@@ -1529,20 +1530,16 @@ async function handleIngest(req, env, profileId) {
   let body;
   try {
     body = await req.json();
+    if (JSON.stringify(body).length > 256e3) {
+      return json({ error: "Payload too large" }, { status: 413 });
+    }
   } catch {
     return json({ error: "Invalid JSON" }, { status: 400 });
-  }
-  if (JSON.stringify(body).length > 256e3) {
-    return json({ error: "Payload too large" }, { status: 413 });
   }
   if (!body?.device_id || !body?.ts || !body?.metrics) {
     return json({ error: "Missing required fields" }, { status: 400 });
   }
-  const ok = await verifyDeviceKey(
-    env,
-    body.device_id,
-    req.headers.get("X-GREENBRO-DEVICE-KEY")
-  );
+  const ok = await verifyDeviceKey(env, body.device_id, req.headers.get("X-GREENBRO-DEVICE-KEY"));
   if (!ok) return json({ error: "Unauthorized" }, { status: 401 });
   const supply = body.metrics.supplyC ?? null;
   const ret = body.metrics.returnC ?? null;
@@ -1633,10 +1630,7 @@ async function handleIngest(req, env, profileId) {
     await env.DB.prepare(
       `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id) VALUES (?1, ?2, ?3, ?4, ?5)`
     ).bind(nowISO(), "/api/ingest", 500, dur, body.device_id).run();
-    return json(
-      { error: "DB error", detail: String(e?.message || e) },
-      { status: 500 }
-    );
+    return json({ error: "DB error", detail: String(e?.message || e) }, { status: 500 });
   }
 }
 __name(handleIngest, "handleIngest");
@@ -1647,12 +1641,10 @@ async function handleHeartbeat(req, env, profileId) {
   } catch {
     return json({ error: "Invalid JSON" }, { status: 400 });
   }
-  if (!body?.device_id || !body?.ts) return json({ error: "Missing fields" }, { status: 400 });
-  const ok = await verifyDeviceKey(
-    env,
-    body.device_id,
-    req.headers.get("X-GREENBRO-DEVICE-KEY")
-  );
+  if (!body?.device_id || !body?.ts) {
+    return json({ error: "Missing fields" }, { status: 400 });
+  }
+  const ok = await verifyDeviceKey(env, body.device_id, req.headers.get("X-GREENBRO-DEVICE-KEY"));
   if (!ok) return json({ error: "Unauthorized" }, { status: 401 });
   await env.DB.batch([
     env.DB.prepare(
@@ -1668,7 +1660,192 @@ async function handleHeartbeat(req, env, profileId) {
 }
 __name(handleHeartbeat, "handleHeartbeat");
 function appHtml(env, returnUrlParam) {
-  return `<!doctype html>...`;
+  const returnLink = returnUrlParam || env.RETURN_DEFAULT;
+  const css = `
+  :root { color-scheme: dark; --bg:#0b0f10; --card:#11181a; --muted:#6b7f7a; --fg:#e9ffef; --brand:#52ff99; --warn:#ffcc66; --err:#ff7a7a; --ok:#7dffa1; }
+  *{box-sizing:border-box} html,body,#root{height:100%} body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial}
+  a{color:var(--brand);text-decoration:none}
+  .nav{display:flex;gap:.75rem;align-items:center;padding:.75rem 1rem;border-bottom:1px solid #17322a;background:#0d1415;position:sticky;top:0}
+  .nav .brand{display:flex;align-items:center;gap:.5rem;font-weight:600}
+  .tag{padding:.1rem .4rem;border-radius:.4rem;background:#143c2c;color:#72ffb6}
+  .sp{flex:1}
+  .btn{background:#123026;border:1px solid #1d4a39;color:var(--fg);padding:.5rem .75rem;border-radius:.6rem;cursor:pointer}
+  .btn:hover{background:#173a2e}
+  .wrap{max-width:1100px;margin:0 auto;padding:1rem}
+  .grid{display:grid;gap:1rem}
+  .kpis{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+  .card{background:var(--card);border:1px solid #15352a;border-radius:1rem;padding:1rem}
+  .muted{color:var(--muted)}
+  .hero{font-size:28px}
+  input,select{background:#0e1516;border:1px solid #193c30;color:var(--fg);border-radius:.5rem;padding:.5rem .6rem}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:.4rem .5rem;border-bottom:1px solid #183328}
+  .badge{border:1px solid #2b5a49;border-radius:.4rem;padding:.1rem .35rem}
+  `;
+  const js = `
+  const e=React.createElement;
+  const root=ReactDOM.createRoot(document.getElementById('root'));
+  const api=path=>fetch(path,{headers:{}}).then(r=>r.ok?r.json():Promise.reject(r));
+  const qs=new URLSearchParams(location.search);
+  const RETURN_URL = qs.get('return') || ${JSON.stringify(returnLink)};
+
+  function useMe(){
+    const [me,setMe]=React.useState(null);
+    const [err,setErr]=React.useState(null);
+    React.useEffect(()=>{ api('/api/me').then(setMe).catch(()=>setErr(true)); },[]);
+    return {me,err};
+  }
+
+  function TopNav({me}){
+    return e('div',{className:'nav'},
+      e('div',{className:'brand'}, e('img',{src:'/assets/GREENBRO LOGO APP.svg',height:24}), 'GreenBro Dashboard'),
+      e('span',{className:'tag'}, me? me.roles.join(', ') : 'guest'),
+      e('div',{className:'sp'}),
+      e('a',{href:'/app/logout?return='+encodeURIComponent(RETURN_URL), className:'btn'}, 'Logout')
+    );
+  }
+
+  function Page({title,children}) {
+    return e('div',null,
+      e('div',{className:'wrap'},
+        e('h2',null,title),
+        children
+      )
+    );
+  }
+
+  function OverviewPage(){
+    return e(Page,{title:'Overview (Fleet)'},
+      e('div',{className:'grid kpis'},
+        e('div',{className:'card'}, e('div',{className:'muted'},'Online %'), e('div',{className:'hero'},'\u2014')),
+        e('div',{className:'card'}, e('div',{className:'muted'},'Open Alerts'), e('div',{className:'hero'},'\u2014')),
+        e('div',{className:'card'}, e('div',{className:'muted'},'Avg COP (24h)'), e('div',{className:'hero'},'\u2014')),
+        e('div',{className:'card'}, e('div',{className:'muted'},'Low-\u0394T Count'), e('div',{className:'hero'},'\u2014')),
+        e('div',{className:'card'}, e('div',{className:'muted'},'Heartbeat Freshness'), e('div',{className:'hero'},'\u2014'))
+      ),
+      e('div',{className:'card',style:{marginTop:'1rem'}}, e('b',null,'Regions'), e('div',null,'Gauteng \u2022 KZN \u2022 Western Cape (filters devices link)'))
+    );
+  }
+
+  function CompactDashboardPage(){
+    return e(Page,{title:'My Sites \u2014 Compact'}, 
+      e('div',{className:'grid kpis'},
+        e('div',{className:'card'}, e('div',{className:'muted'},'Online %'), e('div',{className:'hero'},'\u2014')),
+        e('div',{className:'card'}, e('div',{className:'muted'},'Open Alerts'), e('div',{className:'hero'},'\u2014')),
+        e('div',{className:'card'}, e('div',{className:'muted'},'Avg COP (24h)'), e('div',{className:'hero'},'\u2014')),
+        e('div',{className:'card'}, e('div',{className:'muted'},'Low-\u0394T'), e('div',{className:'hero'},'\u2014'))
+      ),
+      e('div',{className:'card',style:{marginTop:'1rem'}}, e('b',null,'Recent alerts'), e('div',null,'(placeholder)'))
+    );
+  }
+
+  function DevicesPage(){
+    const [id,setId]=React.useState('GB-HP-001234');
+    const [data,setData]=React.useState(null);
+    const [err,setErr]=React.useState(null);
+    const fetchLatest=()=>api('/api/devices/'+encodeURIComponent(id)+'/latest').then(setData).catch(()=>setErr(true));
+    return e(Page,{title:'Devices'},
+      e('div',{className:'card'},
+        e('div',null,
+          e('label',null,'Device ID '),
+          e('input',{value:id,onChange:e=>setId(e.target.value),style:{marginRight:8}}),
+          e('button',{className:'btn',onClick:fetchLatest},'Open')
+        ),
+        data && e('div',{style:{marginTop:'1rem'}},
+          e('div',null, e('b',null,'Device: '), data.device_id),
+          e('pre',null, JSON.stringify(data.latest,null,2))
+        ),
+        err && e('div',{style:{color:"var(--err)"}},'Error loading device')
+      )
+    );
+  }
+
+  function DeviceDetailPage(){
+    const [id,setId]=React.useState('GB-HP-001234');
+    const [d,setD]=React.useState(null);
+    const load=()=>api('/api/devices/'+encodeURIComponent(id)+'/latest').then(setD).catch(()=>setD(null));
+    React.useEffect(load,[]);
+    const v=(k)=> d?.latest?.[k] ?? '\u2014';
+    return e(Page,{title:'Device Detail'},
+      e('div',{className:'card'},
+        e('div',null, e('label',null,'Device ID '), e('input',{value:id,onChange:e=>setId(e.target.value)}), e('button',{className:'btn',onClick:load,style:{marginLeft:8}},'Load')),
+        e('div',{className:'grid',style:{gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',marginTop:'1rem'}},
+          ['supplyC','returnC','deltaT','tankC','ambientC','flowLps','compCurrentA','eevSteps','powerKW','thermalKW','cop','mode','defrost','online'].map(k =>
+            e('div',{key:k,className:'card'}, e('div',{className:'muted'},k), e('div',{className:'hero'}, String(v(k))))
+          )
+        ),
+        e('div',{className:'muted',style:{marginTop:'1rem'}},'Charts & alerts placeholders')
+      )
+    );
+  }
+
+  function AlertsPage(){ return e(Page,{title:'Alerts'}, e('div',{className:'card'},'(placeholder queues)')); }
+  function CommissioningPage(){ return e(Page,{title:'Commissioning & QA'}, e('div',{className:'card'},'(checklist placeholder, Generate Report later)')); }
+  function AdminPage(){ return e(Page,{title:'Admin'}, e('div',{className:'card'},'Users, roles, MFA coverage (placeholder)')); }
+  function AdminArchivePage(){ return e(Page,{title:'Admin Archive'}, e('div',{className:'card'},'(placeholder)')); }
+
+  function UnauthorizedPage(){
+    return e('div',null,
+      e('div',{className:'wrap'},
+        e('div',{className:'card'}, e('h2',null,'Access required'),
+          e('p',null,'Please sign in to continue.'),
+          e('a',{className:'btn',href:'/cdn-cgi/access/login?redirect_url='+encodeURIComponent('/app')},'Sign in'),
+          e('div',{style:{marginTop:'1rem'}}, e('a',{href: RETURN_URL},'Back to GreenBro'))
+        )
+      )
+    );
+  }
+
+  function App(){
+    const {me,err} = useMe();
+
+    if (err) return e(UnauthorizedPage);
+    if (!me) return e('div',null,e('div',{className:'wrap'}, e('div',{className:'card'}, 'Loading\u2026')));
+
+    const path = location.pathname.replace(/^\\/app\\/?/,'') || '';
+    const page = path.split('/')[0];
+
+    if (path==='' || path==='index.html'){
+      const landing = (me.roles||[]).includes('admin') ? '/app/overview'
+        : (me.roles||[]).includes('client') ? '/app/compact'
+        : '/app/devices';
+      if (location.pathname !== landing) { history.replaceState(null,'',landing); }
+    }
+
+    const content =
+      page==='overview' ? e(OverviewPage)
+      : page==='compact' ? e(CompactDashboardPage)
+      : page==='devices' ? e(DevicesPage)
+      : page==='device' ? e(DeviceDetailPage)
+      : page==='alerts' ? e(AlertsPage)
+      : page==='commissioning' ? e(CommissioningPage)
+      : page==='admin' ? e(AdminPage)
+      : page==='admin-archive' ? e(AdminArchivePage)
+      : e(OverviewPage);
+
+    return e('div',null,
+      e(TopNav,{me}),
+      content
+    );
+  }
+
+  root.render(e(App));
+  `;
+  return `<!doctype html>
+<html lang="en-ZA">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GreenBro \u2014 Heat Pump Dashboard</title>
+  <style>${css}</style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"><\/script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"><\/script>
+  <script>${js}<\/script>
+</body>
+</html>`;
 }
 __name(appHtml, "appHtml");
 var app_default = {
@@ -1676,16 +1853,14 @@ var app_default = {
     const url = new URL(req.url);
     const path = url.pathname;
     if (path === "/") {
-      const dest = new URL("/app", req.url).toString();
-      return Response.redirect(dest, 302);
+      return Response.redirect(new URL("/app", req.url).toString(), 302);
     }
-    if (path === "/favicon.ico")
+    if (path === "/favicon.ico") {
       return withSecurityHeaders(new Response("", { status: 204 }));
+    }
     if (path === "/sw-brand.js") {
       return withSecurityHeaders(
-        new Response("// stub\n", {
-          headers: { "content-type": "application/javascript" }
-        })
+        new Response("// stub\n", { headers: { "content-type": "application/javascript" } })
       );
     }
     if (req.method === "OPTIONS") {
@@ -1704,9 +1879,7 @@ var app_default = {
       const name = decodeURIComponent(path.replace("/assets/", ""));
       const a = ASSETS[name];
       if (!a) return text("Not found", { status: 404 });
-      return withSecurityHeaders(
-        new Response(a.body, { headers: { "content-type": a.ct } })
-      );
+      return withSecurityHeaders(new Response(a.body, { headers: { "content-type": a.ct } }));
     }
     if (path === "/health") return handleHealth();
     if (path === "/app" || path === "/app/") {
@@ -1722,9 +1895,8 @@ var app_default = {
     }
     if (path === "/app/logout") {
       const ret = url.searchParams.get("return") || env.RETURN_DEFAULT;
-      const logoutRelative = `/cdn-cgi/access/logout?return=${encodeURIComponent(ret)}`;
-      const logoutAbs = new URL(logoutRelative, req.url).toString();
-      return Response.redirect(logoutAbs, 302);
+      const logoutUrl = `/cdn-cgi/access/logout?return=${encodeURIComponent(ret)}`;
+      return Response.redirect(logoutUrl, 302);
     }
     if (path.startsWith("/app/")) {
       const user = await requireAccessUser(req, env);
@@ -1756,6 +1928,7 @@ var app_default = {
     }
     return json({ error: "Not found" }, { status: 404 });
   },
+  // Cron hooks (placeholders for later ops)
   async scheduled(_event, _env, _ctx) {
   }
 };
