@@ -1853,7 +1853,7 @@ var app_default = {
     const url = new URL(req.url);
     const path = url.pathname;
     if (path === "/") {
-      return Response.redirect(new URL("/app", req.url).toString(), 302);
+      return Response.redirect(url.origin + "/app", 302);
     }
     if (path === "/favicon.ico") {
       return withSecurityHeaders(new Response("", { status: 204 }));
@@ -1895,7 +1895,10 @@ var app_default = {
     }
     if (path === "/app/logout") {
       const ret = url.searchParams.get("return") || env.RETURN_DEFAULT;
-      const logoutUrl = `/cdn-cgi/access/logout?return=${encodeURIComponent(ret)}`;
+      const logoutUrl = new URL(
+        `/cdn-cgi/access/logout?return=${encodeURIComponent(ret)}`,
+        url
+      ).toString();
       return Response.redirect(logoutUrl, 302);
     }
     if (path.startsWith("/app/")) {

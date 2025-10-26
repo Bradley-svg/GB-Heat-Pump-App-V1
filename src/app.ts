@@ -4,6 +4,7 @@
 //  - handleIngest now uses req.json<TelemetryBody>()
 //  - OPTIONS preflight allows x-greenbro-device-key
 //  - Root "/" redirect uses absolute URL to avoid preview parser error
+//  - Logout redirect made absolute as well
 
 import { createRemoteJWKSet, jwtVerify, JWTPayload } from "jose";
 
@@ -230,11 +231,10 @@ async function verifyDeviceKey(env: Env, deviceId: string, keyHeader: string | n
 async function handleIngest(req: Request, env: Env, profileId: string) {
   const t0 = Date.now();
 
-  // PATCH A: Use req.json<TelemetryBody>() (BOM-safe + faster) + optional size guard.
+  // Use req.json<TelemetryBody>() (BOM-safe + faster) + optional size guard.
   let body: TelemetryBody;
   try {
     body = await req.json<TelemetryBody>();
-    // Optional: size guard (json() already parsed). Reject if body is too large serialized.
     if (JSON.stringify(body).length > 256_000) {
       return json({ error: "Payload too large" }, { status: 413 });
     }
@@ -586,7 +586,7 @@ export default {
 
     // Absolute redirect to avoid "Unable to parse URL: /app" in preview.
     if (path === "/") {
-      return Response.redirect(new URL("/app", req.url).toString(), 302);
+      return Response.redirect(url.origin + "/app", 302);
     }
 
     if (path === "/favicon.ico") {
@@ -599,7 +599,7 @@ export default {
       );
     }
 
-    // PATCH B: OPTIONS preflight allows custom device header
+    // OPTIONS preflight allows custom device header
     if (req.method === "OPTIONS") {
       return withSecurityHeaders(
         new Response("", {
@@ -638,9 +638,13 @@ export default {
       return Response.redirect(env.APP_BASE_URL + landingFor(user), 302);
     }
 
+    // Logout route – make absolute too
     if (path === "/app/logout") {
       const ret = url.searchParams.get("return") || env.RETURN_DEFAULT;
-      const logoutUrl = `/cdn-cgi/access/logout?return=${encodeURIComponent(ret)}`;
+      const logoutUrl = new URL(
+        `/cdn-cgi/access/logout?return=${encodeURIComponent(ret)}`,
+        url,
+      ).toString();
       return Response.redirect(logoutUrl, 302);
     }
 
