@@ -27,11 +27,11 @@ function text(s: string, init: ResponseInit = {}) {
 function withSecurityHeaders(res: Response) {
   const csp = [
     "default-src 'self'",
-    // React UMD from unpkg; you can swap to jsDelivr if preferred.
-    "script-src 'self' https://unpkg.com",
+    // React UMD from unpkg
+    "script-src 'self' https://unpkg.com 'unsafe-inline'", // allow inline SPA script
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
-    `connect-src 'self'`,
+    "connect-src 'self'",
     "font-src 'self' data:",
     "object-src 'none'",
     "base-uri 'self'",
@@ -167,8 +167,8 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
   const flow = body.metrics.flowLps ?? 0;
   const rho = 0.997;      // kg/L at 20°C
   const cp = 4.186;       // kJ/kg·°C
-  // flow (L/s) * rho (kg/L) * cp (kJ/kg°C) * ΔT (°C) / 1000 = kW_th
-  const thermalKW = (deltaT !== null) ? round(rho * cp * flow * deltaT / 1000, 2) : null;
+  // flow (L/s) * rho (kg/L) * cp (kJ/kg°C) * ΔT (°C) = kW_th
+  const thermalKW = (deltaT !== null) ? round(rho * cp * flow * deltaT, 2) : null; // <-- fixed units
   let cop: number | null = null;
   let cop_quality: "measured" | "estimated" | null = null;
 
@@ -475,6 +475,25 @@ export default {
     const url = new URL(req.url);
     const path = url.pathname;
 
+    // Convenience + noise suppression (dev)
+    if (path === "/") return Response.redirect("/app", 302);
+    if (path === "/favicon.ico") return withSecurityHeaders(new Response("", { status: 204 }));
+    if (path === "/sw-brand.js") {
+      return withSecurityHeaders(new Response("// stub\n", { headers: { "content-type": "application/javascript" } }));
+    }
+
+    // Lightweight CORS/preflight support (future-friendly)
+    if (req.method === "OPTIONS") {
+      return withSecurityHeaders(new Response("", {
+        status: 204,
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET,POST,OPTIONS",
+          "access-control-allow-headers": "content-type,cf-access-jwt-assertion"
+        }
+      }));
+    }
+
     // Assets
     if (path.startsWith("/assets/")) {
       const name = decodeURIComponent(path.replace("/assets/", ""));
@@ -489,7 +508,9 @@ export default {
     // Public SPA gate (shows login card if not signed in)
     if (path === "/app" || path === "/app/") {
       const user = await requireAccessUser(req, env);
-      if (!user) return withSecurityHeaders(new Response(appHtml(env, new URL(req.url).searchParams.get("return")), { headers: { "content-type": HTML_CT } }));
+      if (!user) {
+        return withSecurityHeaders(new Response(appHtml(env, new URL(req.url).searchParams.get("return")), { headers: { "content-type": HTML_CT } }));
+      }
       // server-side landing redirect
       return Response.redirect(env.APP_BASE_URL + landingFor(user), 302);
     }
@@ -504,7 +525,9 @@ export default {
     // Any /app/* path serves SPA (client routing)
     if (path.startsWith("/app/")) {
       const user = await requireAccessUser(req, env);
-      if (!user) return withSecurityHeaders(new Response(appHtml(env, new URL(req.url).searchParams.get("return")), { headers: { "content-type": HTML_CT } }));
+      if (!user) {
+        return withSecurityHeaders(new Response(appHtml(env, new URL(req.url).searchParams.get("return")), { headers: { "content-type": HTML_CT } }));
+      }
       return withSecurityHeaders(new Response(appHtml(env, new URL(req.url).searchParams.get("return")), { headers: { "content-type": HTML_CT } }));
     }
 

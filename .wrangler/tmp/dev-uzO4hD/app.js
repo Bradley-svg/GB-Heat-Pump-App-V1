@@ -1412,11 +1412,12 @@ __name(text, "text");
 function withSecurityHeaders(res) {
   const csp = [
     "default-src 'self'",
-    // React UMD from unpkg; you can swap to jsDelivr if preferred.
-    "script-src 'self' https://unpkg.com",
+    // React UMD from unpkg
+    "script-src 'self' https://unpkg.com 'unsafe-inline'",
+    // allow inline SPA script
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
-    `connect-src 'self'`,
+    "connect-src 'self'",
     "font-src 'self' data:",
     "object-src 'none'",
     "base-uri 'self'",
@@ -1539,7 +1540,7 @@ async function handleIngest(req, env, profileId) {
   const flow = body.metrics.flowLps ?? 0;
   const rho = 0.997;
   const cp = 4.186;
-  const thermalKW = deltaT !== null ? round(rho * cp * flow * deltaT / 1e3, 2) : null;
+  const thermalKW = deltaT !== null ? round(rho * cp * flow * deltaT, 2) : null;
   let cop = null;
   let cop_quality = null;
   if (typeof body.metrics.powerKW === "number" && body.metrics.powerKW > 0.05 && thermalKW !== null) {
@@ -1843,6 +1844,21 @@ var app_default = {
   async fetch(req, env) {
     const url = new URL(req.url);
     const path = url.pathname;
+    if (path === "/") return Response.redirect("/app", 302);
+    if (path === "/favicon.ico") return withSecurityHeaders(new Response("", { status: 204 }));
+    if (path === "/sw-brand.js") {
+      return withSecurityHeaders(new Response("// stub\n", { headers: { "content-type": "application/javascript" } }));
+    }
+    if (req.method === "OPTIONS") {
+      return withSecurityHeaders(new Response("", {
+        status: 204,
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET,POST,OPTIONS",
+          "access-control-allow-headers": "content-type,cf-access-jwt-assertion"
+        }
+      }));
+    }
     if (path.startsWith("/assets/")) {
       const name = decodeURIComponent(path.replace("/assets/", ""));
       const a = ASSETS[name];
@@ -1852,7 +1868,9 @@ var app_default = {
     if (path === "/health") return handleHealth();
     if (path === "/app" || path === "/app/") {
       const user = await requireAccessUser(req, env);
-      if (!user) return withSecurityHeaders(new Response(appHtml(env, new URL(req.url).searchParams.get("return")), { headers: { "content-type": HTML_CT } }));
+      if (!user) {
+        return withSecurityHeaders(new Response(appHtml(env, new URL(req.url).searchParams.get("return")), { headers: { "content-type": HTML_CT } }));
+      }
       return Response.redirect(env.APP_BASE_URL + landingFor(user), 302);
     }
     if (path === "/app/logout") {
@@ -1862,7 +1880,9 @@ var app_default = {
     }
     if (path.startsWith("/app/")) {
       const user = await requireAccessUser(req, env);
-      if (!user) return withSecurityHeaders(new Response(appHtml(env, new URL(req.url).searchParams.get("return")), { headers: { "content-type": HTML_CT } }));
+      if (!user) {
+        return withSecurityHeaders(new Response(appHtml(env, new URL(req.url).searchParams.get("return")), { headers: { "content-type": HTML_CT } }));
+      }
       return withSecurityHeaders(new Response(appHtml(env, new URL(req.url).searchParams.get("return")), { headers: { "content-type": HTML_CT } }));
     }
     if (path === "/api/me" && req.method === "GET") return handleMe(req, env);
