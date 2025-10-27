@@ -6,17 +6,11 @@
 //  - Root "/" redirect uses absolute URL to avoid preview parser error
 //  - Logout redirect made absolute as well
 
-import { createRemoteJWKSet, jwtVerify, JWTPayload } from "jose";
+import { createRemoteJWKSet, jwtVerify } from "jose";
+import { deriveUserFromClaims, landingFor } from "./rbac";
+import type { AccessUser } from "./types";
 
 // ---- Types ------------------------------------------------------------------
-
-type Role = "admin" | "contractor" | "client";
-
-interface User {
-  email: string;
-  roles: Role[];
-  clientIds: string[];
-}
 
 interface TelemetryMetrics {
   supplyC?: number | null;
@@ -116,35 +110,6 @@ function maskId(id: string | null | undefined) {
 
 // ---- RBAC helpers ------------------------------------------------------------
 
-function deriveUserFromClaims(claims: JWTPayload): User {
-  const email = (claims as any).email || claims.sub || "unknown@unknown";
-
-  const raw = Array.isArray((claims as any).roles)
-    ? (claims as any).roles
-    : Array.isArray((claims as any).groups)
-    ? (claims as any).groups
-    : [];
-
-  const roles = new Set<Role>();
-  for (const r of raw) {
-    const v = String(r).toLowerCase();
-    if (v.includes("admin")) roles.add("admin");
-    else if (v.includes("contractor")) roles.add("contractor");
-    else if (v.includes("client")) roles.add("client");
-  }
-  if (roles.size === 0) roles.add("client");
-
-  const clientIds = Array.isArray((claims as any).clientIds) ? (claims as any).clientIds : [];
-  return { email, roles: Array.from(roles), clientIds };
-}
-
-function landingFor(user: User) {
-  if (user.roles.includes("admin")) return "/app/overview";
-  if (user.roles.includes("client")) return "/app/compact";
-  if (user.roles.includes("contractor")) return "/app/devices";
-  return "/app/unauthorized";
-}
-
 // ---- Access (Zero Trust) -----------------------------------------------------
 
 const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
@@ -156,7 +121,7 @@ function getJwks(env: Env) {
   return jwksCache.get(url)!;
 }
 
-async function requireAccessUser(req: Request, env: Env): Promise<User | null> {
+async function requireAccessUser(req: Request, env: Env): Promise<AccessUser | null> {
   const jwt = req.headers.get("Cf-Access-Jwt-Assertion");
   if (!jwt) return null;
   try {
@@ -205,13 +170,30 @@ async function handleLatest(req: Request, env: Env, deviceId: string) {
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
 
   const row = await env.DB.prepare(
-    `SELECT * FROM latest_state WHERE device_id = ?1`
-  ).bind(deviceId).first();
+    `SELECT ls.*, d.profile_id as device_profile_id, d.site_id as device_site_id
+       FROM latest_state ls
+       LEFT JOIN devices d ON ls.device_id = d.device_id
+      WHERE ls.device_id = ?1`
+  ).bind(deviceId).first<Record<string, unknown>>();
 
   if (!row) return json({ error: "Not found" }, { status: 404 });
 
+  if (!user.roles.includes("admin")) {
+    const allowed = new Set(user.clientIds.map(id => id.toLowerCase()));
+    const matchesAllowed = (value: unknown) =>
+      typeof value === "string" && allowed.has(value.toLowerCase());
+
+    if (
+      allowed.size === 0 ||
+      (!matchesAllowed(row.device_profile_id) && !matchesAllowed(row.device_site_id))
+    ) {
+      return json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
+
+  const { device_profile_id: _profileId, device_site_id: _siteId, ...latest } = row;
   const maskedDeviceId = user.roles.includes("admin") ? deviceId : maskId(deviceId);
-  return json({ device_id: maskedDeviceId, latest: row });
+  return json({ device_id: maskedDeviceId, latest });
 }
 
 async function verifyDeviceKey(env: Env, deviceId: string, keyHeader: string | null) {
@@ -270,6 +252,16 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
   }
 
   const tsMs = Date.parse(body.ts);
+  if (!Number.isFinite(tsMs)) {
+    return json({ error: "Invalid timestamp" }, { status: 400 });
+  }
+
+  const nowMs = Date.now();
+  const maxFutureSkewMs = 5 * 60 * 1000; // 5 minutes
+  const maxLookbackMs = 365 * 24 * 60 * 60 * 1000; // 1 year
+  if (tsMs > nowMs + maxFutureSkewMs || tsMs < nowMs - maxLookbackMs) {
+    return json({ error: "Timestamp out of range" }, { status: 400 });
+  }
 
   const faults_json = JSON.stringify(body.faults || []);
   const status_json = JSON.stringify({
