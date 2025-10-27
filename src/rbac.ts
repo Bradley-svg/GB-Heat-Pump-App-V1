@@ -1,26 +1,49 @@
+// src/rbac.ts
+import type { JWTPayload } from "jose";
 import type { AccessUser } from "./types";
 
-// Simple role derivation + landings.
-// Map roles from Access JWT claims: prefer `roles`, fallback to `groups`, else default to ["client"].
-export function deriveUserFromClaims(claims: any): AccessUser {
-  const email: string = claims.email || claims.sub || "unknown@unknown";
-  const raw: string[] = Array.isArray(claims.roles)
-    ? claims.roles
-    : Array.isArray(claims.groups)
-    ? claims.groups
+/**
+ * Canonical RBAC helpers.
+ * - roles from roles[] or groups[]
+ * - clientIds from explicit clientIds[] OR groups like "client:<id>"
+ */
+export function deriveUserFromClaims(claims: JWTPayload): AccessUser {
+  const email = (claims as any).email || claims.sub || "unknown@unknown";
+
+  // Normalize potential role/group arrays to string[]
+  const rawRolesArr: unknown[] = Array.isArray((claims as any).roles)
+    ? (claims as any).roles
+    : Array.isArray((claims as any).groups)
+    ? (claims as any).groups
     : [];
+  const rawRoles: string[] = rawRolesArr.map((r) => String(r));
 
   const roles = new Set<AccessUser["roles"][number]>();
-  for (const r of raw) {
-    const v = String(r).toLowerCase();
+  for (const r of rawRoles) {
+    const v = r.toLowerCase();
     if (v.includes("admin")) roles.add("admin");
     else if (v.includes("contractor")) roles.add("contractor");
     else if (v.includes("client")) roles.add("client");
   }
   if (roles.size === 0) roles.add("client");
 
-  // Optional client scoping via claim `clientIds`
-  const clientIds: string[] = Array.isArray(claims.clientIds) ? claims.clientIds : [];
+  // ---- clientIds
+  const groupsUnknown: unknown[] = Array.isArray((claims as any).groups)
+    ? (claims as any).groups
+    : [];
+  const groups: string[] = groupsUnknown.map((g) => String(g));
+
+  // Explicitly type the callback params to avoid implicit 'any'
+  const fromGroups: string[] = groups
+    .filter((g: string) => g.startsWith("client:"))
+    .map((g: string) => g.slice("client:".length));
+
+  const claimIdsUnknown: unknown[] = Array.isArray((claims as any).clientIds)
+    ? (claims as any).clientIds
+    : [];
+  const fromClaim: string[] = claimIdsUnknown.map((id) => String(id));
+
+  const clientIds = Array.from(new Set<string>([...fromGroups, ...fromClaim]));
 
   return { email, roles: Array.from(roles), clientIds };
 }

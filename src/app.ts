@@ -1,14 +1,13 @@
 // app.ts
 // Cloudflare Worker (TypeScript) — GreenBro Heat Pump Dashboard API + SPA host
-// Patches included:
-//  - handleIngest now uses req.json<TelemetryBody>()
-//  - OPTIONS preflight allows x-greenbro-device-key
-//  - Root "/" redirect uses absolute URL to avoid preview parser error
-//  - Logout redirect made absolute as well
+// Security/tenancy patches included:
+//  - shared RBAC import (no duplication)
+//  - tenant-scoped handleLatest
+//  - timestamp validation in ingest/heartbeat (+ "stale" flag)
 
-import { createRemoteJWKSet, jwtVerify } from "jose";
-import { deriveUserFromClaims, landingFor } from "./rbac";
+import { createRemoteJWKSet, jwtVerify, JWTPayload } from "jose";
 import type { AccessUser } from "./types";
+import { deriveUserFromClaims, landingFor } from "./rbac";
 
 // ---- Types ------------------------------------------------------------------
 
@@ -46,6 +45,9 @@ interface Env {
 const JSON_CT = "application/json;charset=utf-8";
 const HTML_CT = "text/html;charset=utf-8";
 const SVG_CT  = "image/svg+xml;charset=utf-8";
+
+const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;      // 5 minutes
+const MIN_VALID_EPOCH_MS = Date.UTC(2020, 0, 1); // sanity floor
 
 function json(data: unknown, init: ResponseInit = {}) {
   return withSecurityHeaders(
@@ -108,8 +110,6 @@ function maskId(id: string | null | undefined) {
   return id.slice(0, 3) + "…" + id.slice(-2);
 }
 
-// ---- RBAC helpers ------------------------------------------------------------
-
 // ---- Access (Zero Trust) -----------------------------------------------------
 
 const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
@@ -126,7 +126,7 @@ async function requireAccessUser(req: Request, env: Env): Promise<AccessUser | n
   if (!jwt) return null;
   try {
     const { payload } = await jwtVerify(jwt, getJwks(env), { audience: env.ACCESS_AUD });
-    return deriveUserFromClaims(payload);
+    return deriveUserFromClaims(payload as JWTPayload);
   } catch {
     return null;
   }
@@ -169,31 +169,28 @@ async function handleLatest(req: Request, env: Env, deviceId: string) {
   const user = await requireAccessUser(req, env);
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
 
+  // Admins: unrestricted
+  if (user.roles.includes("admin")) {
+    const row = await env.DB.prepare(`SELECT * FROM latest_state WHERE device_id = ?1`).bind(deviceId).first();
+    if (!row) return json({ error: "Not found" }, { status: 404 });
+    return json({ device_id: deviceId, latest: row });
+  }
+
+  // Clients/contractors: device must belong to one of their clientIds (profile_id)
+  if (user.clientIds.length === 0) return json({ error: "Not found" }, { status: 404 });
+  const placeholders = user.clientIds.map((_, i) => `?${i + 2}`).join(",");
   const row = await env.DB.prepare(
-    `SELECT ls.*, d.profile_id as device_profile_id, d.site_id as device_site_id
+    `SELECT ls.*
        FROM latest_state ls
-       LEFT JOIN devices d ON ls.device_id = d.device_id
-      WHERE ls.device_id = ?1`
-  ).bind(deviceId).first<Record<string, unknown>>();
+       JOIN devices d ON d.device_id = ls.device_id
+      WHERE ls.device_id = ?1
+        AND d.profile_id IN (${placeholders})`
+  ).bind(deviceId, ...user.clientIds).first();
 
   if (!row) return json({ error: "Not found" }, { status: 404 });
 
-  if (!user.roles.includes("admin")) {
-    const allowed = new Set(user.clientIds.map(id => id.toLowerCase()));
-    const matchesAllowed = (value: unknown) =>
-      typeof value === "string" && allowed.has(value.toLowerCase());
-
-    if (
-      allowed.size === 0 ||
-      (!matchesAllowed(row.device_profile_id) && !matchesAllowed(row.device_site_id))
-    ) {
-      return json({ error: "Forbidden" }, { status: 403 });
-    }
-  }
-
-  const { device_profile_id: _profileId, device_site_id: _siteId, ...latest } = row;
   const maskedDeviceId = user.roles.includes("admin") ? deviceId : maskId(deviceId);
-  return json({ device_id: maskedDeviceId, latest });
+  return json({ device_id: maskedDeviceId, latest: row });
 }
 
 async function verifyDeviceKey(env: Env, deviceId: string, keyHeader: string | null) {
@@ -213,7 +210,6 @@ async function verifyDeviceKey(env: Env, deviceId: string, keyHeader: string | n
 async function handleIngest(req: Request, env: Env, profileId: string) {
   const t0 = Date.now();
 
-  // Use req.json<TelemetryBody>() (BOM-safe + faster) + optional size guard.
   let body: TelemetryBody;
   try {
     body = await req.json<TelemetryBody>();
@@ -231,6 +227,17 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
   const ok = await verifyDeviceKey(env, body.device_id, req.headers.get("X-GREENBRO-DEVICE-KEY"));
   if (!ok) return json({ error: "Unauthorized" }, { status: 401 });
 
+  // Timestamp validation
+  const tsMs = Date.parse(body.ts);
+  if (!Number.isFinite(tsMs) || tsMs < MIN_VALID_EPOCH_MS) {
+    return json({ error: "Invalid timestamp" }, { status: 400 });
+  }
+  const nowMs = Date.now();
+  if (tsMs > nowMs + MAX_FUTURE_SKEW_MS) {
+    return json({ error: "Timestamp too far in the future" }, { status: 422 });
+  }
+  const isStale = nowMs - tsMs > 24 * 60 * 60 * 1000;
+
   const supply = body.metrics.supplyC ?? null;
   const ret = body.metrics.returnC ?? null;
   const deltaT = typeof supply === "number" && typeof ret === "number" ? round(supply - ret, 1) : null;
@@ -241,7 +248,7 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
   const thermalKW = deltaT !== null ? round(rho * cp * flow * deltaT, 2) : null;
 
   let cop: number | null = null;
-  let cop_quality: "measured" | "estimated" | null = null;
+  let cop_quality: "measured" | "estimated" | "stale" | null = null;
 
   if (typeof body.metrics.powerKW === "number" && body.metrics.powerKW > 0.05 && thermalKW !== null) {
     cop = round(thermalKW / body.metrics.powerKW, 2) as number;
@@ -250,18 +257,7 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
     cop = null;
     cop_quality = "estimated";
   }
-
-  const tsMs = Date.parse(body.ts);
-  if (!Number.isFinite(tsMs)) {
-    return json({ error: "Invalid timestamp" }, { status: 400 });
-  }
-
-  const nowMs = Date.now();
-  const maxFutureSkewMs = 5 * 60 * 1000; // 5 minutes
-  const maxLookbackMs = 365 * 24 * 60 * 60 * 1000; // 1 year
-  if (tsMs > nowMs + maxFutureSkewMs || tsMs < nowMs - maxLookbackMs) {
-    return json({ error: "Timestamp out of range" }, { status: 400 });
-  }
+  if (isStale) cop_quality = "stale";
 
   const faults_json = JSON.stringify(body.faults || []);
   const status_json = JSON.stringify({
@@ -360,6 +356,15 @@ async function handleHeartbeat(req: Request, env: Env, profileId: string) {
 
   const ok = await verifyDeviceKey(env, body.device_id, req.headers.get("X-GREENBRO-DEVICE-KEY"));
   if (!ok) return json({ error: "Unauthorized" }, { status: 401 });
+
+  // Timestamp validation
+  const tsMs = Date.parse(body.ts);
+  if (!Number.isFinite(tsMs) || tsMs < MIN_VALID_EPOCH_MS) {
+    return json({ error: "Invalid timestamp" }, { status: 400 });
+  }
+  if (tsMs > Date.now() + MAX_FUTURE_SKEW_MS) {
+    return json({ error: "Timestamp too far in the future" }, { status: 422 });
+  }
 
   await env.DB.batch([
     env.DB.prepare(
@@ -576,7 +581,7 @@ export default {
     const url = new URL(req.url);
     const path = url.pathname;
 
-    // Absolute redirect to avoid "Unable to parse URL: /app" in preview.
+    // Absolute redirect
     if (path === "/") {
       return Response.redirect(url.origin + "/app", 302);
     }
@@ -626,11 +631,10 @@ export default {
           }),
         );
       }
-      // Redirect to role landing; APP_BASE_URL should be absolute (https://...)
       return Response.redirect(env.APP_BASE_URL + landingFor(user), 302);
     }
 
-    // Logout route – make absolute too
+    // Logout route
     if (path === "/app/logout") {
       const ret = url.searchParams.get("return") || env.RETURN_DEFAULT;
       const logoutUrl = new URL(
@@ -677,7 +681,6 @@ export default {
     return json({ error: "Not found" }, { status: 404 });
   },
 
-  // Cron hooks (placeholders for later ops)
   async scheduled(_event: ScheduledEvent, _env: Env, _ctx: ExecutionContext) {
     // no-op
   },
