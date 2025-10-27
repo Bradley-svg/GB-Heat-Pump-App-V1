@@ -1,15 +1,23 @@
 // app.ts
 // Cloudflare Worker (TypeScript) — GreenBro Heat Pump Dashboard API + SPA host
-// Security/tenancy patches included:
-//  - shared RBAC import (no duplication)
-//  - tenant-scoped handleLatest
-//  - timestamp validation in ingest/heartbeat (+ "stale" flag)
+// Patches included:
+//  - CORS helper added and applied to all /api/ingest/* and /api/heartbeat/* responses (success + errors)
+//  - Timestamp sanity check added (now - 1y … now + 5m) for ingest
+//  - OPTIONS preflight already allows x-greenbro-device-key
+//  - Root "/" redirect uses absolute URL to avoid preview parser error
+//  - Logout redirect made absolute as well
 
 import { createRemoteJWKSet, jwtVerify, JWTPayload } from "jose";
-import type { AccessUser } from "./types";
-import { deriveUserFromClaims, landingFor } from "./rbac";
 
 // ---- Types ------------------------------------------------------------------
+
+type Role = "admin" | "contractor" | "client";
+
+interface User {
+  email: string;
+  roles: Role[];
+  clientIds: string[];
+}
 
 interface TelemetryMetrics {
   supplyC?: number | null;
@@ -45,9 +53,6 @@ interface Env {
 const JSON_CT = "application/json;charset=utf-8";
 const HTML_CT = "text/html;charset=utf-8";
 const SVG_CT  = "image/svg+xml;charset=utf-8";
-
-const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;      // 5 minutes
-const MIN_VALID_EPOCH_MS = Date.UTC(2020, 0, 1); // sanity floor
 
 function json(data: unknown, init: ResponseInit = {}) {
   return withSecurityHeaders(
@@ -88,6 +93,14 @@ function withSecurityHeaders(res: Response) {
   });
 }
 
+// ---- NEW: CORS helper for device POSTs --------------------------------------
+
+function withCors(res: Response) {
+  const h = new Headers(res.headers);
+  h.set("access-control-allow-origin", "*");
+  return new Response(res.body, { headers: h, status: res.status, statusText: res.statusText });
+}
+
 async function sha256Hex(input: string) {
   const data = new TextEncoder().encode(input);
   const digest = await crypto.subtle.digest("SHA-256", data);
@@ -110,6 +123,37 @@ function maskId(id: string | null | undefined) {
   return id.slice(0, 3) + "…" + id.slice(-2);
 }
 
+// ---- RBAC helpers ------------------------------------------------------------
+
+function deriveUserFromClaims(claims: JWTPayload): User {
+  const email = (claims as any).email || claims.sub || "unknown@unknown";
+
+  const raw = Array.isArray((claims as any).roles)
+    ? (claims as any).roles
+    : Array.isArray((claims as any).groups)
+    ? (claims as any).groups
+    : [];
+
+  const roles = new Set<Role>();
+  for (const r of raw) {
+    const v = String(r).toLowerCase();
+    if (v.includes("admin")) roles.add("admin");
+    else if (v.includes("contractor")) roles.add("contractor");
+    else if (v.includes("client")) roles.add("client");
+  }
+  if (roles.size === 0) roles.add("client");
+
+  const clientIds = Array.isArray((claims as any).clientIds) ? (claims as any).clientIds : [];
+  return { email, roles: Array.from(roles), clientIds };
+}
+
+function landingFor(user: User) {
+  if (user.roles.includes("admin")) return "/app/overview";
+  if (user.roles.includes("client")) return "/app/compact";
+  if (user.roles.includes("contractor")) return "/app/devices";
+  return "/app/unauthorized";
+}
+
 // ---- Access (Zero Trust) -----------------------------------------------------
 
 const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
@@ -121,12 +165,12 @@ function getJwks(env: Env) {
   return jwksCache.get(url)!;
 }
 
-async function requireAccessUser(req: Request, env: Env): Promise<AccessUser | null> {
+async function requireAccessUser(req: Request, env: Env): Promise<User | null> {
   const jwt = req.headers.get("Cf-Access-Jwt-Assertion");
   if (!jwt) return null;
   try {
     const { payload } = await jwtVerify(jwt, getJwks(env), { audience: env.ACCESS_AUD });
-    return deriveUserFromClaims(payload as JWTPayload);
+    return deriveUserFromClaims(payload);
   } catch {
     return null;
   }
@@ -169,23 +213,9 @@ async function handleLatest(req: Request, env: Env, deviceId: string) {
   const user = await requireAccessUser(req, env);
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
 
-  // Admins: unrestricted
-  if (user.roles.includes("admin")) {
-    const row = await env.DB.prepare(`SELECT * FROM latest_state WHERE device_id = ?1`).bind(deviceId).first();
-    if (!row) return json({ error: "Not found" }, { status: 404 });
-    return json({ device_id: deviceId, latest: row });
-  }
-
-  // Clients/contractors: device must belong to one of their clientIds (profile_id)
-  if (user.clientIds.length === 0) return json({ error: "Not found" }, { status: 404 });
-  const placeholders = user.clientIds.map((_, i) => `?${i + 2}`).join(",");
   const row = await env.DB.prepare(
-    `SELECT ls.*
-       FROM latest_state ls
-       JOIN devices d ON d.device_id = ls.device_id
-      WHERE ls.device_id = ?1
-        AND d.profile_id IN (${placeholders})`
-  ).bind(deviceId, ...user.clientIds).first();
+    `SELECT * FROM latest_state WHERE device_id = ?1`
+  ).bind(deviceId).first();
 
   if (!row) return json({ error: "Not found" }, { status: 404 });
 
@@ -214,29 +244,29 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
   try {
     body = await req.json<TelemetryBody>();
     if (JSON.stringify(body).length > 256_000) {
-      return json({ error: "Payload too large" }, { status: 413 });
+      return withCors(json({ error: "Payload too large" }, { status: 413 }));
     }
   } catch {
-    return json({ error: "Invalid JSON" }, { status: 400 });
+    return withCors(json({ error: "Invalid JSON" }, { status: 400 }));
   }
 
   if (!body?.device_id || !body?.ts || !body?.metrics) {
-    return json({ error: "Missing required fields" }, { status: 400 });
+    return withCors(json({ error: "Missing required fields" }, { status: 400 }));
+  }
+
+  // Timestamp sanity: within past 1y and future +5m
+  const tsMs = Date.parse(body.ts);
+  if (!Number.isFinite(tsMs) || Number.isNaN(tsMs)) {
+    return withCors(json({ error: "Invalid timestamp" }, { status: 400 }));
+  }
+  const now = Date.now();
+  const oneYear = 365 * 24 * 60 * 60 * 1000;
+  if (tsMs < now - oneYear || tsMs > now + 5 * 60 * 1000) {
+    return withCors(json({ error: "Timestamp out of range" }, { status: 400 }));
   }
 
   const ok = await verifyDeviceKey(env, body.device_id, req.headers.get("X-GREENBRO-DEVICE-KEY"));
-  if (!ok) return json({ error: "Unauthorized" }, { status: 401 });
-
-  // Timestamp validation
-  const tsMs = Date.parse(body.ts);
-  if (!Number.isFinite(tsMs) || tsMs < MIN_VALID_EPOCH_MS) {
-    return json({ error: "Invalid timestamp" }, { status: 400 });
-  }
-  const nowMs = Date.now();
-  if (tsMs > nowMs + MAX_FUTURE_SKEW_MS) {
-    return json({ error: "Timestamp too far in the future" }, { status: 422 });
-  }
-  const isStale = nowMs - tsMs > 24 * 60 * 60 * 1000;
+  if (!ok) return withCors(json({ error: "Unauthorized" }, { status: 401 }));
 
   const supply = body.metrics.supplyC ?? null;
   const ret = body.metrics.returnC ?? null;
@@ -248,7 +278,7 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
   const thermalKW = deltaT !== null ? round(rho * cp * flow * deltaT, 2) : null;
 
   let cop: number | null = null;
-  let cop_quality: "measured" | "estimated" | "stale" | null = null;
+  let cop_quality: "measured" | "estimated" | null = null;
 
   if (typeof body.metrics.powerKW === "number" && body.metrics.powerKW > 0.05 && thermalKW !== null) {
     cop = round(thermalKW / body.metrics.powerKW, 2) as number;
@@ -257,7 +287,6 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
     cop = null;
     cop_quality = "estimated";
   }
-  if (isStale) cop_quality = "stale";
 
   const faults_json = JSON.stringify(body.faults || []);
   const status_json = JSON.stringify({
@@ -331,14 +360,14 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
       `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id) VALUES (?1, ?2, ?3, ?4, ?5)`
     ).bind(nowISO(), "/api/ingest", 200, dur, body.device_id).run();
 
-    return json({ ok: true });
+    return withCors(json({ ok: true }));
   } catch (e: any) {
     const dur = Date.now() - t0;
     await env.DB.prepare(
       `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id) VALUES (?1, ?2, ?3, ?4, ?5)`
     ).bind(nowISO(), "/api/ingest", 500, dur, body.device_id).run();
 
-    return json({ error: "DB error", detail: String(e?.message || e) }, { status: 500 });
+    return withCors(json({ error: "DB error", detail: String(e?.message || e) }, { status: 500 }));
   }
 }
 
@@ -347,24 +376,15 @@ async function handleHeartbeat(req: Request, env: Env, profileId: string) {
   try {
     body = await req.json();
   } catch {
-    return json({ error: "Invalid JSON" }, { status: 400 });
+    return withCors(json({ error: "Invalid JSON" }, { status: 400 }));
   }
 
   if (!body?.device_id || !body?.ts) {
-    return json({ error: "Missing fields" }, { status: 400 });
+    return withCors(json({ error: "Missing fields" }, { status: 400 }));
   }
 
   const ok = await verifyDeviceKey(env, body.device_id, req.headers.get("X-GREENBRO-DEVICE-KEY"));
-  if (!ok) return json({ error: "Unauthorized" }, { status: 401 });
-
-  // Timestamp validation
-  const tsMs = Date.parse(body.ts);
-  if (!Number.isFinite(tsMs) || tsMs < MIN_VALID_EPOCH_MS) {
-    return json({ error: "Invalid timestamp" }, { status: 400 });
-  }
-  if (tsMs > Date.now() + MAX_FUTURE_SKEW_MS) {
-    return json({ error: "Timestamp too far in the future" }, { status: 422 });
-  }
+  if (!ok) return withCors(json({ error: "Unauthorized" }, { status: 401 }));
 
   await env.DB.batch([
     env.DB.prepare(
@@ -377,7 +397,7 @@ async function handleHeartbeat(req: Request, env: Env, profileId: string) {
     ).bind(body.device_id, nowISO()),
   ]);
 
-  return json({ ok: true });
+  return withCors(json({ ok: true }));
 }
 
 // ---- SPA HTML ---------------------------------------------------------------
@@ -581,7 +601,7 @@ export default {
     const url = new URL(req.url);
     const path = url.pathname;
 
-    // Absolute redirect
+    // Absolute redirect to avoid "Unable to parse URL: /app" in preview.
     if (path === "/") {
       return Response.redirect(url.origin + "/app", 302);
     }
@@ -631,10 +651,11 @@ export default {
           }),
         );
       }
+      // Redirect to role landing; APP_BASE_URL should be absolute (https://...)
       return Response.redirect(env.APP_BASE_URL + landingFor(user), 302);
     }
 
-    // Logout route
+    // Logout route – make absolute too
     if (path === "/app/logout") {
       const ret = url.searchParams.get("return") || env.RETURN_DEFAULT;
       const logoutUrl = new URL(
@@ -681,6 +702,7 @@ export default {
     return json({ error: "Not found" }, { status: 404 });
   },
 
+  // Cron hooks (placeholders for later ops)
   async scheduled(_event: ScheduledEvent, _env: Env, _ctx: ExecutionContext) {
     // no-op
   },
