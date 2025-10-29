@@ -20,7 +20,15 @@ TIMEZONE = "Africa/Johannesburg"
 HEARTBEAT_INTERVAL_SECS = "30"        # expected device heartbeat period
 OFFLINE_MULTIPLIER = "6"              # mark offline if > 6× heartbeat interval (=> 3 min w/ 30s hb)
 
+# --- Observability / Logs ---
+[observability]
+  [observability.logs]
+  enabled = true
+  head_sampling_rate = 1
+  invocation_logs = true
+  persist = true
+
 # --- Cron schedules ---
-# Every 2 minutes: set devices offline if stale
+# Every 5 minutes: set devices offline if stale
 [triggers]
-crons = ["*/5 * * * *"]   # run the offline sweep every 5 minutes
+crons = ["*/5 * * * *"]
