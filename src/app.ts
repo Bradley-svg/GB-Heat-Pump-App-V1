@@ -7,6 +7,7 @@
 //  • Timestamp sanity helper shared (now − 1y … now + 5m)
 //  • ops_metrics writes are best-effort (won’t flip success into 500)
 //  • deriveUserFromClaims also understands Access groups like client:<id>
+//  • NEW: /api/devices (tenant-scoped listing) + cron offline marker
 
 import { createRemoteJWKSet, jwtVerify, JWTPayload } from "jose";
 
@@ -47,6 +48,8 @@ interface Env {
   ACCESS_AUD: string;
   APP_BASE_URL: string;   // e.g. "https://your-worker-subdomain.workers.dev"
   RETURN_DEFAULT: string; // e.g. "https://greenbro.co.za"
+  HEARTBEAT_INTERVAL_SECS?: string;
+  OFFLINE_MULTIPLIER?: string;
 }
 
 // ---- Utilities ---------------------------------------------------------------
@@ -284,6 +287,64 @@ async function handleLatest(req: Request, env: Env, deviceId: string) {
   }
 
   return json({ device_id: outwardDeviceId, latest });
+}
+
+// NEW — GET /api/devices (tenant-scoped list)
+async function handleListDevices(req: Request, env: Env) {
+  const user = await requireAccessUser(req, env);
+  if (!user) return json({ error: "Unauthorized" }, { status: 401 });
+
+  const isAdmin = user.roles.some(r => r.toLowerCase().includes("admin"));
+  const url = new URL(req.url);
+  const mine = url.searchParams.get("mine") === "1" || !isAdmin; // default to scoped for non-admin
+  const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit") ?? "50")));
+  const cursor = url.searchParams.get("cursor"); // ISO timestamp for pagination
+
+  let where = "";
+  const bind: any[] = [];
+
+  if (mine) {
+    if (!user.clientIds?.length) return json({ items: [], next: null });
+    const ph = user.clientIds.map((_, i) => `?${i + 1}`).join(",");
+    where = `WHERE d.profile_id IN (${ph})`;
+    bind.push(...user.clientIds);
+  }
+
+  if (cursor) {
+    where += where ? " AND" : "WHERE";
+    where += " (d.last_seen_at IS NULL OR d.last_seen_at < ?)";
+    bind.push(cursor);
+  }
+
+  const sql = `
+    SELECT d.device_id, d.profile_id, d.site, d.firmware, d.map_version,
+           d.online, d.last_seen_at
+      FROM devices d
+      ${where}
+     ORDER BY (d.last_seen_at IS NOT NULL) DESC, d.last_seen_at DESC
+     LIMIT ${limit + 1}
+  `;
+
+  const rows = (await env.DB.prepare(sql).bind(...bind).all<{ device_id:string; last_seen_at:string|null; online:number; profile_id:string }>())
+    .results ?? [];
+
+  const hasMore = rows.length > limit;
+  const slice = hasMore ? rows.slice(0, limit) : rows;
+
+  // Mask device_ids for non-admins
+  const items = slice.map(r => ({
+    device_id: isAdmin ? r.device_id : maskId(r.device_id),
+    profile_id: r.profile_id,
+    online: !!r.online,
+    last_seen_at: r.last_seen_at,
+    site: (r as any).site ?? null,
+    firmware: (r as any).firmware ?? null,
+    map_version: (r as any).map_version ?? null,
+  }));
+
+  const next = hasMore ? (slice[slice.length - 1]?.last_seen_at ?? null) : null;
+
+  return json({ items, next });
 }
 
 // Device key check (returns boolean)
@@ -798,6 +859,11 @@ export default {
     // API routes
     if (path === "/api/me" && req.method === "GET") return handleMe(req, env);
 
+    // NEW: list devices (tenant-scoped)
+    if (path === "/api/devices" && req.method === "GET") {
+      return handleListDevices(req, env);
+    }
+
     const latestMatch = path.match(/^\/api\/devices\/([^/]+)\/latest$/);
     if (latestMatch && req.method === "GET") {
       return handleLatest(req, env, decodeURIComponent(latestMatch[1]));
@@ -816,8 +882,43 @@ export default {
     return json({ error: "Not found" }, { status: 404 });
   },
 
-  // Cron hooks (placeholders for later ops)
-  async scheduled(_event: ScheduledEvent, _env: Env, _ctx: ExecutionContext) {
-    // no-op
+  // Cron: mark devices offline if stale (runs via wrangler triggers)
+  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
+    const hbInterval = Number(env.HEARTBEAT_INTERVAL_SECS ?? "30");
+    const multiplier = Number(env.OFFLINE_MULTIPLIER ?? "6");
+    const thresholdSecs = Math.max(60, hbInterval * multiplier); // clamp >=60s
+
+    // julianday('now') difference in days; convert seconds -> days
+    const days = thresholdSecs / 86400;
+
+    // 1) Find devices that are currently online but stale
+    const stale = await env.DB.prepare(
+      `SELECT device_id FROM devices
+        WHERE online = 1
+          AND (last_seen_at IS NULL OR (julianday('now') - julianday(last_seen_at)) > ?1)`
+    ).bind(days).all<{ device_id: string }>();
+
+    const ids = stale.results?.map(r => r.device_id) ?? [];
+    if (!ids.length) return;
+
+    // 2) Mark them offline and reflect in latest_state
+    const updates: D1PreparedStatement[] = [];
+    for (const id of ids) {
+      updates.push(
+        env.DB.prepare(`UPDATE devices SET online=0 WHERE device_id=?1`).bind(id),
+      );
+      updates.push(
+        env.DB.prepare(`UPDATE latest_state SET online=0, updated_at=?2 WHERE device_id=?1`)
+          .bind(id, new Date().toISOString()),
+      );
+      // Optional: write an ops_metrics breadcrumb
+      updates.push(
+        env.DB.prepare(
+          `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id)
+           VALUES (?1,'/cron/offline',200,0,?2)`
+        ).bind(new Date().toISOString(), id),
+      );
+    }
+    await env.DB.batch(updates);
   },
 };

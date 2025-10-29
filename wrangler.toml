@@ -1,23 +1,26 @@
 name = "gb-heat-pump-app-v1"
 main = "src/app.ts"
-compatibility_date = "2025-10-25"
+# Must NOT be in the future. Use a recent date.
+compatibility_date = "2025-10-01"
 
-# Use workers.dev (no DNS needed)
 workers_dev = true
 
-# Bind D1
+# D1
 [[d1_databases]]
 binding = "DB"
 database_name = "GREENBRO_DB"
-# Replace with your real D1 database ID after `npm run d1:create`
 database_id = "ee7ad98b-3629-4985-bd7d-a60c401953a7"
 
 [vars]
-# Non-secret app constants
 APP_BASE_URL = "https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev"
 RETURN_DEFAULT = "https://www.greenbro.co.za/"
 TIMEZONE = "Africa/Johannesburg"
 
-# Store these as secrets (set via `wrangler secret put`)
-# ACCESS_AUD        (string)
-# ACCESS_JWKS_URL   (string)
+# Ops thresholds (override per-env if needed)
+HEARTBEAT_INTERVAL_SECS = "30"        # expected device heartbeat period
+OFFLINE_MULTIPLIER = "6"              # mark offline if > 6× heartbeat interval (=> 3 min w/ 30s hb)
+
+# --- Cron schedules ---
+# Every 2 minutes: set devices offline if stale
+[triggers]
+crons = ["*/2 * * * *"]
