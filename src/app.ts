@@ -1,11 +1,12 @@
 // app.ts
 // Cloudflare Worker (TypeScript) — GreenBro Heat Pump Dashboard API + SPA host
-// Patches included:
-//  - CORS helper added and applied to all /api/ingest/* and /api/heartbeat/* responses (success + errors)
-//  - Timestamp sanity check added (now - 1y … now + 5m) for ingest
-//  - OPTIONS preflight already allows x-greenbro-device-key
-//  - Root "/" redirect uses absolute URL to avoid preview parser error
-//  - Logout redirect made absolute as well
+// Updates in this version:
+//  • CORS helper now returns allow-* headers (and preflight covers device routes)
+//  • /api/devices/:id/latest now ENFORCES tenant scope and REDACTS nested device_id
+//  • /api/ingest/:profileId and /api/heartbeat/:profileId prevent cross-tenant hijack
+//  • Timestamp sanity helper shared (now − 1y … now + 5m)
+//  • ops_metrics writes are best-effort (won’t flip success into 500)
+//  • deriveUserFromClaims also understands Access groups like client:<id>
 
 import { createRemoteJWKSet, jwtVerify, JWTPayload } from "jose";
 
@@ -54,19 +55,6 @@ const JSON_CT = "application/json;charset=utf-8";
 const HTML_CT = "text/html;charset=utf-8";
 const SVG_CT  = "image/svg+xml;charset=utf-8";
 
-function json(data: unknown, init: ResponseInit = {}) {
-  return withSecurityHeaders(
-    new Response(JSON.stringify(data), {
-      headers: { "content-type": JSON_CT },
-      ...init,
-    }),
-  );
-}
-
-function text(s: string, init: ResponseInit = {}) {
-  return withSecurityHeaders(new Response(s, init));
-}
-
 function withSecurityHeaders(res: Response) {
   const csp = [
     "default-src 'self'",
@@ -93,12 +81,17 @@ function withSecurityHeaders(res: Response) {
   });
 }
 
-// ---- NEW: CORS helper for device POSTs --------------------------------------
+function json(data: unknown, init: ResponseInit = {}) {
+  return withSecurityHeaders(
+    new Response(JSON.stringify(data), {
+      headers: { "content-type": JSON_CT },
+      ...init,
+    }),
+  );
+}
 
-function withCors(res: Response) {
-  const h = new Headers(res.headers);
-  h.set("access-control-allow-origin", "*");
-  return new Response(res.body, { headers: h, status: res.status, statusText: res.statusText });
+function text(s: string, init: ResponseInit = {}) {
+  return withSecurityHeaders(new Response(s, init));
 }
 
 async function sha256Hex(input: string) {
@@ -123,27 +116,71 @@ function maskId(id: string | null | undefined) {
   return id.slice(0, 3) + "…" + id.slice(-2);
 }
 
+function parseAndCheckTs(ts: string) {
+  const ms = Date.parse(ts);
+  if (Number.isNaN(ms)) return { ok: false as const, reason: "Invalid timestamp" };
+  const now = Date.now();
+  const ahead = 5 * 60 * 1000;                 // +5 min
+  const behind = 365 * 24 * 60 * 60 * 1000;    // ~1 year
+  if (ms > now + ahead) return { ok: false as const, reason: "Timestamp too far in future" };
+  if (ms < now - behind) return { ok: false as const, reason: "Timestamp too old" };
+  return { ok: true as const, ms };
+}
+
+// ---- CORS --------------------------------------------------------------------
+
+const CORS_BASE: Record<string, string> = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET,POST,OPTIONS",
+  "access-control-allow-headers": "content-type,cf-access-jwt-assertion,x-greenbro-device-key",
+};
+
+function withCors(res: Response) {
+  const h = new Headers(res.headers);
+  for (const [k, v] of Object.entries(CORS_BASE)) h.set(k, v);
+  return new Response(res.body, { headers: h, status: res.status, statusText: res.statusText });
+}
+
+function maybeHandlePreflight(req: Request, pathname: string) {
+  if (req.method !== "OPTIONS") return null;
+  if (
+    pathname.startsWith("/api/ingest/") ||
+    pathname.startsWith("/api/heartbeat/") ||
+    /^\/api\/devices\/[^/]+\/latest$/.test(pathname)
+  ) {
+    return withSecurityHeaders(new Response("", { status: 204, headers: CORS_BASE }));
+  }
+  return null;
+}
+
 // ---- RBAC helpers ------------------------------------------------------------
 
 function deriveUserFromClaims(claims: JWTPayload): User {
   const email = (claims as any).email || claims.sub || "unknown@unknown";
 
-  const raw = Array.isArray((claims as any).roles)
-    ? (claims as any).roles
-    : Array.isArray((claims as any).groups)
-    ? (claims as any).groups
+  const rawGroups: string[] = Array.isArray((claims as any).groups)
+    ? (claims as any).groups.map(String)
     : [];
+  const rawRoles: string[] = Array.isArray((claims as any).roles)
+    ? (claims as any).roles.map(String)
+    : rawGroups;
 
   const roles = new Set<Role>();
-  for (const r of raw) {
-    const v = String(r).toLowerCase();
+  for (const r of rawRoles) {
+    const v = r.toLowerCase();
     if (v.includes("admin")) roles.add("admin");
     else if (v.includes("contractor")) roles.add("contractor");
     else if (v.includes("client")) roles.add("client");
   }
   if (roles.size === 0) roles.add("client");
 
-  const clientIds = Array.isArray((claims as any).clientIds) ? (claims as any).clientIds : [];
+  // Accept explicit claim and/or Access groups like "client:<id>"
+  const fromClaim = Array.isArray((claims as any).clientIds) ? (claims as any).clientIds.map(String) : [];
+  const fromGroups = rawGroups
+    .filter(g => g.startsWith("client:"))
+    .map(g => g.slice("client:".length));
+  const clientIds = Array.from(new Set([...fromClaim, ...fromGroups]));
+
   return { email, roles: Array.from(roles), clientIds };
 }
 
@@ -209,40 +246,66 @@ async function handleMe(req: Request, env: Env) {
   return json(user);
 }
 
+// GET /api/devices/:id/latest  — tenant-scoped + masking
 async function handleLatest(req: Request, env: Env, deviceId: string) {
   const user = await requireAccessUser(req, env);
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
 
-  const row = await env.DB.prepare(
-    `SELECT * FROM latest_state WHERE device_id = ?1`
-  ).bind(deviceId).first();
+  const isAdmin = user.roles.some(r => r.toLowerCase().includes("admin"));
+  let row: any | null;
+
+  if (isAdmin) {
+    row = await env.DB.prepare(`SELECT * FROM latest_state WHERE device_id = ?1 LIMIT 1`)
+      .bind(deviceId).first();
+  } else {
+    if (!user.clientIds || user.clientIds.length === 0) {
+      return json({ error: "Not found" }, { status: 404 });
+    }
+    const placeholders = user.clientIds.map((_, i) => `?${i + 2}`).join(",");
+    row = await env.DB.prepare(
+      `SELECT ls.*
+         FROM latest_state ls
+         JOIN devices d ON d.device_id = ls.device_id
+        WHERE ls.device_id = ?1
+          AND d.profile_id IN (${placeholders})
+        LIMIT 1`
+    ).bind(deviceId, ...user.clientIds).first();
+  }
 
   if (!row) return json({ error: "Not found" }, { status: 404 });
 
-  const maskedDeviceId = user.roles.includes("admin") ? deviceId : maskId(deviceId);
-  return json({ device_id: maskedDeviceId, latest: row });
+  // Redact nested device_id for non-admins
+  let outwardDeviceId = deviceId;
+  let latest = row;
+  if (!isAdmin) {
+    const { device_id: _drop, ...rest } = row;
+    latest = rest;
+    outwardDeviceId = maskId(deviceId);
+  }
+
+  return json({ device_id: outwardDeviceId, latest });
 }
 
+// Device key check (returns boolean)
 async function verifyDeviceKey(env: Env, deviceId: string, keyHeader: string | null) {
   if (!keyHeader) return false;
-
   const row = await env.DB
     .prepare(`SELECT device_key_hash FROM devices WHERE device_id = ?1`)
     .bind(deviceId)
     .first<{ device_key_hash?: string }>();
-
   if (!row || !row.device_key_hash) return false;
-
   const hash = await sha256Hex(keyHeader);
   return hash.toLowerCase() === String(row.device_key_hash).toLowerCase();
 }
 
+// POST /api/ingest/:profileId  — tenant-safe + robust
 async function handleIngest(req: Request, env: Env, profileId: string) {
   const t0 = Date.now();
 
   let body: TelemetryBody;
   try {
-    body = await req.json<TelemetryBody>();
+    // NOTE: no generic arg on json(); cast instead
+    body = (await req.json()) as TelemetryBody;
     if (JSON.stringify(body).length > 256_000) {
       return withCors(json({ error: "Payload too large" }, { status: 413 }));
     }
@@ -254,20 +317,39 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
     return withCors(json({ error: "Missing required fields" }, { status: 400 }));
   }
 
-  // Timestamp sanity: within past 1y and future +5m
-  const tsMs = Date.parse(body.ts);
-  if (!Number.isFinite(tsMs) || Number.isNaN(tsMs)) {
-    return withCors(json({ error: "Invalid timestamp" }, { status: 400 }));
-  }
-  const now = Date.now();
-  const oneYear = 365 * 24 * 60 * 60 * 1000;
-  if (tsMs < now - oneYear || tsMs > now + 5 * 60 * 1000) {
-    return withCors(json({ error: "Timestamp out of range" }, { status: 400 }));
+  // Timestamp sanity
+  const tsCheck = parseAndCheckTs(body.ts);
+  if (!tsCheck.ok) return withCors(json({ error: tsCheck.reason }, { status: 400 }));
+  const tsMs = tsCheck.ms!;
+
+  // Verify device + key + tenant
+  const keyHeader = req.headers.get("X-GREENBRO-DEVICE-KEY");
+  if (!(await verifyDeviceKey(env, body.device_id, keyHeader))) {
+    return withCors(json({ error: "Unauthorized" }, { status: 401 }));
   }
 
-  const ok = await verifyDeviceKey(env, body.device_id, req.headers.get("X-GREENBRO-DEVICE-KEY"));
-  if (!ok) return withCors(json({ error: "Unauthorized" }, { status: 401 }));
+  const devRow = await env.DB
+    .prepare(`SELECT profile_id FROM devices WHERE device_id = ?1`)
+    .bind(body.device_id)
+    .first<{ profile_id?: string | null }>();
 
+  if (!devRow) {
+    return withCors(json({ error: "Unauthorized (unknown device)" }, { status: 401 }));
+  }
+
+  if (devRow.profile_id && devRow.profile_id !== profileId) {
+    console.warn("Profile mismatch", { deviceId: body.device_id, urlProfileId: profileId, dbProfile: devRow.profile_id });
+    return withCors(json({ error: "Profile mismatch for device" }, { status: 409 }));
+  }
+
+  // Attach ownership once
+  if (!devRow.profile_id) {
+    await env.DB.prepare(
+      `UPDATE devices SET profile_id = ?2 WHERE device_id = ?1`
+    ).bind(body.device_id, profileId).run();
+  }
+
+  // Derived metrics
   const supply = body.metrics.supplyC ?? null;
   const ret = body.metrics.returnC ?? null;
   const deltaT = typeof supply === "number" && typeof ret === "number" ? round(supply - ret, 1) : null;
@@ -275,13 +357,12 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
   const flow = body.metrics.flowLps ?? 0;
   const rho = 0.997;  // kg/L ~ water at ~20°C
   const cp  = 4.186;  // kJ/(kg·K)
-  const thermalKW = deltaT !== null ? round(rho * cp * flow * deltaT, 2) : null;
+  const thermalKW = deltaT !== null ? round(rho * cp * flow * (deltaT as number), 2) : null;
 
   let cop: number | null = null;
   let cop_quality: "measured" | "estimated" | null = null;
-
   if (typeof body.metrics.powerKW === "number" && body.metrics.powerKW > 0.05 && thermalKW !== null) {
-    cop = round(thermalKW / body.metrics.powerKW, 2) as number;
+    cop = round((thermalKW as number) / body.metrics.powerKW, 2) as number;
     cop_quality = "measured";
   } else if (thermalKW !== null) {
     cop = null;
@@ -296,7 +377,7 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
   });
 
   try {
-    const tx = env.DB.batch([
+    await env.DB.batch([
       env.DB.prepare(
         `INSERT INTO telemetry (device_id, ts, metrics_json, deltaT, thermalKW, cop, cop_quality, status_json, faults_json)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
@@ -312,7 +393,6 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
         status_json,
         faults_json
       ),
-
       env.DB.prepare(
         `INSERT INTO latest_state
            (device_id, ts, supplyC, returnC, tankC, ambientC, flowLps, compCurrentA, eevSteps, powerKW,
@@ -345,59 +425,98 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
         faults_json,
         nowISO()
       ),
-
       env.DB.prepare(
-        `INSERT INTO devices (device_id, profile_id, online, last_seen_at, device_key_hash)
-         VALUES (?1, ?2, 1, ?3, COALESCE((SELECT device_key_hash FROM devices WHERE device_id = ?1), ''))
-         ON CONFLICT(device_id) DO UPDATE SET online=1, last_seen_at=excluded.last_seen_at`
-      ).bind(body.device_id, profileId, body.ts),
+        `UPDATE devices SET online=1, last_seen_at=?2 WHERE device_id=?1`
+      ).bind(body.device_id, new Date(tsMs).toISOString()),
     ]);
 
-    await tx;
-
-    const dur = Date.now() - t0;
-    await env.DB.prepare(
-      `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id) VALUES (?1, ?2, ?3, ?4, ?5)`
-    ).bind(nowISO(), "/api/ingest", 200, dur, body.device_id).run();
+    // Best-effort ops metrics
+    try {
+      const dur = Date.now() - t0;
+      await env.DB.prepare(
+        `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id) VALUES (?1, ?2, ?3, ?4, ?5)`
+      ).bind(nowISO(), "/api/ingest", 200, dur, body.device_id).run();
+    } catch (e) {
+      console.error("ops_metrics insert failed (ingest)", e);
+    }
 
     return withCors(json({ ok: true }));
   } catch (e: any) {
-    const dur = Date.now() - t0;
-    await env.DB.prepare(
-      `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id) VALUES (?1, ?2, ?3, ?4, ?5)`
-    ).bind(nowISO(), "/api/ingest", 500, dur, body.device_id).run();
-
+    try {
+      const dur = Date.now() - t0;
+      await env.DB.prepare(
+        `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id) VALUES (?1, ?2, ?3, ?4, ?5)`
+      ).bind(nowISO(), "/api/ingest", 500, dur, body.device_id).run();
+    } catch (logErr) {
+      console.error("ops_metrics insert failed (ingest error)", logErr);
+    }
     return withCors(json({ error: "DB error", detail: String(e?.message || e) }, { status: 500 }));
   }
 }
 
+// POST /api/heartbeat/:profileId  — tenant-safe + robust
 async function handleHeartbeat(req: Request, env: Env, profileId: string) {
-  let body: { device_id: string; ts: string };
+  let body: { device_id: string; ts?: string; rssi?: number | null };
   try {
     body = await req.json();
   } catch {
     return withCors(json({ error: "Invalid JSON" }, { status: 400 }));
   }
 
-  if (!body?.device_id || !body?.ts) {
-    return withCors(json({ error: "Missing fields" }, { status: 400 }));
+  if (!body?.device_id) {
+    return withCors(json({ error: "Missing device_id" }, { status: 400 }));
   }
 
-  const ok = await verifyDeviceKey(env, body.device_id, req.headers.get("X-GREENBRO-DEVICE-KEY"));
-  if (!ok) return withCors(json({ error: "Unauthorized" }, { status: 401 }));
+  const tsStr = body.ts ?? new Date().toISOString();
+  const tsCheck = parseAndCheckTs(tsStr);
+  if (!tsCheck.ok) return withCors(json({ error: tsCheck.reason }, { status: 400 }));
+  const tsMs = tsCheck.ms!;
+
+  const keyHeader = req.headers.get("X-GREENBRO-DEVICE-KEY");
+  if (!(await verifyDeviceKey(env, body.device_id, keyHeader))) {
+    return withCors(json({ error: "Unauthorized" }, { status: 401 }));
+  }
+
+  const devRow = await env.DB
+    .prepare(`SELECT profile_id FROM devices WHERE device_id = ?1`)
+    .bind(body.device_id)
+    .first<{ profile_id?: string | null }>();
+
+  if (!devRow) {
+    return withCors(json({ error: "Unauthorized (unknown device)" }, { status: 401 }));
+  }
+
+  if (devRow.profile_id && devRow.profile_id !== profileId) {
+    console.warn("Profile mismatch (hb)", { deviceId: body.device_id, urlProfileId: profileId, dbProfile: devRow.profile_id });
+    return withCors(json({ error: "Profile mismatch for device" }, { status: 409 }));
+  }
+
+  if (!devRow.profile_id) {
+    await env.DB.prepare(
+      `UPDATE devices SET profile_id = ?2 WHERE device_id = ?1`
+    ).bind(body.device_id, profileId).run();
+  }
 
   await env.DB.batch([
     env.DB.prepare(
-      `INSERT INTO devices (device_id, profile_id, online, last_seen_at, device_key_hash)
-       VALUES (?1, ?2, 1, ?3, COALESCE((SELECT device_key_hash FROM devices WHERE device_id = ?1), ''))
-       ON CONFLICT(device_id) DO UPDATE SET online=1, last_seen_at=excluded.last_seen_at`
-    ).bind(body.device_id, profileId, body.ts),
+      `UPDATE devices SET online=1, last_seen_at=?2 WHERE device_id=?1`
+    ).bind(body.device_id, new Date(tsMs).toISOString()),
     env.DB.prepare(
-      `UPDATE latest_state SET online=1, updated_at=?2 WHERE device_id=?1`
-    ).bind(body.device_id, nowISO()),
+      `INSERT INTO latest_state (device_id, ts, payload_json)
+       VALUES (?1, ?2, json_object('ts', ?2, 'rssi', ?3))
+       ON CONFLICT(device_id) DO UPDATE SET ts = excluded.ts, payload_json = excluded.payload_json`
+    ).bind(body.device_id, tsMs, body.rssi ?? null),
   ]);
 
-  return withCors(json({ ok: true }));
+  try {
+    await env.DB.prepare(
+      `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id) VALUES (?1, ?2, ?3, ?4, ?5)`
+    ).bind(nowISO(), "/api/heartbeat", 200, 0, body.device_id).run();
+  } catch (e) {
+    console.error("ops_metrics insert failed (hb)", e);
+  }
+
+  return withCors(json({ ok: true, server_time: new Date().toISOString() }));
 }
 
 // ---- SPA HTML ---------------------------------------------------------------
@@ -606,6 +725,10 @@ export default {
       return Response.redirect(url.origin + "/app", 302);
     }
 
+    // CORS preflight for device routes (ingest/heartbeat/latest)
+    const pre = maybeHandlePreflight(req, path);
+    if (pre) return pre;
+
     if (path === "/favicon.ico") {
       return withSecurityHeaders(new Response("", { status: 204 }));
     }
@@ -616,18 +739,9 @@ export default {
       );
     }
 
-    // OPTIONS preflight allows custom device header
+    // OPTIONS fallback (non-device paths)
     if (req.method === "OPTIONS") {
-      return withSecurityHeaders(
-        new Response("", {
-          status: 204,
-          headers: {
-            "access-control-allow-origin": "*",
-            "access-control-allow-methods": "GET,POST,OPTIONS",
-            "access-control-allow-headers": "content-type,cf-access-jwt-assertion,x-greenbro-device-key",
-          },
-        }),
-      );
+      return withSecurityHeaders(new Response("", { status: 204, headers: CORS_BASE }));
     }
 
     // Static assets
