@@ -23,4 +23,4 @@ OFFLINE_MULTIPLIER = "6"              # mark offline if > 6× heartbeat interval
 # --- Cron schedules ---
 # Every 2 minutes: set devices offline if stale
 [triggers]
-crons = ["*/2 * * * *"]
+crons = ["*/5 * * * *"]   # run the offline sweep every 5 minutes
