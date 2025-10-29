@@ -10,7 +10,8 @@
 //  • NEW: /api/devices (tenant-scoped listing) + cron offline marker
 //  • FIX: Treat missing flow as unknown (thermal/COP become null, not zero)
 //  • FIX: Harden /api/devices pagination (limit sanitization + robust cursor with NULL last_seen_at)
-//  • FIX: Atomic tenant claim on ingest/heartbeat + chunked cron batches
+//  • FIX: Prevent tenant takeover race on first-claim (conditional UPDATE + verify)
+//  • FIX: Cron job batching to stay under D1 limits (chunk + multi-row ops_metrics)
 
 import { createRemoteJWKSet, jwtVerify, JWTPayload } from "jose";
 // ⬇️ use the shared RBAC helpers instead of redefining them here
@@ -128,6 +129,12 @@ function parseAndCheckTs(ts: string) {
   return { ok: true as const, ms };
 }
 
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 // ---- CORS --------------------------------------------------------------------
 
 const CORS_BASE: Record<string, string> = {
@@ -196,6 +203,28 @@ const ASSETS: Record<string, { ct: string; body: string }> = {
     body: `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M4 12a8 8 0 1 0 16 0" stroke="#52ff99" stroke-width="2" fill="none"/><path d="M12 4a8 8 0 0 0 0 16" stroke="#52ff99" stroke-width="2" fill="none"/></svg>`,
   },
 };
+
+// ---- Route helpers -----------------------------------------------------------
+
+/** First-claim guard: only attach device to tenant if still unclaimed. */
+async function claimDeviceIfUnowned(env: Env, deviceId: string, profileId: string) {
+  // Try to claim only if current profile_id is NULL
+  await env.DB.prepare(
+    `UPDATE devices SET profile_id = ?2 WHERE device_id = ?1 AND profile_id IS NULL`
+  ).bind(deviceId, profileId).run();
+
+  // Verify owner after conditional update
+  const row = await env.DB
+    .prepare(`SELECT profile_id FROM devices WHERE device_id = ?1`)
+    .bind(deviceId)
+    .first<{ profile_id?: string | null }>();
+
+  if (!row) return { ok: false as const, reason: "unknown_device" };
+  if (row.profile_id && row.profile_id !== profileId) {
+    return { ok: false as const, reason: "claimed_by_other", owner: row.profile_id };
+  }
+  return { ok: true as const };
+}
 
 // ---- Route handlers ----------------------------------------------------------
 
@@ -395,21 +424,11 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
     return withCors(json({ error: "Profile mismatch for device" }, { status: 409 }));
   }
 
-  // Attach ownership once — ATOMIC (guard against race)
+  // Attach ownership once — guarded against races
   if (!devRow.profile_id) {
-    const claim = await env.DB.prepare(
-      `UPDATE devices SET profile_id = ?2 WHERE device_id = ?1 AND profile_id IS NULL`
-    ).bind(body.device_id, profileId).run();
-
-    if ((claim as any)?.meta?.changes === 0) {
-      // Someone else won the race; re-check owner
-      const cur = await env.DB
-        .prepare(`SELECT profile_id FROM devices WHERE device_id = ?1`)
-        .bind(body.device_id)
-        .first<{ profile_id?: string | null }>();
-      if (cur?.profile_id !== profileId) {
-        return withCors(json({ error: "Profile mismatch for device" }, { status: 409 }));
-      }
+    const claim = await claimDeviceIfUnowned(env, body.device_id, profileId);
+    if (!claim.ok && claim.reason === "claimed_by_other") {
+      return withCors(json({ error: "Profile mismatch for device" }, { status: 409 }));
     }
   }
 
@@ -565,21 +584,11 @@ async function handleHeartbeat(req: Request, env: Env, profileId: string) {
     return withCors(json({ error: "Profile mismatch for device" }, { status: 409 }));
   }
 
-  // Attach ownership once — ATOMIC (guard against race)
+  // Attach ownership once — guarded against races
   if (!devRow.profile_id) {
-    const claim = await env.DB.prepare(
-      `UPDATE devices SET profile_id = ?2 WHERE device_id = ?1 AND profile_id IS NULL`
-    ).bind(body.device_id, profileId).run();
-
-    if ((claim as any)?.meta?.changes === 0) {
-      // Someone else won the race; re-check owner
-      const cur = await env.DB
-        .prepare(`SELECT profile_id FROM devices WHERE device_id = ?1`)
-        .bind(body.device_id)
-        .first<{ profile_id?: string | null }>();
-      if (cur?.profile_id !== profileId) {
-        return withCors(json({ error: "Profile mismatch for device" }, { status: 409 }));
-      }
+    const claim = await claimDeviceIfUnowned(env, body.device_id, profileId);
+    if (!claim.ok && claim.reason === "claimed_by_other") {
+      return withCors(json({ error: "Profile mismatch for device" }, { status: 409 }));
     }
   }
 
@@ -938,29 +947,30 @@ export default {
     const ids = stale.results?.map(r => r.device_id) ?? [];
     if (!ids.length) return;
 
-    // 2) Mark them offline and reflect in latest_state
-    //    D1 batch limit is 50 statements; we push 3 per device, so chunk by 15 devices (45 stmts).
-    const stmts: D1PreparedStatement[] = [];
-    for (const id of ids) {
-      stmts.push(
-        env.DB.prepare(`UPDATE devices SET online=0 WHERE device_id=?1`).bind(id),
-      );
-      stmts.push(
-        env.DB.prepare(`UPDATE latest_state SET online=0, updated_at=?2 WHERE device_id=?1`)
-          .bind(id, new Date().toISOString()),
-      );
-      stmts.push(
-        env.DB.prepare(
-          `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id)
-           VALUES (?1,'/cron/offline',200,0,?2)`
-        ).bind(new Date().toISOString(), id),
-      );
-    }
+    // 2) Process in chunks to honor D1 batch/statement limits
+    const ts = new Date().toISOString();
+    const BATCH = 25; // 3 statements per batch (well under 50)
 
-    const CHUNK_SIZE = 45; // statements
-    for (let i = 0; i < stmts.length; i += CHUNK_SIZE) {
-      const chunk = stmts.slice(i, i + CHUNK_SIZE);
-      await env.DB.batch(chunk);
+    for (const batchIds of chunk(ids, BATCH)) {
+      // a) UPDATE devices … IN (…)
+      const phA = batchIds.map((_, i) => `?${i + 1}`).join(",");
+      await env.DB.prepare(
+        `UPDATE devices SET online=0 WHERE online=1 AND device_id IN (${phA})`
+      ).bind(...batchIds).run();
+
+      // b) UPDATE latest_state … IN (…)
+      const phB = batchIds.map((_, i) => `?${i + 2}`).join(",");
+      await env.DB.prepare(
+        `UPDATE latest_state SET online=0, updated_at=?1 WHERE device_id IN (${phB})`
+      ).bind(ts, ...batchIds).run();
+
+      // c) INSERT ops_metrics (multi-row)
+      const values = batchIds.map(() => `(?, ?, ?, ?, ?)`).join(",");
+      const binds: any[] = [];
+      for (const id of batchIds) binds.push(ts, "/cron/offline", 200, 0, id);
+      await env.DB.prepare(
+        `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id) VALUES ${values}`
+      ).bind(...binds).run();
     }
   },
 };
