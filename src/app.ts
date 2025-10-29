@@ -10,6 +10,7 @@
 //  • NEW: /api/devices (tenant-scoped listing) + cron offline marker
 //  • FIX: Treat missing flow as unknown (thermal/COP become null, not zero)
 //  • FIX: Harden /api/devices pagination (limit sanitization + robust cursor with NULL last_seen_at)
+//  • FIX: Atomic tenant claim on ingest/heartbeat + chunked cron batches
 
 import { createRemoteJWKSet, jwtVerify, JWTPayload } from "jose";
 // ⬇️ use the shared RBAC helpers instead of redefining them here
@@ -259,8 +260,8 @@ async function handleListDevices(req: Request, env: Env) {
   const url = new URL(req.url);
   const mine = url.searchParams.get("mine") === "1" || !isAdmin;
 
-  // ✅ Sanitize limit (default 50, clamp 1..100)
-  const rawLimit = Number(url.searchParams.get("limit"));
+  // ✅ Sanitize limit (default 50; clamp 1..100; force integer)
+  const rawLimit = Number(new URL(req.url).searchParams.get("limit"));
   const limit = Number.isFinite(rawLimit) && rawLimit > 0
     ? Math.min(100, Math.floor(rawLimit))
     : 50;
@@ -394,11 +395,22 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
     return withCors(json({ error: "Profile mismatch for device" }, { status: 409 }));
   }
 
-  // Attach ownership once
+  // Attach ownership once — ATOMIC (guard against race)
   if (!devRow.profile_id) {
-    await env.DB.prepare(
-      `UPDATE devices SET profile_id = ?2 WHERE device_id = ?1`
+    const claim = await env.DB.prepare(
+      `UPDATE devices SET profile_id = ?2 WHERE device_id = ?1 AND profile_id IS NULL`
     ).bind(body.device_id, profileId).run();
+
+    if ((claim as any)?.meta?.changes === 0) {
+      // Someone else won the race; re-check owner
+      const cur = await env.DB
+        .prepare(`SELECT profile_id FROM devices WHERE device_id = ?1`)
+        .bind(body.device_id)
+        .first<{ profile_id?: string | null }>();
+      if (cur?.profile_id !== profileId) {
+        return withCors(json({ error: "Profile mismatch for device" }, { status: 409 }));
+      }
+    }
   }
 
   // Derived metrics
@@ -553,11 +565,22 @@ async function handleHeartbeat(req: Request, env: Env, profileId: string) {
     return withCors(json({ error: "Profile mismatch for device" }, { status: 409 }));
   }
 
-  // Attach ownership once
+  // Attach ownership once — ATOMIC (guard against race)
   if (!devRow.profile_id) {
-    await env.DB.prepare(
-      `UPDATE devices SET profile_id = ?2 WHERE device_id = ?1`
+    const claim = await env.DB.prepare(
+      `UPDATE devices SET profile_id = ?2 WHERE device_id = ?1 AND profile_id IS NULL`
     ).bind(body.device_id, profileId).run();
+
+    if ((claim as any)?.meta?.changes === 0) {
+      // Someone else won the race; re-check owner
+      const cur = await env.DB
+        .prepare(`SELECT profile_id FROM devices WHERE device_id = ?1`)
+        .bind(body.device_id)
+        .first<{ profile_id?: string | null }>();
+      if (cur?.profile_id !== profileId) {
+        return withCors(json({ error: "Profile mismatch for device" }, { status: 409 }));
+      }
+    }
   }
 
   // 1) Mark device online + refresh last_seen_at
@@ -916,23 +939,28 @@ export default {
     if (!ids.length) return;
 
     // 2) Mark them offline and reflect in latest_state
-    const updates: D1PreparedStatement[] = [];
+    //    D1 batch limit is 50 statements; we push 3 per device, so chunk by 15 devices (45 stmts).
+    const stmts: D1PreparedStatement[] = [];
     for (const id of ids) {
-      updates.push(
+      stmts.push(
         env.DB.prepare(`UPDATE devices SET online=0 WHERE device_id=?1`).bind(id),
       );
-      updates.push(
+      stmts.push(
         env.DB.prepare(`UPDATE latest_state SET online=0, updated_at=?2 WHERE device_id=?1`)
           .bind(id, new Date().toISOString()),
       );
-      // Optional: write an ops_metrics breadcrumb
-      updates.push(
+      stmts.push(
         env.DB.prepare(
           `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id)
            VALUES (?1,'/cron/offline',200,0,?2)`
         ).bind(new Date().toISOString(), id),
       );
     }
-    await env.DB.batch(updates);
+
+    const CHUNK_SIZE = 45; // statements
+    for (let i = 0; i < stmts.length; i += CHUNK_SIZE) {
+      const chunk = stmts.slice(i, i + CHUNK_SIZE);
+      await env.DB.batch(chunk);
+    }
   },
 };
