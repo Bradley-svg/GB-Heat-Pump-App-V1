@@ -9,6 +9,7 @@
 //  • RBAC helpers imported from ./rbac (single source of truth)
 //  • NEW: /api/devices (tenant-scoped listing) + cron offline marker
 //  • FIX: Treat missing flow as unknown (thermal/COP become null, not zero)
+//  • FIX: Harden /api/devices pagination (limit sanitization + robust cursor with NULL last_seen_at)
 
 import { createRemoteJWKSet, jwtVerify, JWTPayload } from "jose";
 // ⬇️ use the shared RBAC helpers instead of redefining them here
@@ -253,10 +254,27 @@ async function handleListDevices(req: Request, env: Env) {
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
 
   const isAdmin = user.roles.some((r: string) => r.toLowerCase().includes("admin"));
+
+  // ---- patched section: limit/cursor parsing + WHERE ----
   const url = new URL(req.url);
-  const mine = url.searchParams.get("mine") === "1" || !isAdmin; // default to scoped for non-admin
-  const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit") ?? "50")));
-  const cursor = url.searchParams.get("cursor"); // ISO timestamp for pagination
+  const mine = url.searchParams.get("mine") === "1" || !isAdmin;
+
+  // ✅ Sanitize limit (default 50, clamp 1..100)
+  const rawLimit = Number(url.searchParams.get("limit"));
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0
+    ? Math.min(100, Math.floor(rawLimit))
+    : 50;
+
+  // ✅ Robust cursor: "ts|<ISO>" pages non-null timestamps; "null|<device_id>" pages NULL partition
+  const rawCursor = url.searchParams.get("cursor");
+  let cursorPhase: "ts" | "null" | null = null;
+  let cursorTs: string | null = null;
+  let cursorId: string | null = null;
+  if (rawCursor) {
+    const [phase, val] = rawCursor.split("|", 2);
+    if (phase === "ts" && val)  { cursorPhase = "ts";   cursorTs = decodeURIComponent(val); }
+    if (phase === "null" && val){ cursorPhase = "null"; cursorId = decodeURIComponent(val); }
+  }
 
   let where = "";
   const bind: any[] = [];
@@ -268,10 +286,17 @@ async function handleListDevices(req: Request, env: Env) {
     bind.push(...user.clientIds);
   }
 
-  if (cursor) {
+  // Apply the cursor window
+  if (cursorPhase === "ts" && cursorTs) {
+    // continue through older non-null rows; allow NULLs to appear after those
     where += where ? " AND" : "WHERE";
-    where += " (d.last_seen_at IS NULL OR d.last_seen_at < ?)";
-    bind.push(cursor);
+    where += " ((d.last_seen_at IS NOT NULL AND d.last_seen_at < ?) OR d.last_seen_at IS NULL)";
+    bind.push(cursorTs);
+  } else if (cursorPhase === "null" && cursorId) {
+    // continue within the NULL partition by device_id
+    where += where ? " AND" : "WHERE";
+    where += " (d.last_seen_at IS NULL AND d.device_id > ?)";
+    bind.push(cursorId);
   }
 
   const sql = `
@@ -279,17 +304,17 @@ async function handleListDevices(req: Request, env: Env) {
            d.online, d.last_seen_at
       FROM devices d
       ${where}
-     ORDER BY (d.last_seen_at IS NOT NULL) DESC, d.last_seen_at DESC
+     ORDER BY (d.last_seen_at IS NOT NULL) DESC, d.last_seen_at DESC, d.device_id ASC
      LIMIT ${limit + 1}
   `;
 
-  const rows = (await env.DB.prepare(sql).bind(...bind).all<{ device_id:string; last_seen_at:string|null; online:number; profile_id:string }>())
-    .results ?? [];
+  const rows = (await env.DB.prepare(sql).bind(...bind).all<{
+    device_id: string; profile_id: string; online: number; last_seen_at: string | null;
+  }>()).results ?? [];
 
   const hasMore = rows.length > limit;
   const slice = hasMore ? rows.slice(0, limit) : rows;
 
-  // Mask device_ids for non-admins
   const items = slice.map(r => ({
     device_id: isAdmin ? r.device_id : maskId(r.device_id),
     profile_id: r.profile_id,
@@ -300,9 +325,17 @@ async function handleListDevices(req: Request, env: Env) {
     map_version: (r as any).map_version ?? null,
   }));
 
-  const next = hasMore ? (slice[slice.length - 1]?.last_seen_at ?? null) : null;
+  // ✅ Encode a cursor that keeps paging even if the last row has NULL last_seen_at
+  let next: string | null = null;
+  if (hasMore) {
+    const last = slice[slice.length - 1];
+    next = last.last_seen_at
+      ? `ts|${encodeURIComponent(last.last_seen_at)}`
+      : `null|${encodeURIComponent(last.device_id)}`;
+  }
 
   return json({ items, next });
+  // ---- end patched section ----
 }
 
 // Device key check (returns boolean)
