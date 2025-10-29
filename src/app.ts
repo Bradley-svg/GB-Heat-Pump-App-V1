@@ -52,7 +52,7 @@ interface Env {
   OFFLINE_MULTIPLIER?: string;
 }
 
-// ---- Utilities ---------------------------------------------------------------
+// ---- Utilities --------------------------------------------------------------
 
 const JSON_CT = "application/json;charset=utf-8";
 const HTML_CT = "text/html;charset=utf-8";
@@ -130,7 +130,7 @@ function parseAndCheckTs(ts: string) {
   return { ok: true as const, ms };
 }
 
-// ---- CORS --------------------------------------------------------------------
+// ---- CORS -------------------------------------------------------------------
 
 const CORS_BASE: Record<string, string> = {
   "access-control-allow-origin": "*",
@@ -156,7 +156,7 @@ function maybeHandlePreflight(req: Request, pathname: string) {
   return null;
 }
 
-// ---- RBAC helpers ------------------------------------------------------------
+// ---- RBAC helpers -----------------------------------------------------------
 
 function deriveUserFromClaims(claims: JWTPayload): User {
   const email = (claims as any).email || claims.sub || "unknown@unknown";
@@ -194,7 +194,7 @@ function landingFor(user: User) {
   return "/app/unauthorized";
 }
 
-// ---- Access (Zero Trust) -----------------------------------------------------
+// ---- Access (Zero Trust) ----------------------------------------------------
 
 const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 function getJwks(env: Env) {
@@ -515,7 +515,7 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
   }
 }
 
-// POST /api/heartbeat/:profileId  — tenant-safe + robust
+// POST /api/heartbeat/:profileId  — tenant-safe + schema-safe
 async function handleHeartbeat(req: Request, env: Env, profileId: string) {
   let body: { device_id: string; ts?: string; rssi?: number | null };
   try {
@@ -538,6 +538,7 @@ async function handleHeartbeat(req: Request, env: Env, profileId: string) {
     return withCors(json({ error: "Unauthorized" }, { status: 401 }));
   }
 
+  // Enforce tenancy (no silent reassignment)
   const devRow = await env.DB
     .prepare(`SELECT profile_id FROM devices WHERE device_id = ?1`)
     .bind(body.device_id)
@@ -552,30 +553,43 @@ async function handleHeartbeat(req: Request, env: Env, profileId: string) {
     return withCors(json({ error: "Profile mismatch for device" }, { status: 409 }));
   }
 
+  // Attach ownership once
   if (!devRow.profile_id) {
     await env.DB.prepare(
       `UPDATE devices SET profile_id = ?2 WHERE device_id = ?1`
     ).bind(body.device_id, profileId).run();
   }
 
+  // 1) Mark device online + refresh last_seen_at
+  // 2) Upsert a minimal latest_state row without touching schema-specific columns
+  //    (only the columns we KNOW exist from ingest code: device_id, ts, online, updated_at)
   await env.DB.batch([
     env.DB.prepare(
       `UPDATE devices SET online=1, last_seen_at=?2 WHERE device_id=?1`
     ).bind(body.device_id, new Date(tsMs).toISOString()),
+
     env.DB.prepare(
-      `INSERT INTO latest_state (device_id, ts, payload_json)
-       VALUES (?1, ?2, json_object('ts', ?2, 'rssi', ?3))
-       ON CONFLICT(device_id) DO UPDATE SET ts = excluded.ts, payload_json = excluded.payload_json`
-    ).bind(body.device_id, tsMs, body.rssi ?? null),
+      `INSERT INTO latest_state (device_id, ts, online, updated_at)
+       VALUES (?1, ?2, 1, ?3)
+       ON CONFLICT(device_id) DO UPDATE SET
+         ts = excluded.ts,
+         online = 1,
+         updated_at = excluded.updated_at`
+    ).bind(body.device_id, tsMs, nowISO()),
   ]);
 
+  // Best-effort ops metrics (never fail main flow)
   try {
     await env.DB.prepare(
-      `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id) VALUES (?1, ?2, ?3, ?4, ?5)`
-    ).bind(nowISO(), "/api/heartbeat", 200, 0, body.device_id).run();
+      `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id)
+       VALUES (?1, '/api/heartbeat', 200, 0, ?2)`
+    ).bind(nowISO(), body.device_id).run();
   } catch (e) {
     console.error("ops_metrics insert failed (hb)", e);
   }
+
+  // If you later add a 'rssi' column in latest_state, you can include it above.
+  // For now we just ignore rssi or let ingest record it in telemetry/status.
 
   return withCors(json({ ok: true, server_time: new Date().toISOString() }));
 }
