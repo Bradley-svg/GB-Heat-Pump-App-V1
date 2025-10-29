@@ -2,24 +2,20 @@
 // Cloudflare Worker (TypeScript) — GreenBro Heat Pump Dashboard API + SPA host
 // Updates in this version:
 //  • CORS helper now returns allow-* headers (and preflight covers device routes)
-//  • /api/devices/:id/latest now ENFORCES tenant scope and REDACTS nested device_id
+//  • /api/devices/:id/latest ENFORCES tenant scope and REDACTS nested device_id
 //  • /api/ingest/:profileId and /api/heartbeat/:profileId prevent cross-tenant hijack
 //  • Timestamp sanity helper shared (now − 1y … now + 5m)
 //  • ops_metrics writes are best-effort (won’t flip success into 500)
-//  • deriveUserFromClaims also understands Access groups like client:<id>
+//  • RBAC helpers imported from ./rbac (single source of truth)
 //  • NEW: /api/devices (tenant-scoped listing) + cron offline marker
+//  • FIX: Treat missing flow as unknown (thermal/COP become null, not zero)
 
 import { createRemoteJWKSet, jwtVerify, JWTPayload } from "jose";
+// ⬇️ use the shared RBAC helpers instead of redefining them here
+import { deriveUserFromClaims, landingFor } from "./rbac";
+import type { AccessUser as User } from "./types";
 
 // ---- Types ------------------------------------------------------------------
-
-type Role = "admin" | "contractor" | "client";
-
-interface User {
-  email: string;
-  roles: Role[];
-  clientIds: string[];
-}
 
 interface TelemetryMetrics {
   supplyC?: number | null;
@@ -52,7 +48,7 @@ interface Env {
   OFFLINE_MULTIPLIER?: string;
 }
 
-// ---- Utilities --------------------------------------------------------------
+// ---- Utilities ---------------------------------------------------------------
 
 const JSON_CT = "application/json;charset=utf-8";
 const HTML_CT = "text/html;charset=utf-8";
@@ -130,7 +126,7 @@ function parseAndCheckTs(ts: string) {
   return { ok: true as const, ms };
 }
 
-// ---- CORS -------------------------------------------------------------------
+// ---- CORS --------------------------------------------------------------------
 
 const CORS_BASE: Record<string, string> = {
   "access-control-allow-origin": "*",
@@ -156,45 +152,7 @@ function maybeHandlePreflight(req: Request, pathname: string) {
   return null;
 }
 
-// ---- RBAC helpers -----------------------------------------------------------
-
-function deriveUserFromClaims(claims: JWTPayload): User {
-  const email = (claims as any).email || claims.sub || "unknown@unknown";
-
-  const rawGroups: string[] = Array.isArray((claims as any).groups)
-    ? (claims as any).groups.map(String)
-    : [];
-  const rawRoles: string[] = Array.isArray((claims as any).roles)
-    ? (claims as any).roles.map(String)
-    : rawGroups;
-
-  const roles = new Set<Role>();
-  for (const r of rawRoles) {
-    const v = r.toLowerCase();
-    if (v.includes("admin")) roles.add("admin");
-    else if (v.includes("contractor")) roles.add("contractor");
-    else if (v.includes("client")) roles.add("client");
-  }
-  if (roles.size === 0) roles.add("client");
-
-  // Accept explicit claim and/or Access groups like "client:<id>"
-  const fromClaim = Array.isArray((claims as any).clientIds) ? (claims as any).clientIds.map(String) : [];
-  const fromGroups = rawGroups
-    .filter(g => g.startsWith("client:"))
-    .map(g => g.slice("client:".length));
-  const clientIds = Array.from(new Set([...fromClaim, ...fromGroups]));
-
-  return { email, roles: Array.from(roles), clientIds };
-}
-
-function landingFor(user: User) {
-  if (user.roles.includes("admin")) return "/app/overview";
-  if (user.roles.includes("client")) return "/app/compact";
-  if (user.roles.includes("contractor")) return "/app/devices";
-  return "/app/unauthorized";
-}
-
-// ---- Access (Zero Trust) ----------------------------------------------------
+// ---- Access (Zero Trust) -----------------------------------------------------
 
 const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 function getJwks(env: Env) {
@@ -210,7 +168,7 @@ async function requireAccessUser(req: Request, env: Env): Promise<User | null> {
   if (!jwt) return null;
   try {
     const { payload } = await jwtVerify(jwt, getJwks(env), { audience: env.ACCESS_AUD });
-    return deriveUserFromClaims(payload);
+    return deriveUserFromClaims(payload as JWTPayload);
   } catch {
     return null;
   }
@@ -254,7 +212,7 @@ async function handleLatest(req: Request, env: Env, deviceId: string) {
   const user = await requireAccessUser(req, env);
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
 
-  const isAdmin = user.roles.some(r => r.toLowerCase().includes("admin"));
+  const isAdmin = user.roles.some((r: string) => r.toLowerCase().includes("admin"));
   let row: any | null;
 
   if (isAdmin) {
@@ -294,7 +252,7 @@ async function handleListDevices(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
 
-  const isAdmin = user.roles.some(r => r.toLowerCase().includes("admin"));
+  const isAdmin = user.roles.some((r: string) => r.toLowerCase().includes("admin"));
   const url = new URL(req.url);
   const mine = url.searchParams.get("mine") === "1" || !isAdmin; // default to scoped for non-admin
   const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit") ?? "50")));
@@ -415,19 +373,28 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
   const ret = body.metrics.returnC ?? null;
   const deltaT = typeof supply === "number" && typeof ret === "number" ? round(supply - ret, 1) : null;
 
-  const flow = body.metrics.flowLps ?? 0;
-  const rho = 0.997;  // kg/L ~ water at ~20°C
-  const cp  = 4.186;  // kJ/(kg·K)
-  const thermalKW = deltaT !== null ? round(rho * cp * flow * (deltaT as number), 2) : null;
+  // Treat missing flow as unknown, not zero.
+  const flow = typeof body.metrics.flowLps === "number" ? body.metrics.flowLps : null;
 
+  const rho = 0.997;   // kg/L  (water ~20°C)
+  const cp  = 4.186;   // kJ/(kg·K)
+
+  // Only compute thermal output if BOTH ΔT and flow are present.
+  const thermalKW =
+    (deltaT !== null && flow !== null)
+      ? round(rho * cp * flow * (deltaT as number), 2)
+      : null;
+
+  // Only compute COP when we truly have thermal output and valid electrical power.
   let cop: number | null = null;
-  let cop_quality: "measured" | "estimated" | null = null;
-  if (typeof body.metrics.powerKW === "number" && body.metrics.powerKW > 0.05 && thermalKW !== null) {
+  let cop_quality: "measured" | null = null;
+  if (
+    thermalKW !== null &&
+    typeof body.metrics.powerKW === "number" &&
+    body.metrics.powerKW > 0.05
+  ) {
     cop = round((thermalKW as number) / body.metrics.powerKW, 2) as number;
     cop_quality = "measured";
-  } else if (thermalKW !== null) {
-    cop = null;
-    cop_quality = "estimated";
   }
 
   const faults_json = JSON.stringify(body.faults || []);
