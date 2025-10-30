@@ -49,6 +49,7 @@ interface Env {
   RETURN_DEFAULT: string;
   HEARTBEAT_INTERVAL_SECS?: string;
   OFFLINE_MULTIPLIER?: string;
+  CURSOR_SECRET: string;
 }
 
 // ---- Utilities ---------------------------------------------------------------
@@ -137,6 +138,102 @@ function chunk<T>(arr: T[], size: number): T[][] {
 function safeDecode(part: string | null): string | null {
   if (!part) return null;
   try { return decodeURIComponent(part); } catch { return null; }
+}
+
+function base64UrlEncode(data: Uint8Array) {
+  let binary = "";
+  for (const byte of data) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function base64UrlDecode(input: string): Uint8Array | null {
+  try {
+    let normalized = input.replace(/-/g, "+").replace(/_/g, "/");
+    while (normalized.length % 4) normalized += "=";
+    const binary = atob(normalized);
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+const cursorKeyCache = new Map<string, Promise<CryptoKey>>();
+
+function ensureCursorSecret(env: Env) {
+  const secret = env.CURSOR_SECRET;
+  if (!secret || secret.length < 16) {
+    throw new Error("CURSOR_SECRET must be configured (>= 16 characters)");
+  }
+  return secret;
+}
+
+async function importCursorKey(secret: string) {
+  if (!cursorKeyCache.has(secret)) {
+    const encoder = new TextEncoder();
+    const secretHash = await crypto.subtle.digest("SHA-256", encoder.encode(secret));
+    const keyPromise = crypto.subtle.importKey(
+      "raw",
+      secretHash,
+      "AES-GCM",
+      false,
+      ["encrypt", "decrypt"],
+    );
+    cursorKeyCache.set(secret, keyPromise);
+  }
+  return cursorKeyCache.get(secret)!;
+}
+
+async function sealCursorId(env: Env, deviceId: string) {
+  const secret = ensureCursorSecret(env);
+  const key = await importCursorKey(secret);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoder = new TextEncoder();
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    encoder.encode(deviceId),
+  );
+  return `enc.${base64UrlEncode(iv)}.${base64UrlEncode(new Uint8Array(ciphertext))}`;
+}
+
+async function unsealCursorId(env: Env, token: string) {
+  const secret = ensureCursorSecret(env);
+  const key = await importCursorKey(secret);
+  const [, ivPart, dataPart] = token.split(".", 3);
+  if (!ivPart || !dataPart) return null;
+  const ivArray = base64UrlDecode(ivPart);
+  const payloadArray = base64UrlDecode(dataPart);
+  if (!ivArray || !payloadArray) return null;
+  const ivBuffer = new ArrayBuffer(ivArray.length);
+  new Uint8Array(ivBuffer).set(ivArray);
+  const payloadBuffer = new ArrayBuffer(payloadArray.length);
+  new Uint8Array(payloadBuffer).set(payloadArray);
+  try {
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: ivBuffer }, key, payloadBuffer);
+    return new TextDecoder().decode(plain);
+  } catch {
+    return null;
+  }
+}
+
+async function parseCursorId(
+  encoded: string | null,
+  env: Env,
+  isAdmin: boolean,
+): Promise<{ ok: true; id: string | null } | { ok: false }> {
+  if (!encoded) return { ok: true, id: null };
+  if (!encoded.startsWith("enc.")) {
+    return isAdmin ? { ok: true, id: encoded } : { ok: false };
+  }
+  try {
+    const unsealed = await unsealCursorId(env, encoded);
+    if (!unsealed) return { ok: false };
+    return { ok: true, id: unsealed };
+  } catch {
+    return { ok: false };
+  }
 }
 
 // SQL WHERE helper: safely append a clause with the right prefix
@@ -313,11 +410,25 @@ async function handleListDevices(req: Request, env: Env) {
     const phase = parts[0];
     if (phase === "ts") {
       cursorPhase = "ts";
-      cursorTs = safeDecode(parts[1]);
-      cursorId = safeDecode(parts[2] || null); // may be null for legacy
+      const tsPart = parts[1] ?? null;
+      cursorTs = safeDecode(tsPart);
+      if (tsPart && cursorTs === null) return json({ error: "Invalid cursor" }, { status: 400 });
+      const idPartRaw = parts.length >= 3 ? parts[2] ?? null : null;
+      const idPart = safeDecode(idPartRaw);
+      if (idPartRaw && idPart === null) return json({ error: "Invalid cursor" }, { status: 400 });
+      if (idPart) {
+        const parsed = await parseCursorId(idPart, env, isAdmin);
+        if (!parsed.ok) return json({ error: "Invalid cursor" }, { status: 400 });
+        cursorId = parsed.id;
+      }
     } else if (phase === "null") {
       cursorPhase = "null";
-      cursorId = safeDecode(parts[1] || null);
+      const idPartRaw = parts[1] ?? null;
+      const idPart = safeDecode(idPartRaw);
+      if (!idPart) return json({ error: "Invalid cursor" }, { status: 400 });
+      const parsed = await parseCursorId(idPart, env, isAdmin);
+      if (!parsed.ok || !parsed.id) return json({ error: "Invalid cursor" }, { status: 400 });
+      cursorId = parsed.id;
     }
   }
 
@@ -380,9 +491,18 @@ async function handleListDevices(req: Request, env: Env) {
   let next: string | null = null;
   if (hasMore) {
     const last = slice[slice.length - 1];
+    let cursorDeviceId = last.device_id;
+    if (!isAdmin) {
+      try {
+        cursorDeviceId = await sealCursorId(env, last.device_id);
+      } catch (err) {
+        console.error("Failed to seal cursor", err);
+        return json({ error: "Server error" }, { status: 500 });
+      }
+    }
     next = last.last_seen_at
-      ? `ts|${encodeURIComponent(last.last_seen_at)}|${encodeURIComponent(last.device_id)}`
-      : `null|${encodeURIComponent(last.device_id)}`;
+      ? `ts|${encodeURIComponent(last.last_seen_at)}|${encodeURIComponent(cursorDeviceId)}`
+      : `null|${encodeURIComponent(cursorDeviceId)}`;
   }
 
   return json({ items, next });
@@ -649,9 +769,14 @@ const hours = Number.isFinite(rawHours) && rawHours > 0
 const sinceMs = Date.now() - hours * 60 * 60 * 1000;
 
   // low ΔT threshold (°C); default 2.0
-  const lowDeltaT = Number.isFinite(Number(url.searchParams.get("lowDeltaT")))
-    ? Number(url.searchParams.get("lowDeltaT"))
-    : 2;
+  const lowDeltaParam = url.searchParams.get("lowDeltaT");
+  let lowDeltaT = 2;
+  if (lowDeltaParam !== null && lowDeltaParam.trim() !== "") {
+    const parsed = Number(lowDeltaParam);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      lowDeltaT = parsed;
+    }
+  }
 
   // --- Base WHERE and binds (use anonymous '?' placeholders, not numbered) ---
   let where = "";

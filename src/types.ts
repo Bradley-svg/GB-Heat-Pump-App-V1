@@ -3,6 +3,7 @@ export type Env = {
   APP_BASE_URL: string;
   RETURN_DEFAULT: string;
   TIMEZONE: string;
+  CURSOR_SECRET: string;
 
   // Access secrets (set via `wrangler secret put`)
   ACCESS_AUD: string;
