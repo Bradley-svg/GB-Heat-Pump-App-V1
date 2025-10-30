@@ -641,9 +641,12 @@ async function handleFleetSummary(req: Request, env: Env) {
   const isAdmin = user.roles.some(r => r.toLowerCase().includes("admin"));
   const url = new URL(req.url);
 
-  // 24h by default; allow override via ?hours=...
-  const hours = Math.max(1, Math.min(168, Number(url.searchParams.get("hours") ?? "24")));
-  const sinceMs = Date.now() - hours * 60 * 60 * 1000;
+  // Sanitize ?hours=... (default 24; clamp 1..168; force integer)
+const rawHours = Number(url.searchParams.get("hours"));
+const hours = Number.isFinite(rawHours) && rawHours > 0
+  ? Math.min(168, Math.floor(rawHours))
+  : 24;
+const sinceMs = Date.now() - hours * 60 * 60 * 1000;
 
   // low ΔT threshold (°C); default 2.0
   const lowDeltaT = Number.isFinite(Number(url.searchParams.get("lowDeltaT")))
