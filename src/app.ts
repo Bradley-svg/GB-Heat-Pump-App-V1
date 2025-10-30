@@ -139,6 +139,11 @@ function safeDecode(part: string | null): string | null {
   try { return decodeURIComponent(part); } catch { return null; }
 }
 
+// SQL WHERE helper: safely append a clause with the right prefix
+function andWhere(where: string, clause: string) {
+  return where ? `${where} AND ${clause}` : `WHERE ${clause}`;
+}
+
 // ---- CORS --------------------------------------------------------------------
 
 const CORS_BASE: Record<string, string> = {
@@ -628,88 +633,113 @@ async function handleHeartbeat(req: Request, env: Env, profileId: string) {
   return withCors(json({ ok: true, server_time: new Date().toISOString() }));
 }
 
-// NEW — GET /api/fleet/summary  (tenant-scoped KPIs)
+// GET /api/fleet/summary  — admin or tenant-scoped fleet KPIs (24h window)
 async function handleFleetSummary(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
 
-  const isAdmin = user.roles.some((r: string) => r.toLowerCase().includes("admin"));
+  const isAdmin = user.roles.some(r => r.toLowerCase().includes("admin"));
   const url = new URL(req.url);
-  const mine = url.searchParams.get("mine") === "1" || !isAdmin;
 
+  // 24h by default; allow override via ?hours=...
+  const hours = Math.max(1, Math.min(168, Number(url.searchParams.get("hours") ?? "24")));
+  const sinceMs = Date.now() - hours * 60 * 60 * 1000;
+
+  // low ΔT threshold (°C); default 2.0
+  const lowDeltaT = Number.isFinite(Number(url.searchParams.get("lowDeltaT")))
+    ? Number(url.searchParams.get("lowDeltaT"))
+    : 2;
+
+  // --- Base WHERE and binds (use anonymous '?' placeholders, not numbered) ---
   let where = "";
   const bind: any[] = [];
-  if (mine) {
-    if (!user.clientIds?.length) {
-      // empty scope
+
+  if (!isAdmin) {
+    const ids = user.clientIds || [];
+    if (ids.length === 0) {
+      // Empty fleet when tenant scope has no clientIds
       return json({
-        ts: nowISO(),
-        total_devices: 0,
-        online_devices: 0,
+        devices_total: 0,
+        devices_online: 0,
         online_pct: 0,
         avg_cop_24h: null,
-        low_deltaT_count: 0,
-        stale_heartbeat_count: 0,
-        notes: "no-scope",
+        low_deltaT_count_24h: 0,
+        max_heartbeat_age_sec: null,
+        window_start_ms: sinceMs,
+        generated_at: nowISO(),
       });
     }
-    const ph = user.clientIds.map((_, i) => `?${i + 1}`).join(",");
-    where = `WHERE d.profile_id IN (${ph})`;
-    bind.push(...user.clientIds);
+    const ph = ids.map(() => "?").join(",");
+    where = andWhere(where, `d.profile_id IN (${ph})`);
+    bind.push(...ids);
   }
 
-  // online/total
-  const counts = await env.DB.prepare(
-    `SELECT COUNT(*) as total, COALESCE(SUM(CASE WHEN d.online=1 THEN 1 ELSE 0 END),0) as online
-       FROM devices d ${where}`
-  ).bind(...bind).first<{ total: number; online: number }>();
+  // --- Totals and online ---
+  const totalRow = await env.DB
+    .prepare(`SELECT COUNT(*) AS c FROM devices d ${where}`)
+    .bind(...bind)
+    .first<{ c: number }>();
 
-  const total = Number(counts?.total || 0);
-  const online = Number(counts?.online || 0);
+  const onlineRow = await env.DB
+    .prepare(`SELECT COUNT(*) AS c FROM devices d ${andWhere(where, "d.online = 1")}`)
+    .bind(...bind)
+    .first<{ c: number }>();
 
-  // stale heartbeats vs threshold
-  const hbInterval = Number(env.HEARTBEAT_INTERVAL_SECS ?? "30");
-  const multiplier = Number(env.OFFLINE_MULTIPLIER ?? "6");
-  const thresholdSecs = Math.max(60, hbInterval * multiplier);
-  const days = thresholdSecs / 86400;
+  const devices_total = totalRow?.c ?? 0;
+  const devices_online = onlineRow?.c ?? 0;
+  const online_pct = devices_total ? Math.round((devices_online / devices_total) * 100) : 0;
 
-  const stale = await env.DB.prepare(
-    `SELECT COUNT(*) as c FROM devices d ${where ? where + " AND" : "WHERE"}
-       (d.last_seen_at IS NULL OR (julianday('now') - julianday(d.last_seen_at)) > ?1)`
-  ).bind(...bind, days).first<{ c: number }>();
-  const staleCount = Number(stale?.c || 0);
+  // --- Telemetry-scoped WHERE (join to devices + time window) ---
+  const telemWhere = andWhere(where, "t.ts >= ?");
+  const telemBind = [...bind, sinceMs];
 
-  // avg COP over last 24h (telemetry.ts is in ms)
-  const sinceMs = Date.now() - 86_400_000;
-  const copRow = await env.DB.prepare(
-    `SELECT AVG(t.cop) as avg_cop
-       FROM telemetry t
-       JOIN devices d ON d.device_id = t.device_id
-       ${where}
-      AND t.ts >= ?1 AND t.cop IS NOT NULL`
-  ).bind(...bind, sinceMs).first<{ avg_cop: number | null }>();
-  const avgCop = copRow?.avg_cop ?? null;
+  // Avg COP over window
+  const avgRow = await env.DB
+    .prepare(
+      `SELECT AVG(t.cop) AS v
+         FROM telemetry t
+         JOIN devices d ON d.device_id = t.device_id
+         ${telemWhere}`,
+    )
+    .bind(...telemBind)
+    .first<{ v: number | null }>();
 
-  // low deltaT (from latest_state)
-  const lowDeltaThresh = 2.0;
-  const lowRow = await env.DB.prepare(
-    `SELECT COUNT(*) as c
-       FROM latest_state ls
-       JOIN devices d ON d.device_id = ls.device_id
-       ${where}
-      AND ls.deltaT IS NOT NULL AND ls.deltaT < ?1`
-  ).bind(...bind, lowDeltaThresh).first<{ c: number }>();
-  const lowDelta = Number(lowRow?.c || 0);
+  // Low-ΔT count over window
+  const lowWhere = andWhere(telemWhere, "t.deltaT IS NOT NULL AND t.deltaT < ?");
+  const lowBind = [...telemBind, lowDeltaT];
+  const lowRow = await env.DB
+    .prepare(
+      `SELECT COUNT(*) AS c
+         FROM telemetry t
+         JOIN devices d ON d.device_id = t.device_id
+         ${lowWhere}`,
+    )
+    .bind(...lowBind)
+    .first<{ c: number }>();
+
+  // Max heartbeat age (seconds) across the fleet
+  const hbRow = await env.DB
+    .prepare(
+      `SELECT MAX(
+          CASE WHEN d.last_seen_at IS NULL THEN NULL
+               ELSE (strftime('%s','now') - strftime('%s', d.last_seen_at))
+          END
+        ) AS s
+       FROM devices d
+       ${where}`,
+    )
+    .bind(...bind)
+    .first<{ s: number | null }>();
 
   return json({
-    ts: nowISO(),
-    total_devices: total,
-    online_devices: online,
-    online_pct: total ? Math.round((online / total) * 100) : 0,
-    avg_cop_24h: avgCop !== null ? Number(round(avgCop, 2)) : null,
-    low_deltaT_count: lowDelta,
-    stale_heartbeat_count: staleCount,
-    threshold_secs: thresholdSecs,
+    devices_total,
+    devices_online,
+    online_pct,
+    avg_cop_24h: avgRow?.v ?? null,
+    low_deltaT_count_24h: lowRow?.c ?? 0,
+    max_heartbeat_age_sec: hbRow?.s ?? null,
+    window_start_ms: sinceMs,
+    generated_at: nowISO(),
   });
 }
 
@@ -772,23 +802,20 @@ function appHtml(env: Env, returnUrlParam: string | null) {
     const [err,setErr]=React.useState(null);
     React.useEffect(()=>{ api('/api/fleet/summary').then(setS).catch(()=>setErr(true)); },[]);
     const v = (x, fallback='—') => (x===null || x===undefined)? fallback : x;
-    const pct = n => (n===null||n===undefined)? '—' : (n + '%');
     return e(Page,{title:'Overview (Fleet)'},
       e('div',{className:'grid kpis'},
         e('div',{className:'card'}, e('div',{className:'muted'},'Online %'),
           e('div',{className:'hero'}, v(s?.online_pct,'—'))),
-        e('div',{className:'card'}, e('div',{className:'muted'},'Open Alerts'),
-          e('div',{className:'hero'}, v(s?.open_alerts ?? 0, 0))),
         e('div',{className:'card'}, e('div',{className:'muted'},'Avg COP (24h)'),
           e('div',{className:'hero'}, v(s?.avg_cop_24h,'—'))),
-        e('div',{className:'card'}, e('div',{className:'muted'},'Low-ΔT Count'),
-          e('div',{className:'hero'}, v(s?.low_deltaT_count,'—'))),
-        e('div',{className:'card'}, e('div',{className:'muted'},'Stale Heartbeats'),
-          e('div',{className:'hero'}, v(s?.stale_heartbeat_count,'—')))
+        e('div',{className:'card'}, e('div',{className:'muted'},'Low-ΔT Count (24h)'),
+          e('div',{className:'hero'}, v(s?.low_deltaT_count_24h,'—'))),
+        e('div',{className:'card'}, e('div',{className:'muted'},'Oldest Heartbeat (s)'),
+          e('div',{className:'hero'}, v(s?.max_heartbeat_age_sec,'—')))
       ),
       e('div',{className:'card',style:{marginTop:'1rem'}},
         e('b',null,'Devices'),
-        e('div',null, s? \`\${s.online_devices}/\${s.total_devices} online\` : '—')
+        e('div',null, s? \`\${s.devices_online}/\${s.devices_total} online\` : '—')
       ),
       err && e('div',{className:'card',style:{color:"var(--err)",marginTop:'1rem'}},'Failed to load KPIs')
     );
@@ -992,8 +1019,14 @@ export default {
 
     // API routes
     if (path === "/api/me" && req.method === "GET") return handleMe(req, env);
-    if (path === "/api/fleet/summary" && req.method === "GET") return handleFleetSummary(req, env);
-    if (path === "/api/devices" && req.method === "GET") return handleListDevices(req, env) ;
+    // Fleet summary
+    if (path === "/api/fleet/summary" && req.method === "GET") {
+      return handleFleetSummary(req, env);
+    }
+    // NEW: list devices (tenant-scoped)
+    if (path === "/api/devices" && req.method === "GET") {
+      return handleListDevices(req, env);
+    }
 
     const latestMatch = path.match(/^\/api\/devices\/([^/]+)\/latest$/);
     if (latestMatch && req.method === "GET") {
