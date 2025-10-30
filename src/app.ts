@@ -12,9 +12,11 @@
 //  • FIX: Harden /api/devices pagination (limit sanitization + robust cursor with NULL last_seen_at)
 //  • FIX: Prevent tenant takeover race on first-claim (conditional UPDATE + verify)
 //  • FIX: Cron job batching to stay under D1 limits (chunk + multi-row ops_metrics)
+//  • FIX: Cursor parsing hardened (safe decode + legacy cursor support)
+//  • NEW: /api/fleet/summary endpoint + Overview wired to live KPIs
+//  • RBAC: fail-closed (no implicit "client" role)
 
 import { createRemoteJWKSet, jwtVerify, JWTPayload } from "jose";
-// ⬇️ use the shared RBAC helpers instead of redefining them here
 import { deriveUserFromClaims, landingFor } from "./rbac";
 import type { AccessUser as User } from "./types";
 
@@ -32,7 +34,6 @@ interface TelemetryMetrics {
   mode?: string | null;
   defrost?: number | null;
 }
-
 interface TelemetryBody {
   device_id: string;
   ts: string; // ISO timestamp
@@ -40,13 +41,12 @@ interface TelemetryBody {
   faults?: unknown[];
   rssi?: number | null;
 }
-
 interface Env {
   DB: D1Database;
   ACCESS_JWKS_URL: string;
   ACCESS_AUD: string;
-  APP_BASE_URL: string;   // e.g. "https://your-worker-subdomain.workers.dev"
-  RETURN_DEFAULT: string; // e.g. "https://greenbro.co.za"
+  APP_BASE_URL: string;
+  RETURN_DEFAULT: string;
   HEARTBEAT_INTERVAL_SECS?: string;
   OFFLINE_MULTIPLIER?: string;
 }
@@ -108,9 +108,7 @@ function round(n: unknown, dp: number) {
   return Math.round(n * f) / f;
 }
 
-function nowISO() {
-  return new Date().toISOString();
-}
+function nowISO() { return new Date().toISOString(); }
 
 function maskId(id: string | null | undefined) {
   if (!id) return "";
@@ -122,8 +120,8 @@ function parseAndCheckTs(ts: string) {
   const ms = Date.parse(ts);
   if (Number.isNaN(ms)) return { ok: false as const, reason: "Invalid timestamp" };
   const now = Date.now();
-  const ahead = 5 * 60 * 1000;                 // +5 min
-  const behind = 365 * 24 * 60 * 60 * 1000;    // ~1 year
+  const ahead = 5 * 60 * 1000;              // +5 min
+  const behind = 365 * 24 * 60 * 60 * 1000; // ~1 year
   if (ms > now + ahead) return { ok: false as const, reason: "Timestamp too far in future" };
   if (ms < now - behind) return { ok: false as const, reason: "Timestamp too old" };
   return { ok: true as const, ms };
@@ -133,6 +131,12 @@ function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
+}
+
+// Safe decode for untrusted cursor segments
+function safeDecode(part: string | null): string | null {
+  if (!part) return null;
+  try { return decodeURIComponent(part); } catch { return null; }
 }
 
 // ---- CORS --------------------------------------------------------------------
@@ -208,12 +212,10 @@ const ASSETS: Record<string, { ct: string; body: string }> = {
 
 /** First-claim guard: only attach device to tenant if still unclaimed. */
 async function claimDeviceIfUnowned(env: Env, deviceId: string, profileId: string) {
-  // Try to claim only if current profile_id is NULL
   await env.DB.prepare(
     `UPDATE devices SET profile_id = ?2 WHERE device_id = ?1 AND profile_id IS NULL`
   ).bind(deviceId, profileId).run();
 
-  // Verify owner after conditional update
   const row = await env.DB
     .prepare(`SELECT profile_id FROM devices WHERE device_id = ?1`)
     .bind(deviceId)
@@ -228,9 +230,7 @@ async function claimDeviceIfUnowned(env: Env, deviceId: string, profileId: strin
 
 // ---- Route handlers ----------------------------------------------------------
 
-async function handleHealth() {
-  return json({ ok: true, ts: nowISO() });
-}
+async function handleHealth() { return json({ ok: true, ts: nowISO() }); }
 
 async function handleMe(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
@@ -278,7 +278,7 @@ async function handleLatest(req: Request, env: Env, deviceId: string) {
   return json({ device_id: outwardDeviceId, latest });
 }
 
-// NEW — GET /api/devices (tenant-scoped list)
+// NEW — GET /api/devices (tenant-scoped list) with stable keyset pagination
 async function handleListDevices(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
@@ -295,15 +295,25 @@ async function handleListDevices(req: Request, env: Env) {
     ? Math.min(100, Math.floor(rawLimit))
     : 50;
 
-  // ✅ Robust cursor: "ts|<ISO>" pages non-null timestamps; "null|<device_id>" pages NULL partition
+  // ✅ Robust cursor:
+  //   - "ts|<ISO>|<lastDeviceId>" pages non-null partition stably (ts DESC, id ASC)
+  //   - legacy "ts|<ISO>" still supported (may skip equals)
+  //   - "null|<lastDeviceId>" pages NULL partition (id ASC)
   const rawCursor = url.searchParams.get("cursor");
   let cursorPhase: "ts" | "null" | null = null;
   let cursorTs: string | null = null;
   let cursorId: string | null = null;
   if (rawCursor) {
-    const [phase, val] = rawCursor.split("|", 2);
-    if (phase === "ts" && val)  { cursorPhase = "ts";   cursorTs = decodeURIComponent(val); }
-    if (phase === "null" && val){ cursorPhase = "null"; cursorId = decodeURIComponent(val); }
+    const parts = rawCursor.split("|", 3);
+    const phase = parts[0];
+    if (phase === "ts") {
+      cursorPhase = "ts";
+      cursorTs = safeDecode(parts[1]);
+      cursorId = safeDecode(parts[2] || null); // may be null for legacy
+    } else if (phase === "null") {
+      cursorPhase = "null";
+      cursorId = safeDecode(parts[1] || null);
+    }
   }
 
   let where = "";
@@ -318,10 +328,16 @@ async function handleListDevices(req: Request, env: Env) {
 
   // Apply the cursor window
   if (cursorPhase === "ts" && cursorTs) {
-    // continue through older non-null rows; allow NULLs to appear after those
+    // Stable keyset: (ts < cursorTs) OR (ts = cursorTs AND id > lastId)
     where += where ? " AND" : "WHERE";
-    where += " ((d.last_seen_at IS NOT NULL AND d.last_seen_at < ?) OR d.last_seen_at IS NULL)";
-    bind.push(cursorTs);
+    if (cursorId) {
+      where += " ((d.last_seen_at IS NOT NULL AND (d.last_seen_at < ? OR (d.last_seen_at = ? AND d.device_id > ?))) OR d.last_seen_at IS NULL)";
+      bind.push(cursorTs, cursorTs, cursorId);
+    } else {
+      // Legacy (may drop equals, but safe)
+      where += " ((d.last_seen_at IS NOT NULL AND d.last_seen_at < ?) OR d.last_seen_at IS NULL)";
+      bind.push(cursorTs);
+    }
   } else if (cursorPhase === "null" && cursorId) {
     // continue within the NULL partition by device_id
     where += where ? " AND" : "WHERE";
@@ -360,7 +376,7 @@ async function handleListDevices(req: Request, env: Env) {
   if (hasMore) {
     const last = slice[slice.length - 1];
     next = last.last_seen_at
-      ? `ts|${encodeURIComponent(last.last_seen_at)}`
+      ? `ts|${encodeURIComponent(last.last_seen_at)}|${encodeURIComponent(last.device_id)}`
       : `null|${encodeURIComponent(last.device_id)}`;
   }
 
@@ -386,7 +402,6 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
 
   let body: TelemetryBody;
   try {
-    // NOTE: no generic arg on json(); cast instead
     body = (await req.json()) as TelemetryBody;
     if (JSON.stringify(body).length > 256_000) {
       return withCors(json({ error: "Payload too large" }, { status: 413 }));
@@ -443,20 +458,14 @@ async function handleIngest(req: Request, env: Env, profileId: string) {
   const rho = 0.997;   // kg/L  (water ~20°C)
   const cp  = 4.186;   // kJ/(kg·K)
 
-  // Only compute thermal output if BOTH ΔT and flow are present.
   const thermalKW =
     (deltaT !== null && flow !== null)
       ? round(rho * cp * flow * (deltaT as number), 2)
       : null;
 
-  // Only compute COP when we truly have thermal output and valid electrical power.
   let cop: number | null = null;
   let cop_quality: "measured" | null = null;
-  if (
-    thermalKW !== null &&
-    typeof body.metrics.powerKW === "number" &&
-    body.metrics.powerKW > 0.05
-  ) {
+  if (thermalKW !== null && typeof body.metrics.powerKW === "number" && body.metrics.powerKW > 0.05) {
     cop = round((thermalKW as number) / body.metrics.powerKW, 2) as number;
     cop_quality = "measured";
   }
@@ -592,14 +601,10 @@ async function handleHeartbeat(req: Request, env: Env, profileId: string) {
     }
   }
 
-  // 1) Mark device online + refresh last_seen_at
-  // 2) Upsert a minimal latest_state row without touching schema-specific columns
-  //    (only the columns we KNOW exist from ingest code: device_id, ts, online, updated_at)
   await env.DB.batch([
     env.DB.prepare(
       `UPDATE devices SET online=1, last_seen_at=?2 WHERE device_id=?1`
     ).bind(body.device_id, new Date(tsMs).toISOString()),
-
     env.DB.prepare(
       `INSERT INTO latest_state (device_id, ts, online, updated_at)
        VALUES (?1, ?2, 1, ?3)
@@ -610,7 +615,7 @@ async function handleHeartbeat(req: Request, env: Env, profileId: string) {
     ).bind(body.device_id, tsMs, nowISO()),
   ]);
 
-  // Best-effort ops metrics (never fail main flow)
+  // Best-effort ops metrics
   try {
     await env.DB.prepare(
       `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id)
@@ -620,10 +625,92 @@ async function handleHeartbeat(req: Request, env: Env, profileId: string) {
     console.error("ops_metrics insert failed (hb)", e);
   }
 
-  // If you later add a 'rssi' column in latest_state, you can include it above.
-  // For now we just ignore rssi or let ingest record it in telemetry/status.
-
   return withCors(json({ ok: true, server_time: new Date().toISOString() }));
+}
+
+// NEW — GET /api/fleet/summary  (tenant-scoped KPIs)
+async function handleFleetSummary(req: Request, env: Env) {
+  const user = await requireAccessUser(req, env);
+  if (!user) return json({ error: "Unauthorized" }, { status: 401 });
+
+  const isAdmin = user.roles.some((r: string) => r.toLowerCase().includes("admin"));
+  const url = new URL(req.url);
+  const mine = url.searchParams.get("mine") === "1" || !isAdmin;
+
+  let where = "";
+  const bind: any[] = [];
+  if (mine) {
+    if (!user.clientIds?.length) {
+      // empty scope
+      return json({
+        ts: nowISO(),
+        total_devices: 0,
+        online_devices: 0,
+        online_pct: 0,
+        avg_cop_24h: null,
+        low_deltaT_count: 0,
+        stale_heartbeat_count: 0,
+        notes: "no-scope",
+      });
+    }
+    const ph = user.clientIds.map((_, i) => `?${i + 1}`).join(",");
+    where = `WHERE d.profile_id IN (${ph})`;
+    bind.push(...user.clientIds);
+  }
+
+  // online/total
+  const counts = await env.DB.prepare(
+    `SELECT COUNT(*) as total, COALESCE(SUM(CASE WHEN d.online=1 THEN 1 ELSE 0 END),0) as online
+       FROM devices d ${where}`
+  ).bind(...bind).first<{ total: number; online: number }>();
+
+  const total = Number(counts?.total || 0);
+  const online = Number(counts?.online || 0);
+
+  // stale heartbeats vs threshold
+  const hbInterval = Number(env.HEARTBEAT_INTERVAL_SECS ?? "30");
+  const multiplier = Number(env.OFFLINE_MULTIPLIER ?? "6");
+  const thresholdSecs = Math.max(60, hbInterval * multiplier);
+  const days = thresholdSecs / 86400;
+
+  const stale = await env.DB.prepare(
+    `SELECT COUNT(*) as c FROM devices d ${where ? where + " AND" : "WHERE"}
+       (d.last_seen_at IS NULL OR (julianday('now') - julianday(d.last_seen_at)) > ?1)`
+  ).bind(...bind, days).first<{ c: number }>();
+  const staleCount = Number(stale?.c || 0);
+
+  // avg COP over last 24h (telemetry.ts is in ms)
+  const sinceMs = Date.now() - 86_400_000;
+  const copRow = await env.DB.prepare(
+    `SELECT AVG(t.cop) as avg_cop
+       FROM telemetry t
+       JOIN devices d ON d.device_id = t.device_id
+       ${where}
+      AND t.ts >= ?1 AND t.cop IS NOT NULL`
+  ).bind(...bind, sinceMs).first<{ avg_cop: number | null }>();
+  const avgCop = copRow?.avg_cop ?? null;
+
+  // low deltaT (from latest_state)
+  const lowDeltaThresh = 2.0;
+  const lowRow = await env.DB.prepare(
+    `SELECT COUNT(*) as c
+       FROM latest_state ls
+       JOIN devices d ON d.device_id = ls.device_id
+       ${where}
+      AND ls.deltaT IS NOT NULL AND ls.deltaT < ?1`
+  ).bind(...bind, lowDeltaThresh).first<{ c: number }>();
+  const lowDelta = Number(lowRow?.c || 0);
+
+  return json({
+    ts: nowISO(),
+    total_devices: total,
+    online_devices: online,
+    online_pct: total ? Math.round((online / total) * 100) : 0,
+    avg_cop_24h: avgCop !== null ? Number(round(avgCop, 2)) : null,
+    low_deltaT_count: lowDelta,
+    stale_heartbeat_count: staleCount,
+    threshold_secs: thresholdSecs,
+  });
 }
 
 // ---- SPA HTML ---------------------------------------------------------------
@@ -670,31 +757,40 @@ function appHtml(env: Env, returnUrlParam: string | null) {
   function TopNav({me}){
     return e('div',{className:'nav'},
       e('div',{className:'brand'}, e('img',{src:'/assets/GREENBRO LOGO APP.svg',height:24}), 'GreenBro Dashboard'),
-      e('span',{className:'tag'}, me? me.roles.join(', ') : 'guest'),
+      e('span',{className:'tag'}, me? (me.roles && me.roles.length? me.roles.join(', ') : 'no-role') : 'guest'),
       e('div',{className:'sp'}),
       e('a',{href:'/app/logout?return='+encodeURIComponent(RETURN_URL), className:'btn'}, 'Logout')
     );
   }
 
   function Page({title,children}) {
-    return e('div',null,
-      e('div',{className:'wrap'},
-        e('h2',null,title),
-        children
-      )
-    );
+    return e('div',null, e('div',{className:'wrap'}, e('h2',null,title), children ));
   }
 
-  function OverviewPage(){
+  function OverviewPage({me}){
+    const [s,setS]=React.useState(null);
+    const [err,setErr]=React.useState(null);
+    React.useEffect(()=>{ api('/api/fleet/summary').then(setS).catch(()=>setErr(true)); },[]);
+    const v = (x, fallback='—') => (x===null || x===undefined)? fallback : x;
+    const pct = n => (n===null||n===undefined)? '—' : (n + '%');
     return e(Page,{title:'Overview (Fleet)'},
       e('div',{className:'grid kpis'},
-        e('div',{className:'card'}, e('div',{className:'muted'},'Online %'), e('div',{className:'hero'},'—')),
-        e('div',{className:'card'}, e('div',{className:'muted'},'Open Alerts'), e('div',{className:'hero'},'—')),
-        e('div',{className:'card'}, e('div',{className:'muted'},'Avg COP (24h)'), e('div',{className:'hero'},'—')),
-        e('div',{className:'card'}, e('div',{className:'muted'},'Low-ΔT Count'), e('div',{className:'hero'},'—')),
-        e('div',{className:'card'}, e('div',{className:'muted'},'Heartbeat Freshness'), e('div',{className:'hero'},'—'))
+        e('div',{className:'card'}, e('div',{className:'muted'},'Online %'),
+          e('div',{className:'hero'}, v(s?.online_pct,'—'))),
+        e('div',{className:'card'}, e('div',{className:'muted'},'Open Alerts'),
+          e('div',{className:'hero'}, v(s?.open_alerts ?? 0, 0))),
+        e('div',{className:'card'}, e('div',{className:'muted'},'Avg COP (24h)'),
+          e('div',{className:'hero'}, v(s?.avg_cop_24h,'—'))),
+        e('div',{className:'card'}, e('div',{className:'muted'},'Low-ΔT Count'),
+          e('div',{className:'hero'}, v(s?.low_deltaT_count,'—'))),
+        e('div',{className:'card'}, e('div',{className:'muted'},'Stale Heartbeats'),
+          e('div',{className:'hero'}, v(s?.stale_heartbeat_count,'—')))
       ),
-      e('div',{className:'card',style:{marginTop:'1rem'}}, e('b',null,'Regions'), e('div',null,'Gauteng • KZN • Western Cape (filters devices link)'))
+      e('div',{className:'card',style:{marginTop:'1rem'}},
+        e('b',null,'Devices'),
+        e('div',null, s? \`\${s.online_devices}/\${s.total_devices} online\` : '—')
+      ),
+      err && e('div',{className:'card',style:{color:"var(--err)",marginTop:'1rem'}},'Failed to load KPIs')
     );
   }
 
@@ -758,9 +854,8 @@ function appHtml(env: Env, returnUrlParam: string | null) {
   function UnauthorizedPage(){
     return e('div',null,
       e('div',{className:'wrap'},
-        e('div',{className:'card'}, e('h2',null,'Access required'),
-          e('p',null,'Please sign in to continue.'),
-          e('a',{className:'btn',href:'/cdn-cgi/access/login?redirect_url='+encodeURIComponent('/app')},'Sign in'),
+        e('div',{className:'card'}, e('h2',null,'No access'),
+          e('p',null,'Your account is signed in but has no assigned role. Please contact support.'),
           e('div',{style:{marginTop:'1rem'}}, e('a',{href: RETURN_URL},'Back to GreenBro'))
         )
       )
@@ -773,18 +868,20 @@ function appHtml(env: Env, returnUrlParam: string | null) {
     if (err) return e(UnauthorizedPage);
     if (!me) return e('div',null,e('div',{className:'wrap'}, e('div',{className:'card'}, 'Loading…')));
 
+    const roles = me.roles || [];
     const path = location.pathname.replace(/^\\/app\\/?/,'') || '';
     const page = path.split('/')[0];
 
     if (path==='' || path==='index.html'){
-      const landing = (me.roles||[]).includes('admin') ? '/app/overview'
-        : (me.roles||[]).includes('client') ? '/app/compact'
-        : '/app/devices';
+      const landing = roles.includes('admin') ? '/app/overview'
+        : roles.includes('client') ? '/app/compact'
+        : roles.includes('contractor') ? '/app/devices'
+        : '/app/unauthorized';
       if (location.pathname !== landing) { history.replaceState(null,'',landing); }
     }
 
     const content =
-      page==='overview' ? e(OverviewPage)
+      page==='overview' ? e(OverviewPage,{me})
       : page==='compact' ? e(CompactDashboardPage)
       : page==='devices' ? e(DevicesPage)
       : page==='device' ? e(DeviceDetailPage)
@@ -792,12 +889,10 @@ function appHtml(env: Env, returnUrlParam: string | null) {
       : page==='commissioning' ? e(CommissioningPage)
       : page==='admin' ? e(AdminPage)
       : page==='admin-archive' ? e(AdminArchivePage)
-      : e(OverviewPage);
+      : page==='unauthorized' ? e(UnauthorizedPage)
+      : e(OverviewPage,{me});
 
-    return e('div',null,
-      e(TopNav,{me}),
-      content
-    );
+    return e('div',null, e(TopNav,{me}), content );
   }
 
   root.render(e(App));
@@ -827,12 +922,8 @@ export default {
     const url = new URL(req.url);
     const path = url.pathname;
 
-    // Absolute redirect to avoid "Unable to parse URL: /app" in preview.
-    if (path === "/") {
-      return Response.redirect(url.origin + "/app", 302);
-    }
+    if (path === "/") return Response.redirect(url.origin + "/app", 302);
 
-    // CORS preflight for device routes (ingest/heartbeat/latest)
     const pre = maybeHandlePreflight(req, path);
     if (pre) return pre;
 
@@ -846,7 +937,6 @@ export default {
       );
     }
 
-    // OPTIONS fallback (non-device paths)
     if (req.method === "OPTIONS") {
       return withSecurityHeaders(new Response("", { status: 204, headers: CORS_BASE }));
     }
@@ -859,7 +949,6 @@ export default {
       return withSecurityHeaders(new Response(a.body, { headers: { "content-type": a.ct } }));
     }
 
-    // Health
     if (path === "/health") return handleHealth();
 
     // App shell
@@ -872,11 +961,10 @@ export default {
           }),
         );
       }
-      // Redirect to role landing; APP_BASE_URL should be absolute (https://...)
       return Response.redirect(env.APP_BASE_URL + landingFor(user), 302);
     }
 
-    // Logout route – make absolute too
+    // Logout route
     if (path === "/app/logout") {
       const ret = url.searchParams.get("return") || env.RETURN_DEFAULT;
       const logoutUrl = new URL(
@@ -904,11 +992,8 @@ export default {
 
     // API routes
     if (path === "/api/me" && req.method === "GET") return handleMe(req, env);
-
-    // NEW: list devices (tenant-scoped)
-    if (path === "/api/devices" && req.method === "GET") {
-      return handleListDevices(req, env);
-    }
+    if (path === "/api/fleet/summary" && req.method === "GET") return handleFleetSummary(req, env);
+    if (path === "/api/devices" && req.method === "GET") return handleListDevices(req, env) ;
 
     const latestMatch = path.match(/^\/api\/devices\/([^/]+)\/latest$/);
     if (latestMatch && req.method === "GET") {
@@ -932,12 +1017,9 @@ export default {
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
     const hbInterval = Number(env.HEARTBEAT_INTERVAL_SECS ?? "30");
     const multiplier = Number(env.OFFLINE_MULTIPLIER ?? "6");
-    const thresholdSecs = Math.max(60, hbInterval * multiplier); // clamp >=60s
-
-    // julianday('now') difference in days; convert seconds -> days
+    const thresholdSecs = Math.max(60, hbInterval * multiplier);
     const days = thresholdSecs / 86400;
 
-    // 1) Find devices that are currently online but stale
     const stale = await env.DB.prepare(
       `SELECT device_id FROM devices
         WHERE online = 1
@@ -947,9 +1029,8 @@ export default {
     const ids = stale.results?.map(r => r.device_id) ?? [];
     if (!ids.length) return;
 
-    // 2) Process in chunks to honor D1 batch/statement limits
     const ts = new Date().toISOString();
-    const BATCH = 25; // 3 statements per batch (well under 50)
+    const BATCH = 25; // << keeps us under D1 50-statement limit
 
     for (const batchIds of chunk(ids, BATCH)) {
       // a) UPDATE devices … IN (…)

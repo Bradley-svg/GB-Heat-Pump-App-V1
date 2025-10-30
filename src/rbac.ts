@@ -6,6 +6,7 @@ import type { AccessUser } from "./types";
  * Canonical RBAC helpers.
  * - roles from roles[] or groups[]
  * - clientIds from explicit clientIds[] OR groups like "client:<id>"
+ * SECURITY: Fail-closed. If no supported role is present, user gets no roles.
  */
 export function deriveUserFromClaims(claims: JWTPayload): AccessUser {
   const email = (claims as any).email || claims.sub || "unknown@unknown";
@@ -25,7 +26,7 @@ export function deriveUserFromClaims(claims: JWTPayload): AccessUser {
     else if (v.includes("contractor")) roles.add("contractor");
     else if (v.includes("client")) roles.add("client");
   }
-  if (roles.size === 0) roles.add("client");
+  // ❌ no default grant — unknown users have zero roles
 
   // ---- clientIds
   const groupsUnknown: unknown[] = Array.isArray((claims as any).groups)
@@ -33,7 +34,6 @@ export function deriveUserFromClaims(claims: JWTPayload): AccessUser {
     : [];
   const groups: string[] = groupsUnknown.map((g) => String(g));
 
-  // Explicitly type the callback params to avoid implicit 'any'
   const fromGroups: string[] = groups
     .filter((g: string) => g.startsWith("client:"))
     .map((g: string) => g.slice("client:".length));
@@ -52,5 +52,6 @@ export function landingFor(user: AccessUser): string {
   if (user.roles.includes("admin")) return "/app/overview";
   if (user.roles.includes("client")) return "/app/compact";
   if (user.roles.includes("contractor")) return "/app/devices";
+  // ❗ no roles => explicit unauthorized landing
   return "/app/unauthorized";
 }
