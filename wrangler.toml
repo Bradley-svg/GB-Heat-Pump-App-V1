@@ -32,3 +32,9 @@ OFFLINE_MULTIPLIER = "6"              # mark offline if > 6× heartbeat interval
 # Every 5 minutes: set devices offline if stale
 [triggers]
 crons = ["*/5 * * * *"]
+
+[[r2_buckets]]
+binding = "GB_BUCKET"
+bucket_name = "greenbro-brand"
+# optional for local dev:
+# preview_bucket_name = "greenbro-brand-dev"
