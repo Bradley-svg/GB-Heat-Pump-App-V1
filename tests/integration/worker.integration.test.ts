@@ -5,7 +5,6 @@ import { describe, expect, it, beforeAll, beforeEach, afterAll, vi } from "vites
 
 import { hmacSha256Hex } from "../../src/utils";
 import { sealCursorId } from "../../src/lib/cursor";
-import { handleTelemetryLatestBatch, handleTelemetrySeries } from "../../src/routes/telemetry";
 import type { User } from "../../src/env";
 import { createWorkerEnv } from "../helpers/worker-env";
 
@@ -26,6 +25,7 @@ describe.sequential("Worker integration", () => {
   let currentUser: User | null = adminUser;
   let handleFleetSummary: typeof import("../../src/routes/fleet").handleFleetSummary;
   let handleIngest: typeof import("../../src/routes/ingest").handleIngest;
+  let handleRequest: typeof import("../../src/router").handleRequest;
   let requireAccessUserSpy: ReturnType<typeof vi.spyOn> | null = null;
 
   beforeAll(async () => {
@@ -35,6 +35,7 @@ describe.sequential("Worker integration", () => {
       .mockImplementation(async () => currentUser);
     ({ handleFleetSummary } = await import("../../src/routes/fleet"));
     ({ handleIngest } = await import("../../src/routes/ingest"));
+    ({ handleRequest } = await import("../../src/router"));
   });
 
   beforeEach(() => {
@@ -137,7 +138,7 @@ describe.sequential("Worker integration", () => {
         }),
       });
 
-      const response = await handleTelemetryLatestBatch(request, env);
+      const response = await handleRequest(request, env);
       expect(response.status).toBe(200);
       const payload = (await response.json()) as {
         items: Array<{
@@ -251,7 +252,7 @@ describe.sequential("Worker integration", () => {
       allowedUrl.searchParams.set("start", start);
       allowedUrl.searchParams.set("end", end);
 
-      const allowedResponse = await handleTelemetrySeries(new Request(allowedUrl.toString()), env);
+      const allowedResponse = await handleRequest(new Request(allowedUrl.toString()), env);
       expect(allowedResponse.status).toBe(200);
       const allowedPayload = (await allowedResponse.json()) as {
         interval_ms: number;
@@ -291,10 +292,7 @@ describe.sequential("Worker integration", () => {
       forbiddenUrl.searchParams.set("start", start);
       forbiddenUrl.searchParams.set("end", end);
 
-      const forbiddenResponse = await handleTelemetrySeries(
-        new Request(forbiddenUrl.toString()),
-        env,
-      );
+      const forbiddenResponse = await handleRequest(new Request(forbiddenUrl.toString()), env);
       expect(forbiddenResponse.status).toBe(403);
     } finally {
       dispose();

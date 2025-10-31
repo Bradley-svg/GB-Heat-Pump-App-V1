@@ -91,7 +91,7 @@ export function handleRequest(req: Request, env: Env, ctx?: ExecutionContext) {
   const start = Date.now();
   const logger = bindRequestLogger(req, env);
   logger.debug("request.received");
-  return Promise.resolve(router.handle(req, env, ctx))
+  return Promise.resolve(router.fetch(req, env, ctx))
     .then((res) => {
       logger.info("request.completed", {
         status: res?.status ?? 0,
