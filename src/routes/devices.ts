@@ -12,6 +12,7 @@ import { json } from "../utils/responses";
 import { parseMetricsJson, safeDecode } from "../utils";
 import { DeviceHistoryQuerySchema, ListDevicesQuerySchema } from "../schemas/devices";
 import { validationErrorResponse } from "../utils/validation";
+import { loggerForRequest } from "../utils/logging";
 
 export async function handleLatest(req: Request, env: Env, deviceId: string) {
   const user = await requireAccessUser(req, env);
@@ -164,7 +165,9 @@ export async function handleListDevices(req: Request, env: Env) {
       })),
     );
   } catch (err) {
-    console.error("Failed to build device list", err);
+    loggerForRequest(req, { route: "/api/devices" }).error("devices.list_failed", {
+      error: err,
+    });
     return json({ error: "Server error" }, { status: 500 });
   }
 
@@ -176,7 +179,9 @@ export async function handleListDevices(req: Request, env: Env) {
       try {
         cursorDeviceId = await sealCursorId(env, last.device_id);
       } catch (err) {
-        console.error("Failed to seal cursor", err);
+        loggerForRequest(req, { route: "/api/devices" }).error("devices.cursor_seal_failed", {
+          error: err,
+        });
         return json({ error: "Server error" }, { status: 500 });
       }
     }
@@ -254,7 +259,11 @@ export async function handleDeviceHistory(req: Request, env: Env, rawDeviceId: s
   try {
     lookupToken = await buildDeviceLookup(resolvedId, env, scope.isAdmin);
   } catch (err) {
-    console.error("Failed to build history lookup", err);
+    loggerForRequest(req, {
+      route: "/api/devices/:id/history",
+      device_id: resolvedId,
+      request_device_id: rawDeviceId,
+    }).error("devices.history_lookup_failed", { error: err });
     return json({ error: "Server error" }, { status: 500 });
   }
 

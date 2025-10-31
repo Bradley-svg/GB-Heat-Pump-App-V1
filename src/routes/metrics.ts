@@ -23,7 +23,12 @@ export async function handleMetrics(req: Request, env: Env) {
   const opsRows =
     (
       await env.DB.prepare(
-        `SELECT route, status_code, COUNT(*) AS count
+        `SELECT route,
+                status_code,
+                COUNT(*) AS count,
+                SUM(duration_ms) AS total_duration_ms,
+                AVG(duration_ms) AS avg_duration_ms,
+                MAX(duration_ms) AS max_duration_ms
            FROM ops_metrics
           GROUP BY route, status_code
           ORDER BY route ASC, status_code ASC`,
@@ -31,6 +36,9 @@ export async function handleMetrics(req: Request, env: Env) {
         route: string | null;
         status_code: number | null;
         count: number | null;
+        total_duration_ms: number | string | null;
+        avg_duration_ms: number | string | null;
+        max_duration_ms: number | string | null;
       }>()
     ).results ?? [];
 

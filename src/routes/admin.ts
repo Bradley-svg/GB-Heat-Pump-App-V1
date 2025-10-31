@@ -5,6 +5,7 @@ import { json } from "../utils/responses";
 import { andWhere, nowISO } from "../utils";
 import { AdminOverviewQuerySchema } from "../schemas/admin";
 import { validationErrorResponse } from "../utils/validation";
+import { loggerForRequest } from "../utils/logging";
 
 export async function handleAdminOverview(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
@@ -106,7 +107,10 @@ export async function handleAdminOverview(req: Request, env: Env) {
         lookupToken = await buildDeviceLookup(deviceId, env, scope.isAdmin);
         outwardId = presentDeviceId(deviceId, scope.isAdmin);
       } catch (err) {
-        console.error("Failed to build ops lookup", err);
+        loggerForRequest(req, { route: "/api/admin/overview", device_id: deviceId }).error(
+          "admin.lookup_failed",
+          { error: err },
+        );
         return json({ error: "Server error" }, { status: 500 });
       }
     }

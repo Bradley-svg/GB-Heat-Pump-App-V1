@@ -3,6 +3,7 @@ import { requireAccessUser } from "../lib/access";
 import { buildDeviceLookup, buildDeviceScope, presentDeviceId } from "../lib/device";
 import { json } from "../utils/responses";
 import { andWhere, nowISO } from "../utils";
+import { loggerForRequest } from "../utils/logging";
 
 export async function handleCommissioning(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
@@ -70,7 +71,10 @@ export async function handleCommissioning(req: Request, env: Env) {
       })),
     );
   } catch (err) {
-    console.error("Failed to build commissioning payload", err);
+    loggerForRequest(req, { route: "/api/commissioning/checklist" }).error(
+      "commissioning.payload_failed",
+      { error: err },
+    );
     return json({ error: "Server error" }, { status: 500 });
   }
 

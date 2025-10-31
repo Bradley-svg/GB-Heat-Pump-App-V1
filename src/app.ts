@@ -6,6 +6,7 @@ import { CORS_BASE, maybeHandlePreflight } from "./lib/cors";
 import { HTML_CT, json, text, withSecurityHeaders } from "./utils/responses";
 import { chunk } from "./utils";
 import { handleRequest } from "./router";
+import { systemLogger } from "./utils/logging";
 
 const DEFAULT_APP_CONFIG = { apiBase: "", assetBase: "/assets/" };
 const STATIC_CONTENT_TYPES: Record<string, string> = {
@@ -145,6 +146,7 @@ export default {
   },
 
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
+    const log = systemLogger({ task: "offline-cron" });
     const hbInterval = Number(env.HEARTBEAT_INTERVAL_SECS ?? "30");
     const multiplier = Number(env.OFFLINE_MULTIPLIER ?? "6");
     const thresholdSecs = Math.max(60, hbInterval * multiplier);
@@ -159,11 +161,20 @@ export default {
       .all<{ device_id: string }>();
 
     const ids = stale.results?.map((r) => r.device_id) ?? [];
-    if (!ids.length) return;
+    if (!ids.length) {
+      log.debug("cron.offline_check.noop", { stale_count: 0, threshold_secs: thresholdSecs });
+      return;
+    }
+
+    log.info("cron.offline_check.start", {
+      stale_count: ids.length,
+      threshold_secs: thresholdSecs,
+    });
 
     const ts = new Date().toISOString();
     const BATCH = 25;
 
+    let processed = 0;
     for (const batchIds of chunk(ids, BATCH)) {
       const phA = batchIds.map((_, i) => `?${i + 1}`).join(",");
       await env.DB.prepare(`UPDATE devices SET online=0 WHERE online=1 AND device_id IN (${phA})`)
@@ -183,6 +194,14 @@ export default {
       )
         .bind(...binds)
         .run();
+
+      processed += batchIds.length;
     }
+
+    log.info("cron.offline_check.completed", {
+      stale_count: ids.length,
+      processed,
+      batches: Math.ceil(ids.length / BATCH),
+    });
   },
 };

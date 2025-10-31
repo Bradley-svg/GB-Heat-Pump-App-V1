@@ -25,17 +25,48 @@ export interface OpsMetricInput {
   route: string | null;
   status_code: number | null;
   count: number | null;
+  total_duration_ms?: number | string | null;
+  avg_duration_ms?: number | string | null;
+  max_duration_ms?: number | string | null;
 }
 
 export interface OpsMetricNormalized {
   route: string;
   status_code: number;
   count: number;
+  total_duration_ms: number;
+  avg_duration_ms: number;
+  max_duration_ms: number;
 }
 
 const WATER_DENSITY_KG_PER_L = 0.997;
 const WATER_SPECIFIC_HEAT_KJ_PER_KG_C = 4.186;
 const MIN_COP_POWER_KW = 0.05;
+
+export const ALERT_THRESHOLDS = {
+  devices: {
+    offline_ratio: { warn: 0.2, critical: 0.35 },
+    heartbeat_gap_minutes: { warn: 5, critical: 10 },
+  },
+  ops: {
+    error_rate: { warn: 0.02, critical: 0.05 },
+    client_error_rate: { warn: 0.08, critical: 0.15 },
+    avg_duration_ms: { warn: 1500, critical: 3000 },
+  },
+  ingest: {
+    consecutive_failures: { warn: 3, critical: 5 },
+    rate_limit_per_device: { warn: 90, critical: 120 },
+  },
+} as const;
+
+function coerceNumber(value: unknown, fallback = 0): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : fallback;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+}
 
 export function pickMetricsFormat(explicit: string | null | undefined, acceptHeader: string | null | undefined): MetricsFormat {
   if (explicit === "json" || explicit === "prom") return explicit;
@@ -98,11 +129,79 @@ export function normalizeDeviceSummary(stats: DeviceSummaryInput) {
 }
 
 export function normalizeOpsMetrics(rows: OpsMetricInput[]): OpsMetricNormalized[] {
-  return rows.map((row) => ({
-    route: row.route ?? "unknown",
-    status_code: typeof row.status_code === "number" ? row.status_code : 0,
-    count: typeof row.count === "number" ? row.count : 0,
-  }));
+  return rows.map((row) => {
+    const route = row.route ?? "unknown";
+    const statusCodeRaw =
+      typeof row.status_code === "number" ? row.status_code : coerceNumber(row.status_code);
+    const statusCode = Number.isFinite(statusCodeRaw) ? Math.trunc(statusCodeRaw) : 0;
+    const count = coerceNumber(row.count);
+    const totalDuration = coerceNumber(row.total_duration_ms);
+    const avgDuration =
+      count > 0 ? totalDuration / count : coerceNumber(row.avg_duration_ms);
+    const maxDuration = coerceNumber(row.max_duration_ms);
+
+    return {
+      route,
+      status_code: statusCode,
+      count,
+      total_duration_ms: totalDuration,
+      avg_duration_ms: avgDuration,
+      max_duration_ms: maxDuration,
+    };
+  });
+}
+
+export function summarizeOpsMetrics(rows: OpsMetricNormalized[]) {
+  let total = 0;
+  let serverErrors = 0;
+  let clientErrors = 0;
+  let slow = 0;
+
+  const slowRoutes: Array<{
+    route: string;
+    status_code: number;
+    avg_duration_ms: number;
+    count: number;
+  }> = [];
+  const serverErrorRoutes: Array<{ route: string; status_code: number; count: number }> = [];
+
+  for (const row of rows) {
+    total += row.count;
+    if (row.status_code >= 500) {
+      serverErrors += row.count;
+      serverErrorRoutes.push({
+        route: row.route,
+        status_code: row.status_code,
+        count: row.count,
+      });
+    } else if (row.status_code >= 400) {
+      clientErrors += row.count;
+    }
+    if (row.avg_duration_ms >= ALERT_THRESHOLDS.ops.avg_duration_ms.warn) {
+      slow += row.count;
+      slowRoutes.push({
+        route: row.route,
+        status_code: row.status_code,
+        avg_duration_ms: Number(row.avg_duration_ms.toFixed(2)),
+        count: row.count,
+      });
+    }
+  }
+
+  slowRoutes.sort((a, b) => b.avg_duration_ms - a.avg_duration_ms);
+  serverErrorRoutes.sort((a, b) => b.count - a.count);
+
+  const totalRequests = total;
+  const denominator = totalRequests > 0 ? totalRequests : 1;
+
+  return {
+    total_requests: totalRequests,
+    server_error_rate: totalRequests > 0 ? Number((serverErrors / denominator).toFixed(4)) : 0,
+    client_error_rate: totalRequests > 0 ? Number((clientErrors / denominator).toFixed(4)) : 0,
+    slow_rate: totalRequests > 0 ? Number((slow / denominator).toFixed(4)) : 0,
+    slow_routes: slowRoutes.slice(0, 5),
+    top_server_error_routes: serverErrorRoutes.slice(0, 5),
+  };
 }
 
 export function formatMetricsJson(
@@ -112,9 +211,17 @@ export function formatMetricsJson(
 ) {
   const summary = normalizeDeviceSummary(devices);
   const ops = normalizeOpsMetrics(opsRows);
+  const opsSummary = summarizeOpsMetrics(ops);
+  const offlineRatio = summary.total > 0 ? summary.offline / summary.total : 0;
+
   return {
-    devices: summary,
+    devices: {
+      ...summary,
+      offline_ratio: Number(offlineRatio.toFixed(4)),
+    },
     ops,
+    ops_summary: opsSummary,
+    thresholds: ALERT_THRESHOLDS,
     generated_at: generatedAt,
   };
 }
@@ -126,6 +233,8 @@ export function formatPromMetrics(
 ) {
   const summary = normalizeDeviceSummary(devices);
   const ops = normalizeOpsMetrics(opsRows);
+  const opsSummary = summarizeOpsMetrics(ops);
+  const offlineRatio = summary.total > 0 ? summary.offline / summary.total : 0;
   const lines: string[] = [
     "# HELP greenbro_devices_total Total registered devices",
     "# TYPE greenbro_devices_total gauge",
@@ -136,6 +245,9 @@ export function formatPromMetrics(
     "# HELP greenbro_devices_offline_total Devices currently marked offline",
     "# TYPE greenbro_devices_offline_total gauge",
     `greenbro_devices_offline_total ${summary.offline}`,
+    "# HELP greenbro_devices_offline_ratio Fraction of devices currently offline",
+    "# TYPE greenbro_devices_offline_ratio gauge",
+    `greenbro_devices_offline_ratio ${offlineRatio}`,
     "# HELP greenbro_ops_requests_total Recorded API requests by route and status",
     "# TYPE greenbro_ops_requests_total counter",
   ];
@@ -152,6 +264,18 @@ export function formatPromMetrics(
     "# TYPE greenbro_metrics_generated_at gauge",
   );
   lines.push(`greenbro_metrics_generated_at ${Math.floor(timestampMs / 1000)}`);
+  lines.push("# HELP greenbro_ops_requests_overall_total Total recorded API requests (all routes)");
+  lines.push("# TYPE greenbro_ops_requests_overall_total counter");
+  lines.push(`greenbro_ops_requests_overall_total ${opsSummary.total_requests}`);
+  lines.push("# HELP greenbro_ops_server_error_rate Share of requests returning 5xx");
+  lines.push("# TYPE greenbro_ops_server_error_rate gauge");
+  lines.push(`greenbro_ops_server_error_rate ${opsSummary.server_error_rate}`);
+  lines.push("# HELP greenbro_ops_client_error_rate Share of requests returning 4xx");
+  lines.push("# TYPE greenbro_ops_client_error_rate gauge");
+  lines.push(`greenbro_ops_client_error_rate ${opsSummary.client_error_rate}`);
+  lines.push("# HELP greenbro_ops_slow_rate Share of requests above avg latency threshold");
+  lines.push("# TYPE greenbro_ops_slow_rate gauge");
+  lines.push(`greenbro_ops_slow_rate ${opsSummary.slow_rate}`);
 
   return lines.join("\n") + "\n";
 }

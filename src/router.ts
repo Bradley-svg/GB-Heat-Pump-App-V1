@@ -20,6 +20,7 @@ import {
 } from "./routes/commissioning-runs";
 import { handleCreateAuditEntry, handleListAuditTrail } from "./routes/audit";
 import { handleCreateMqttMapping, handleListMqttMappings } from "./routes/mqtt";
+import { bindRequestLogger, loggerForRequest, releaseRequestLogger } from "./utils/logging";
 
 type RoutedRequest = Request & { params?: Record<string, string> };
 type RouteHandler = (req: Request, env: Env) => Promise<Response> | Response;
@@ -84,5 +85,25 @@ router
 router.all("*", () => json({ error: "Not found" }, { status: 404 }));
 
 export function handleRequest(req: Request, env: Env, ctx?: ExecutionContext) {
-  return router.handle(req, env, ctx);
+  const start = Date.now();
+  const logger = bindRequestLogger(req, env);
+  logger.debug("request.received");
+  return Promise.resolve(router.handle(req, env, ctx))
+    .then((res) => {
+      logger.info("request.completed", {
+        status: res?.status ?? 0,
+        duration_ms: Date.now() - start,
+      });
+      return res;
+    })
+    .catch((err) => {
+      loggerForRequest(req).error("request.failed", {
+        duration_ms: Date.now() - start,
+        error: err,
+      });
+      throw err;
+    })
+    .finally(() => {
+      releaseRequestLogger(req);
+    });
 }

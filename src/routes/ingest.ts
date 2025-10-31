@@ -12,6 +12,7 @@ import { validationErrorResponse } from "../utils/validation";
 import { HeartbeatPayloadSchema, TelemetryPayloadSchema } from "../schemas/ingest";
 import type { HeartbeatPayload, TelemetryPayload } from "../schemas/ingest";
 import { deriveTelemetryMetrics } from "../telemetry";
+import { loggerForRequest, systemLogger, type Logger } from "../utils/logging";
 
 const DEVICE_KEY_HEADER = "X-GREENBRO-DEVICE-KEY";
 const SIGNATURE_HEADER = "X-GREENBRO-SIGNATURE";
@@ -51,6 +52,7 @@ async function recordOpsMetric(
   statusCode: number,
   durationMs: number,
   deviceId: string | null,
+  logger?: Logger,
 ) {
   try {
     await env.DB.prepare(
@@ -59,7 +61,12 @@ async function recordOpsMetric(
       .bind(nowISO(), route, statusCode, durationMs, deviceId)
       .run();
   } catch (error) {
-    console.error(`ops_metrics insert failed (${route}, ${statusCode})`, error);
+    (logger ?? systemLogger({ route })).error("ops_metrics.insert_failed", {
+      route,
+      status_code: statusCode,
+      device_id: deviceId,
+      error,
+    });
   }
 }
 
@@ -145,6 +152,7 @@ function payloadSizeOk(raw: string) {
 
 export async function handleIngest(req: Request, env: Env, profileId: string) {
   const t0 = Date.now();
+  const log = loggerForRequest(req, { route: `${INGEST_ROUTE}/:profile`, profile_id: profileId });
   const cors = evaluateCors(req, env);
   if (!cors.allowed) {
     return json({ error: "Origin not allowed" }, { status: 403 });
@@ -211,11 +219,13 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
   }
 
   if (devRow.profile_id && devRow.profile_id !== profileId) {
-    console.warn("Profile mismatch", {
-      deviceId: body.device_id,
-      urlProfileId: profileId,
-      dbProfile: devRow.profile_id,
-    });
+    log
+      .with({
+        device_id: body.device_id,
+        db_profile_id: devRow.profile_id,
+        requested_profile_id: profileId,
+      })
+      .warn("ingest.profile_mismatch");
     return withCors(
       req,
       env,
@@ -238,7 +248,16 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
 
   const limitPerMinute = parsedRateLimit(env);
   if (await isRateLimited(env, INGEST_ROUTE, body.device_id, limitPerMinute)) {
-    await recordOpsMetric(env, INGEST_ROUTE, 429, Date.now() - t0, body.device_id);
+    const deviceLog = log.with({ device_id: body.device_id });
+    await recordOpsMetric(
+      env,
+      INGEST_ROUTE,
+      429,
+      Date.now() - t0,
+      body.device_id,
+      deviceLog,
+    );
+    deviceLog.warn("ingest.rate_limited", { limit_per_minute: limitPerMinute });
     return withCors(req, env, json({ error: "Rate limit exceeded" }, { status: 429 }), cors);
   }
 
@@ -315,11 +334,20 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
       ).bind(body.device_id, new Date(tsMs).toISOString()),
     ]);
 
-    await recordOpsMetric(env, INGEST_ROUTE, 200, Date.now() - t0, body.device_id);
-
+    const deviceLog = log.with({ device_id: body.device_id });
+    await recordOpsMetric(env, INGEST_ROUTE, 200, Date.now() - t0, body.device_id, deviceLog);
+    deviceLog.info("ingest.telemetry_stored", {
+      payload_ts: new Date(tsMs).toISOString(),
+      faults_count: body.faults?.length ?? 0,
+      delta_t: deltaT,
+      thermal_kw: thermalKW,
+      cop,
+    });
     return withCors(req, env, json({ ok: true }), cors);
   } catch (e: any) {
-    await recordOpsMetric(env, INGEST_ROUTE, 500, Date.now() - t0, body.device_id);
+    const deviceLog = log.with({ device_id: body.device_id });
+    deviceLog.error("ingest.db_error", { error: e });
+    await recordOpsMetric(env, INGEST_ROUTE, 500, Date.now() - t0, body.device_id, deviceLog);
     return withCors(
       req,
       env,
@@ -331,6 +359,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
 
 export async function handleHeartbeat(req: Request, env: Env, profileId: string) {
   const t0 = Date.now();
+  const log = loggerForRequest(req, { route: `${HEARTBEAT_ROUTE}/:profile`, profile_id: profileId });
   const cors = evaluateCors(req, env);
   if (!cors.allowed) {
     return json({ error: "Origin not allowed" }, { status: 403 });
@@ -397,11 +426,13 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
   }
 
   if (devRow.profile_id && devRow.profile_id !== profileId) {
-    console.warn("Profile mismatch", {
-      deviceId: body.device_id,
-      urlProfileId: profileId,
-      dbProfile: devRow.profile_id,
-    });
+    log
+      .with({
+        device_id: body.device_id,
+        db_profile_id: devRow.profile_id,
+        requested_profile_id: profileId,
+      })
+      .warn("heartbeat.profile_mismatch");
     return withCors(
       req,
       env,
@@ -424,7 +455,16 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
 
   const limitPerMinute = parsedRateLimit(env);
   if (await isRateLimited(env, HEARTBEAT_ROUTE, body.device_id, limitPerMinute)) {
-    await recordOpsMetric(env, HEARTBEAT_ROUTE, 429, Date.now() - t0, body.device_id);
+    const deviceLog = log.with({ device_id: body.device_id });
+    await recordOpsMetric(
+      env,
+      HEARTBEAT_ROUTE,
+      429,
+      Date.now() - t0,
+      body.device_id,
+      deviceLog,
+    );
+    deviceLog.warn("heartbeat.rate_limited", { limit_per_minute: limitPerMinute });
     return withCors(req, env, json({ error: "Rate limit exceeded" }, { status: 429 }), cors);
   }
 
@@ -442,12 +482,14 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
       ).bind(body.device_id, new Date(tsMs).toISOString()),
     ]);
 
-    await recordOpsMetric(env, HEARTBEAT_ROUTE, 200, Date.now() - t0, body.device_id);
-
+    const deviceLog = log.with({ device_id: body.device_id });
+    await recordOpsMetric(env, HEARTBEAT_ROUTE, 200, Date.now() - t0, body.device_id, deviceLog);
+    deviceLog.info("heartbeat.accepted", { payload_ts: new Date(tsMs).toISOString() });
     return withCors(req, env, json({ ok: true, server_time: new Date().toISOString() }), cors);
   } catch (e) {
-    console.error("Heartbeat update failed", e);
-    await recordOpsMetric(env, HEARTBEAT_ROUTE, 500, Date.now() - t0, body.device_id);
+    const deviceLog = log.with({ device_id: body.device_id });
+    deviceLog.error("heartbeat.db_error", { error: e });
+    await recordOpsMetric(env, HEARTBEAT_ROUTE, 500, Date.now() - t0, body.device_id, deviceLog);
     return withCors(req, env, json({ error: "DB error" }, { status: 500 }), cors);
   }
 }

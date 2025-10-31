@@ -19,6 +19,7 @@ import {
 } from "../schemas/alerts";
 import { validationErrorResponse, validateWithSchema } from "../utils/validation";
 import { createAlert, listAlerts, type AlertRecord } from "../lib/alerts-store";
+import { loggerForRequest } from "../utils/logging";
 
 export async function handleAlertsFeed(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
@@ -91,7 +92,9 @@ export async function handleAlertsFeed(req: Request, env: Env) {
       }),
     );
   } catch (err) {
-    console.error("Failed to build alerts feed", err);
+    loggerForRequest(req, { route: "/api/alerts/recent" }).error("alerts.feed_failed", {
+      error: err,
+    });
     return json({ error: "Server error" }, { status: 500 });
   }
 

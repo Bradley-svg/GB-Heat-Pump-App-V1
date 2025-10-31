@@ -6,6 +6,7 @@ import { andWhere, nowISO, parseFaultsJson } from "../utils";
 import { ClientCompactQuerySchema } from "../schemas/client";
 import { validationErrorResponse } from "../utils/validation";
 import { maskTelemetryNumber } from "../telemetry";
+import { loggerForRequest } from "../utils/logging";
 
 export async function handleClientCompact(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
@@ -139,7 +140,9 @@ export async function handleClientCompact(req: Request, env: Env) {
       }),
     );
   } catch (err) {
-    console.error("Failed to build alerts payload", err);
+    loggerForRequest(req, { route: "/api/client/compact" }).error("client.alerts_payload_failed", {
+      error: err,
+    });
     return json({ error: "Server error" }, { status: 500 });
   }
 
@@ -187,7 +190,9 @@ export async function handleClientCompact(req: Request, env: Env) {
       }),
     );
   } catch (err) {
-    console.error("Failed to build top devices payload", err);
+    loggerForRequest(req, { route: "/api/client/compact" }).error("client.top_devices_payload_failed", {
+      error: err,
+    });
     return json({ error: "Server error" }, { status: 500 });
   }
 

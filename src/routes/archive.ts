@@ -6,6 +6,7 @@ import { andWhere, nowISO, parseFaultsJson } from "../utils";
 import { ArchiveQuerySchema } from "../schemas/archive";
 import { validationErrorResponse } from "../utils/validation";
 import { maskTelemetryNumber } from "../telemetry";
+import { loggerForRequest } from "../utils/logging";
 
 export async function handleArchive(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
@@ -74,7 +75,9 @@ export async function handleArchive(req: Request, env: Env) {
       })),
     );
   } catch (err) {
-    console.error("Failed to build archive offline payload", err);
+    loggerForRequest(req, { route: "/api/archive/offline" }).error("archive.offline_payload_failed", {
+      error: err,
+    });
     return json({ error: "Server error" }, { status: 500 });
   }
 
