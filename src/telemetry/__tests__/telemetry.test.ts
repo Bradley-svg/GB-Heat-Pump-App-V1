@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ALERT_THRESHOLDS,
   deriveTelemetryMetrics,
   formatMetricsJson,
   formatPromMetrics,
@@ -62,11 +63,39 @@ describe("metrics formatting", () => {
       "2025-01-01T00:00:00.000Z",
     );
 
-    expect(payload.devices).toEqual({ total: 10, online: 6, offline: 4 });
+    expect(payload.devices).toEqual({
+      total: 10,
+      online: 6,
+      offline: 4,
+      offline_ratio: 0.4,
+    });
     expect(payload.ops).toEqual([
-      { route: "/api/devices", status_code: 200, count: 5 },
-      { route: "unknown", status_code: 0, count: 0 },
+      {
+        route: "/api/devices",
+        status_code: 200,
+        count: 5,
+        total_duration_ms: 0,
+        avg_duration_ms: 0,
+        max_duration_ms: 0,
+      },
+      {
+        route: "unknown",
+        status_code: 0,
+        count: 0,
+        total_duration_ms: 0,
+        avg_duration_ms: 0,
+        max_duration_ms: 0,
+      },
     ]);
+    expect(payload.ops_summary).toEqual({
+      total_requests: 5,
+      server_error_rate: 0,
+      client_error_rate: 0,
+      slow_rate: 0,
+      slow_routes: [],
+      top_server_error_routes: [],
+    });
+    expect(payload.thresholds).toEqual(ALERT_THRESHOLDS);
     expect(payload.generated_at).toBe("2025-01-01T00:00:00.000Z");
   });
 
@@ -80,8 +109,13 @@ describe("metrics formatting", () => {
     expect(prom).toContain(`greenbro_devices_total 5`);
     expect(prom).toContain(`greenbro_devices_online_total 3`);
     expect(prom).toContain(`greenbro_devices_offline_total 2`);
+    expect(prom).toContain(`greenbro_devices_offline_ratio 0.4`);
     expect(prom).toContain(`greenbro_ops_requests_total{route="/api/\\"test\\"",status="500"} 2`);
-    expect(prom.trimEnd()).toMatch(/greenbro_metrics_generated_at 5$/);
+    expect(prom).toContain(`greenbro_metrics_generated_at 5`);
+    expect(prom).toContain(`greenbro_ops_requests_overall_total 2`);
+    expect(prom).toContain(`greenbro_ops_server_error_rate 1`);
+    expect(prom).toContain(`greenbro_ops_client_error_rate 0`);
+    expect(prom).toContain(`greenbro_ops_slow_rate 0`);
   });
 });
 

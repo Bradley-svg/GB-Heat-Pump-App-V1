@@ -1,37 +1,38 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import "@testing-library/jest-dom/vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { axe } from "vitest-axe";
 
 import App from "../../app/App";
 
-beforeEach(() => {
-  window.history.replaceState(null, "", "/app/overview");
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+const isBrowserEnvironment = typeof window !== "undefined" && typeof document !== "undefined";
+const describeIfBrowser = isBrowserEnvironment ? describe : describe.skip;
 
-  const mockResponse = (body: unknown): Response =>
-    ({
-      ok: true,
-      status: 200,
-      json: () => Promise.resolve(body),
-      text: () => Promise.resolve(JSON.stringify(body ?? null)),
-    }) as Response;
+describeIfBrowser("App accessibility", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/app/overview");
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
 
-  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => mockFetch(input, mockResponse)));
-});
+    const mockResponse = (body: unknown): Response =>
+      ({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(body),
+        text: () => Promise.resolve(JSON.stringify(body ?? null)),
+      }) as Response;
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => mockFetch(input, mockResponse)));
+  });
 
-describe("App accessibility", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("renders the overview page without axe violations", async () => {
     const { container } = render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /overview \(fleet\)/i })).toBeInTheDocument();
-    });
+    const heading = await screen.findByRole("heading", { name: /overview \(fleet\)/i });
+    expect(heading).not.toBeNull();
 
     const results = await axe(container);
     expect(results.violations).toHaveLength(0);
