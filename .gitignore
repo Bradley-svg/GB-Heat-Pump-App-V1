@@ -3,3 +3,4 @@ frontend/node_modules/
 dist/
 frontend/dist/
 .vite/
+.dev.vars
