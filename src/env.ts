@@ -9,6 +9,7 @@ export interface Env {
   HEARTBEAT_INTERVAL_SECS?: string;
   OFFLINE_MULTIPLIER?: string;
   CURSOR_SECRET: string;
+  APP_STATIC?: R2Bucket;
 }
 
 export type { User };

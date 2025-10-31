@@ -39,3 +39,9 @@ binding = "GB_BUCKET"
 bucket_name = "greenbro-brand"
 # optional for local dev:
 # preview_bucket_name = "greenbro-brand-dev"
+
+[[r2_buckets]]
+binding = "APP_STATIC"
+bucket_name = "greenbro-app-static"
+# optional for local dev:
+# preview_bucket_name = "greenbro-app-static-dev"

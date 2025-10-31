@@ -37,7 +37,7 @@ describe("handleIngest", () => {
 
     const res = await handleIngest(req, env, "test");
     expect(res.status).toBe(400);
-    const payload = await res.json();
+    const payload = (await res.json()) as any;
     expect(payload.error).toBe("Invalid JSON");
   });
 
@@ -58,7 +58,7 @@ describe("handleIngest", () => {
     const res = await handleIngest(req, env, "demo");
     expect(verifyDeviceKeyMock).toHaveBeenCalled();
     expect(res.status).toBe(401);
-    const payload = await res.json();
+    const payload = (await res.json()) as any;
     expect(payload.error).toBe("Unauthorized");
   });
 
@@ -144,7 +144,7 @@ describe("handleIngest", () => {
     const res = await handleIngest(req, env, "demo");
 
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.ok).toBe(true);
 
     expect(selectFirst).toHaveBeenCalled();

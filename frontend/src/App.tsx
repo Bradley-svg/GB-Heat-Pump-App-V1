@@ -1,94 +1,30 @@
-import type { Env } from "../env";
+﻿/* eslint-disable */
+// @ts-nocheck
 
-export function appHtml(env: Env, returnUrlParam: string | null) {
-  const returnLink = returnUrlParam || env.RETURN_DEFAULT;
+import React from "react";
 
-  const css = String.raw`
-:root { color-scheme: dark; --bg:#0b0f10; --card:#11181a; --muted:#6b7f7a; --fg:#e9ffef; --brand:#52ff99; --warn:#ffcc66; --err:#ff7a7a; --ok:#7dffa1; }
-*{box-sizing:border-box}
-html,body,#root{height:100%}
-body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 'Inter',system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
-a{color:var(--brand);text-decoration:none}
-.nav{display:flex;gap:.75rem;align-items:center;padding:.75rem 1rem;border-bottom:1px solid #17322a;background:#0d1415;position:sticky;top:0;z-index:10}
-.nav .brand{display:flex;align-items:center;gap:.5rem;font-weight:600;font-size:15px}
-.tag{padding:.1rem .5rem;border-radius:.5rem;background:#143c2c;color:#72ffb6;font-size:12px;text-transform:uppercase;letter-spacing:.08em}
-.sp{flex:1}
-.btn{background:#123026;border:1px solid #1d4a39;color:var(--fg);padding:.5rem .85rem;border-radius:.6rem;cursor:pointer;font-weight:500}
-.btn:hover{background:#173a2e}
-.btn.ghost{background:transparent;color:var(--muted);border-color:#1d4032}
-.btn.ghost.active{color:var(--fg);background:#123026}
-.wrap{max-width:1180px;margin:0 auto;padding:1.2rem}
-.grid{display:grid;gap:1rem}
-.grid.kpis{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
-.grid.auto{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
-.grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.75rem}
-.card{background:var(--card);border:1px solid #15352a;border-radius:1rem;padding:1rem;box-shadow:0 10px 25px rgba(0,0,0,0.18)}
-.card.tight{padding:.75rem}
-.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem}
-.card-title{font-size:16px;font-weight:600}
-.muted{color:var(--muted)}
-.hero{font-size:32px;font-weight:600}
-.large-number{font-size:32px;font-weight:600}
-.subdued{color:#889a94;font-size:12px}
-.pill{display:inline-flex;align-items:center;gap:.35rem;padding:.2rem .55rem;border-radius:999px;background:#133126;color:#7dffa1;font-size:12px;text-transform:uppercase;letter-spacing:.08em}
-.pill.warn{background:#3a2e1a;color:var(--warn)}
-.pill.error{background:#3a1f1f;color:var(--err)}
-.chip{background:#102119;border:1px solid #1f4532;border-radius:.6rem;padding:.2rem .55rem;font-size:12px;display:inline-flex;align-items:center;gap:.3rem;color:#7dffa1}
-.chip.warn{border-color:#4d3c20;color:var(--warn);background:#2a2113}
-.chip.error{border-color:#4a2020;color:var(--err);background:#2a1414}
-table{width:100%;border-collapse:collapse}
-.table th,.table td{padding:.55rem .65rem;border-bottom:1px solid #163226;text-align:left;font-size:13px}
-.table tr:hover{background:rgba(82,255,153,0.05)}
-.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff7a7a}
-.status-dot.ok{background:#7dffa1}
-.sparkline{width:100%;height:60px}
-.list{display:flex;flex-direction:column;gap:.8rem}
-.list-item{display:flex;justify-content:space-between;align-items:flex-start;border:1px solid #163226;border-radius:.85rem;padding:.85rem;background:#0f1716;gap:.75rem}
-.list-item .meta{font-size:12px;color:var(--muted)}
-.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem}
-.metric-tile{background:#101918;border:1px solid #1b382f;border-radius:.85rem;padding:.75rem}
-.metric-label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
-.metric-value{margin-top:.35rem;font-size:20px;font-weight:600}
-.metric-sub{color:#86a59c;font-size:12px;margin-top:.2rem}
-.checklist{display:flex;flex-direction:column;gap:.45rem;margin-top:.6rem}
-.check-item{display:flex;justify-content:space-between;align-items:center;background:#101b19;border:1px solid #1b382f;border-radius:.7rem;padding:.45rem .6rem}
-.check-item.fail{background:#1a1111;border-color:#3e1c1c}
-.check-item span{font-size:13px}
-.progress-bar{background:#132320;border-radius:999px;overflow:hidden;height:8px;margin-top:.4rem}
-.progress-bar > div{height:100%;background:linear-gradient(90deg,#1fcc78,#52ff99)}
-input,select{background:#0e1516;border:1px solid #193a30;color:var(--fg);border-radius:.6rem;padding:.5rem .6rem;font-size:14px}
-.flex{display:flex;gap:1rem;flex-wrap:wrap}
-.two-column{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}
-.empty{color:var(--muted);font-style:italic}
-.tabs{display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap}
-.stack{display:flex;flex-direction:column;gap:.75rem}
-.callout{background:#11231d;border:1px solid #1d4032;border-radius:.8rem;padding:.75rem;font-size:13px;color:#7dffa1}
-.callout.warn{background:#2a2113;border-color:#4a3a1a;color:var(--warn)}
-.callout.error{background:#2a1414;border-color:#4a2020;color:var(--err)}
-.min-table{max-height:320px;overflow:auto}
-.chart-card{padding:0}
-.chart-card svg{display:block;width:100%;height:160px}
-.section-title{font-size:18px;margin:0 0 .5rem 0;font-weight:600}
-.link{color:var(--brand);text-decoration:none}
-.link:hover{text-decoration:underline}
-.mono{font-family:'JetBrains Mono',monospace}
-.badge{border:1px solid #2b5a49;border-radius:.4rem;padding:.2rem .45rem;font-size:12px}
-.pill + .pill{margin-left:.4rem}
-.card-group{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem}
-.history-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem}
-.history-card{background:#101918;border:1px solid #1b382f;border-radius:.75rem;padding:.6rem .75rem}
-.history-card strong{font-size:16px}
-@media (max-width:720px){.nav{flex-wrap:wrap;gap:.5rem}.nav .sp{display:none}.grid.kpis{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}}
+declare global {
+  interface Window {
+    __APP_CONFIG__?: {
+      returnDefault?: string;
+      apiBase?: string;
+      assetBase?: string;
+    };
+  }
+}
 
-`;
+const appConfig = window.__APP_CONFIG__ ?? {};
+const RETURN_DEFAULT = appConfig.returnDefault ?? "/";
+const API_BASE = appConfig.apiBase ?? "";
+const ASSET_BASE = appConfig.assetBase ?? "/assets/";
+const e = React.createElement;
+const qs = new URLSearchParams(window.location.search);
+const RETURN_URL = qs.get("return") || RETURN_DEFAULT;
 
-  const js = String.raw`
-const e=React.createElement;
-const root=ReactDOM.createRoot(document.getElementById('root'));
-const api=path=>fetch(path,{headers:{}}).then(r=>r.ok?r.json():Promise.reject(r));
-const qs=new URLSearchParams(location.search);
-const RETURN_URL = qs.get('return') || ${JSON.stringify(returnLink)};
-
+const api = (path: string, init?: RequestInit) =>
+  fetch(API_BASE + path, { headers: {}, ...init }).then((r) =>
+    r.ok ? r.json() : Promise.reject(r),
+  );
 function useMe(){
   const [me,setMe]=React.useState(null);
   const [err,setErr]=React.useState(null);
@@ -100,7 +36,7 @@ function useMe(){
 
 function TopNav({me}){
   return e('div',{className:'nav'},
-    e('div',{className:'brand'}, e('img',{src:'/assets/GREENBRO LOGO APP.svg',height:24,alt:'GreenBro'}),'GreenBro Dashboard'),
+    e('div',{className:'brand'}, e('img',{src:ASSET_BASE+'GREENBRO LOGO APP.svg',height:24,alt:'GreenBro'}),'GreenBro Dashboard'),
     e('span',{className:'tag'}, me? (me.roles && me.roles.length? me.roles.join(', ') : 'no-role') : 'guest'),
     e('div',{className:'sp'}),
     e('a',{href:'/app/logout?return='+encodeURIComponent(RETURN_URL),className:'btn'},'Logout')
@@ -120,18 +56,18 @@ function Page({title,children,actions}){
 }
 
 function formatNumber(value,dp=1){
-  if(value===null||value===undefined||Number.isNaN(value)) return '—';
+  if(value===null||value===undefined||Number.isNaN(value)) return 'â€”';
   const mult=Math.pow(10,dp);
   return String(Math.round(value*mult)/mult);
 }
 
 function formatPercent(value,dp=0){
-  if(value===null||value===undefined||Number.isNaN(value)) return '—';
+  if(value===null||value===undefined||Number.isNaN(value)) return 'â€”';
   return formatNumber(value,dp)+'%';
 }
 
 function formatRelative(ts){
-  if(!ts) return '—';
+  if(!ts) return 'â€”';
   const d=new Date(ts);
   if(Number.isNaN(d.getTime())) return ts;
   const diff=Date.now()-d.getTime();
@@ -147,7 +83,7 @@ function formatRelative(ts){
 }
 
 function formatDate(ts){
-  if(!ts) return '—';
+  if(!ts) return 'â€”';
   const d=new Date(ts);
   if(Number.isNaN(d.getTime())) return ts;
   return d.toLocaleString();
@@ -193,14 +129,14 @@ function OverviewPage({me}){
         e('div',{className:'subdued'},'Window start '+formatRelative(data?.window_start_ms))
       ]),
       e('div',{className:'card tight'},[
-        e('div',{className:'muted'},'Low ΔT events'),
+        e('div',{className:'muted'},'Low Î”T events'),
         e('div',{className:'large-number'},formatNumber(data?.low_deltaT_count_24h||0,0)),
         e('div',{className:'subdued'},'Oldest heartbeat '+formatNumber((data?.max_heartbeat_age_sec||0)/60,1)+'m')
       ])
     ]),
     e('div',{className:'card',style:{marginTop:'1rem'}},[
       e('div',{className:'card-title'},'Devices'),
-      e('div',{className:'subdued'},data? data.devices_online+'/'+data.devices_total+' online':'—')
+      e('div',{className:'subdued'},data? data.devices_online+'/'+data.devices_total+' online':'â€”')
     ]),
     error? e('div',{className:'card callout error',style:{marginTop:'1rem'}},'Failed to load fleet metrics'):null
   ]);
@@ -232,12 +168,12 @@ function CompactDashboardPage(){
     }).catch(()=>{});
     return ()=>{cancelled=true;};
   },[]);
-  if(loading) return e(Page,{title:'My Sites — Compact'}, e('div',{className:'card'},'Loading…'));
-  if(error || !summary) return e(Page,{title:'My Sites — Compact'}, e('div',{className:'card callout error'},'Unable to load dashboard data'));
+  if(loading) return e(Page,{title:'My Sites â€” Compact'}, e('div',{className:'card'},'Loadingâ€¦'));
+  if(error || !summary) return e(Page,{title:'My Sites â€” Compact'}, e('div',{className:'card callout error'},'Unable to load dashboard data'));
   const k=summary.kpis||{};
   const trendValues=(summary.trend||[]).map(p=>typeof p[trendKey]==='number'?p[trendKey]:null);
-  const trendSubtitle=trendKey==='cop'?'Fleet average COP':(trendKey==='thermalKW'?'Thermal output (kW)':'ΔT average (°C)');
-  return e(Page,{title:'My Sites — Compact'},[
+  const trendSubtitle=trendKey==='cop'?'Fleet average COP':(trendKey==='thermalKW'?'Thermal output (kW)':'Î”T average (Â°C)');
+  return e(Page,{title:'My Sites â€” Compact'},[
     e('div',{className:'grid kpis',key:'kpis'},[
       e('div',{className:'card tight',key:'online'},[
         e('div',{className:'muted'},'Online rate'),
@@ -255,7 +191,7 @@ function CompactDashboardPage(){
         e('div',{className:'subdued'},'Window start '+formatRelative(summary.window_start_ms))
       ]),
       e('div',{className:'card tight',key:'delta'},[
-        e('div',{className:'muted'},'Low ΔT (24h)'),
+        e('div',{className:'muted'},'Low Î”T (24h)'),
         e('div',{className:'large-number'},formatNumber(k.low_deltaT_count||0,0)),
         e('div',{className:'subdued'},k.max_heartbeat_age_sec? 'Oldest heartbeat '+formatNumber((k.max_heartbeat_age_sec||0)/60,1)+'m':'All fresh')
       ])
@@ -269,7 +205,7 @@ function CompactDashboardPage(){
         e('div',{className:'tabs'},[
           e('button',{className:'btn ghost'+(trendKey==='cop'?' active':''),onClick:()=>setTrendKey('cop')},'COP'),
           e('button',{className:'btn ghost'+(trendKey==='thermalKW'?' active':''),onClick:()=>setTrendKey('thermalKW')},'Thermal kW'),
-          e('button',{className:'btn ghost'+(trendKey==='deltaT'?' active':''),onClick:()=>setTrendKey('deltaT')},'ΔT')
+          e('button',{className:'btn ghost'+(trendKey==='deltaT'?' active':''),onClick:()=>setTrendKey('deltaT')},'Î”T')
         ])
       ]),
       e('div',{style:{padding:'0 1rem 1rem'}},
@@ -315,10 +251,10 @@ function CompactDashboardPage(){
           e('tbody',null,
             devices.map((d,idx)=>e('tr',{key:d.lookup||idx},[
               e('td',null,e('a',{href:'/app/device?device='+encodeURIComponent(d.lookup),className:'link'},d.device_id||'(device)')),
-              e('td',null,d.site || '—'),
+              e('td',null,d.site || 'â€”'),
               e('td',null,e('span',{className:'status-dot'+(d.online?' ok':''),title:d.online?'Online':'Offline'})),
               e('td',null,formatRelative(d.last_seen_at)),
-              e('td',null,d.firmware || '—')
+              e('td',null,d.firmware || 'â€”')
             ]))
           )
         )
@@ -367,17 +303,17 @@ function DevicesPage(){
           e('tbody',null,
             items.map((d,idx)=>e('tr',{key:d.lookup||idx},[
               e('td',null,e('a',{href:'/app/device?device='+encodeURIComponent(d.lookup),className:'link'},d.device_id)),
-              e('td',null,d.site || '—'),
+              e('td',null,d.site || 'â€”'),
               e('td',null,e('span',{className:'status-dot'+(d.online?' ok':''),title:d.online?'Online':'Offline'})),
               e('td',null,formatRelative(d.last_seen_at)),
-              e('td',null,d.profile_id || '—')
+              e('td',null,d.profile_id || 'â€”')
             ]))
           )
         )
-      ): e('div',{className:'empty'},loading?'Loading…':'No devices'),
+      ): e('div',{className:'empty'},loading?'Loadingâ€¦':'No devices'),
       e('div',{style:{marginTop:'1rem',display:'flex',justifyContent:'space-between',alignItems:'center'}},[
         e('div',{className:'subdued'},cursor? 'More devices available':'End of list'),
-        cursor? e('button',{className:'btn',disabled:loading,onClick:()=>load(cursor)},loading?'Loading…':'Load more'):null
+        cursor? e('button',{className:'btn',disabled:loading,onClick:()=>load(cursor)},loading?'Loadingâ€¦':'Load more'):null
       ])
     ])
   ]);
@@ -444,7 +380,7 @@ function DeviceDetailPage(){
     const value=metrics[key];
     if(value===null||value===undefined) return e('div',{className:'metric-tile',key:key},[
       e('div',{className:'metric-label'},label),
-      e('div',{className:'metric-value'},'—')
+      e('div',{className:'metric-value'},'â€”')
     ]);
     if(typeof value==='number'){
       return e('div',{className:'metric-tile',key:key},[
@@ -468,14 +404,14 @@ function DeviceDetailPage(){
             devices.map(d=>e('option',{value:d.lookup,key:d.lookup},d.device_id))
           ])
         ]),
-        e('button',{className:'btn',style:{alignSelf:'flex-end'},onClick:()=>selected && load(selected),disabled:!selected||loading},loading?'Loading…':'Refresh')
+        e('button',{className:'btn',style:{alignSelf:'flex-end'},onClick:()=>selected && load(selected),disabled:!selected||loading},loading?'Loadingâ€¦':'Refresh')
       ]),
       error? e('div',{className:'callout error',style:{marginTop:'1rem'}},'Unable to load device data'):null,
       latest? e('div',{className:'stack',style:{marginTop:'1rem'}},[
         e('div',{className:'grid-3'},[
           e('div',{className:'card tight'},[
             e('div',{className:'muted'},'Device ID'),
-            e('div',{className:'large-number'},selectedDisplay || latest.device_id || '—'),
+            e('div',{className:'large-number'},selectedDisplay || latest.device_id || 'â€”'),
             e('div',{className:'subdued'},metrics.updated_at? 'Updated '+formatRelative(metrics.updated_at): (metrics.ts? 'Sample '+formatRelative(metrics.ts):''))
           ]),
           e('div',{className:'card tight'},[
@@ -488,20 +424,20 @@ function DeviceDetailPage(){
           ]),
           e('div',{className:'card tight'},[
             e('div',{className:'muted'},'Site'),
-            e('div',{className:'large-number'},(devices.find(d=>d.lookup===selected)?.site)||'—'),
+            e('div',{className:'large-number'},(devices.find(d=>d.lookup===selected)?.site)||'â€”'),
             e('div',{className:'subdued'},'Last heartbeat '+formatRelative(devices.find(d=>d.lookup===selected)?.last_seen_at || metrics.updated_at))
           ])
         ]),
         e('div',{className:'metric-grid'},[
-          renderMetric('supplyC','Supply °C',1),
-          renderMetric('returnC','Return °C',1),
-          renderMetric('deltaT','ΔT °C',2),
+          renderMetric('supplyC','Supply Â°C',1),
+          renderMetric('returnC','Return Â°C',1),
+          renderMetric('deltaT','Î”T Â°C',2),
           renderMetric('flowLps','Flow L/s',2),
           renderMetric('thermalKW','Thermal kW',2),
           renderMetric('cop','COP',2),
           renderMetric('powerKW','Power kW',2),
-          renderMetric('tankC','Tank °C',1),
-          renderMetric('ambientC','Ambient °C',1),
+          renderMetric('tankC','Tank Â°C',1),
+          renderMetric('ambientC','Ambient Â°C',1),
           renderMetric('defrost','Defrost'),
           renderMetric('mode','Mode')
         ]),
@@ -509,12 +445,12 @@ function DeviceDetailPage(){
           e('div',{className:'card tight'},[
             e('div',{className:'muted'},'Supply trend'),
             e(Sparkline,{values:historySeries.supply,color:'#52ff99'}),
-            e('div',{className:'subdued'},'Latest '+formatNumber(historySeries.supply.length?historySeries.supply[historySeries.supply.length-1]:null,1)+'°C')
+            e('div',{className:'subdued'},'Latest '+formatNumber(historySeries.supply.length?historySeries.supply[historySeries.supply.length-1]:null,1)+'Â°C')
           ]),
           e('div',{className:'card tight'},[
             e('div',{className:'muted'},'Return trend'),
             e(Sparkline,{values:historySeries.return,color:'#86a5ff'}),
-            e('div',{className:'subdued'},'Latest '+formatNumber(historySeries.return.length?historySeries.return[historySeries.return.length-1]:null,1)+'°C')
+            e('div',{className:'subdued'},'Latest '+formatNumber(historySeries.return.length?historySeries.return[historySeries.return.length-1]:null,1)+'Â°C')
           ]),
           e('div',{className:'card tight'},[
             e('div',{className:'muted'},'Thermal output'),
@@ -572,7 +508,7 @@ function AlertsPage(){
     });
   },[]);
 
-  if(loading) return e(Page,{title:'Alerts'}, e('div',{className:'card'},'Loading…'));
+  if(loading) return e(Page,{title:'Alerts'}, e('div',{className:'card'},'Loadingâ€¦'));
   if(error || !data) return e(Page,{title:'Alerts'}, e('div',{className:'card callout error'},'Unable to load alerts'));
 
   return e(Page,{title:'Alerts'},[
@@ -631,7 +567,7 @@ function CommissioningPage(){
     });
   },[]);
 
-  if(loading) return e(Page,{title:'Commissioning & QA'}, e('div',{className:'card'},'Loading…'));
+  if(loading) return e(Page,{title:'Commissioning & QA'}, e('div',{className:'card'},'Loadingâ€¦'));
   if(error || !data) return e(Page,{title:'Commissioning & QA'}, e('div',{className:'card callout error'},'Unable to load commissioning status'));
 
   return e(Page,{title:'Commissioning & QA'},[
@@ -680,7 +616,7 @@ function AdminPage(){
     });
   },[]);
 
-  if(loading) return e(Page,{title:'Admin'}, e('div',{className:'card'},'Loading…'));
+  if(loading) return e(Page,{title:'Admin'}, e('div',{className:'card'},'Loadingâ€¦'));
   if(error || !data) return e(Page,{title:'Admin'}, e('div',{className:'card callout error'},'Unable to load admin overview'));
 
   return e(Page,{title:'Admin'},[
@@ -726,12 +662,12 @@ function AdminPage(){
               e('td',null,row.route),
               e('td',null,row.status_code),
               e('td',null,row.duration_ms),
-              e('td',null,row.device_id? e('a',{href:'/app/device?device='+encodeURIComponent(row.lookup),className:'link'},row.device_id):'—')
+              e('td',null,row.device_id? e('a',{href:'/app/device?device='+encodeURIComponent(row.lookup),className:'link'},row.device_id):'â€”')
             ]))
           )
         ])
       ): e('div',{className:'empty'},'No recent operations in scope'),
-      e('div',{className:'subdued',style:{marginTop:'.6rem'}},'Status mix: '+Object.entries(data.ops_summary||{}).map(([k,v])=>k+': '+v).join(' • ')||'n/a')
+      e('div',{className:'subdued',style:{marginTop:'.6rem'}},'Status mix: '+Object.entries(data.ops_summary||{}).map(([k,v])=>k+': '+v).join(' â€¢ ')||'n/a')
     ])
   ]);
 }
@@ -751,7 +687,7 @@ function AdminArchivePage(){
     });
   },[]);
 
-  if(loading) return e(Page,{title:'Archive'}, e('div',{className:'card'},'Loading…'));
+  if(loading) return e(Page,{title:'Archive'}, e('div',{className:'card'},'Loadingâ€¦'));
   if(error || !data) return e(Page,{title:'Archive'}, e('div',{className:'card callout error'},'Unable to load archive data'));
 
   return e(Page,{title:'Archive'},[
@@ -804,7 +740,7 @@ function App(){
   const {me,err}=useMe();
 
   if (err) return e(UnauthorizedPage);
-  if (!me) return e('div',null,e('div',{className:'wrap'}, e('div',{className:'card'}, 'Loading…')));
+  if (!me) return e('div',null,e('div',{className:'wrap'}, e('div',{className:'card'}, 'Loadingâ€¦')));
 
   const roles = me.roles || [];
   const path = location.pathname.replace(/^\/app\/?/,'') || '';
@@ -833,27 +769,9 @@ function App(){
   return e('div',null, e(TopNav,{me}), content );
 }
 
-root.render(e(App));
-
-
-`;
 
 
 
-  return `<!doctype html>
-<html lang="en-ZA">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>GreenBro — Heat Pump Dashboard</title>
-  <style>${css}</style>
-</head>
-<body>
-  <div id="root"></div>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script>${js}</script>
-</body>
-</html>`;
-}
+export default App;
+
 

@@ -1,11 +1,80 @@
 import type { Env } from "./env";
 import { ASSETS } from "./assets";
-import { appHtml } from "./frontend/app-shell";
+import { STATIC_BUNDLE, type StaticBundleKey } from "./frontend/static-bundle";
 import { landingFor, requireAccessUser } from "./lib/access";
 import { CORS_BASE, maybeHandlePreflight } from "./lib/cors";
 import { HTML_CT, json, text, withSecurityHeaders } from "./utils/responses";
 import { chunk } from "./utils";
 import { handleRequest } from "./router";
+
+const DEFAULT_APP_CONFIG = { apiBase: "", assetBase: "/assets/" };
+const STATIC_CONTENT_TYPES: Record<string, string> = {
+  ".html": HTML_CT,
+  ".js": "application/javascript;charset=utf-8",
+  ".css": "text/css;charset=utf-8",
+};
+const APP_R2_PREFIX = "app/";
+
+function extname(path: string): string {
+  const idx = path.lastIndexOf(".");
+  return idx === -1 ? "" : path.slice(idx);
+}
+
+function contentTypeFor(path: string): string {
+  return STATIC_CONTENT_TYPES[extname(path)] || "application/octet-stream";
+}
+
+function injectAppConfig(html: string, env: Env): string {
+  const config = { ...DEFAULT_APP_CONFIG, returnDefault: env.RETURN_DEFAULT };
+  const script = `<script>window.__APP_CONFIG__=${JSON.stringify(config)};</script>`;
+  return html.replace("</head>", `  ${script}\n</head>`);
+}
+
+async function loadFromR2(key: string, env: Env, ctHint: string): Promise<Response | null> {
+  if (!("APP_STATIC" in env) || !env.APP_STATIC) return null;
+  const obj = await env.APP_STATIC.get(APP_R2_PREFIX + key);
+  if (!obj) return null;
+  const headers = new Headers();
+  if (obj.httpMetadata?.contentType) {
+    headers.set("content-type", obj.httpMetadata.contentType);
+  } else {
+    headers.set("content-type", ctHint);
+  }
+  if (obj.httpMetadata?.cacheControl) {
+    headers.set("cache-control", obj.httpMetadata.cacheControl);
+  }
+  if (!headers.has("cache-control")) {
+    const cache = key.endsWith(".html") ? "no-store" : "public, max-age=900, immutable";
+    headers.set("cache-control", cache);
+  }
+  return new Response(obj.body, { headers });
+}
+
+function bundleResponse(key: StaticBundleKey, env: Env): Response {
+  const body = STATIC_BUNDLE[key] as string;
+  const ct = contentTypeFor(key);
+  let payload = body;
+  if (key === "index.html") {
+    payload = injectAppConfig(body, env);
+  }
+  const headers = new Headers({
+    "content-type": ct,
+    "cache-control": key === "index.html" ? "no-store" : "public, max-age=900, immutable",
+  });
+  return new Response(payload, { headers });
+}
+
+async function serveAppStatic(path: string, env: Env): Promise<Response | null> {
+  const normalized = path.replace(/^\/app\/?/, "");
+  const bundleKey = (normalized && !normalized.startsWith("assets/") ? "index.html" : normalized || "index.html") as StaticBundleKey;
+  if (!(bundleKey in STATIC_BUNDLE)) {
+    return null;
+  }
+  const ctHint = contentTypeFor(bundleKey);
+  const r2 = await loadFromR2(bundleKey, env, ctHint);
+  if (r2) return r2;
+  return bundleResponse(bundleKey, env);
+}
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
@@ -42,14 +111,15 @@ export default {
 
     if (path === "/app" || path === "/app/") {
       const user = await requireAccessUser(req, env);
-      if (!user) {
-        return withSecurityHeaders(
-          new Response(appHtml(env, new URL(req.url).searchParams.get("return")), {
-            headers: { "content-type": HTML_CT },
-          }),
-        );
+      if (user) {
+        const landing = env.APP_BASE_URL + landingFor(user);
+        if (url.pathname !== landing) {
+          return Response.redirect(landing, 302);
+        }
       }
-      return Response.redirect(env.APP_BASE_URL + landingFor(user), 302);
+      const spa = await serveAppStatic("/app", env);
+      if (spa) return withSecurityHeaders(spa);
+      return text("Not found", { status: 404 });
     }
 
     if (path === "/app/logout") {
@@ -58,20 +128,17 @@ export default {
       return Response.redirect(logoutUrl, 302);
     }
 
+    if (path.startsWith("/app/assets/")) {
+      const assetRes = await serveAppStatic(path, env);
+      if (assetRes) return withSecurityHeaders(assetRes);
+      return text("Not found", { status: 404 });
+    }
+
     if (path.startsWith("/app/")) {
-      const user = await requireAccessUser(req, env);
-      if (!user) {
-        return withSecurityHeaders(
-          new Response(appHtml(env, new URL(req.url).searchParams.get("return")), {
-            headers: { "content-type": HTML_CT },
-          }),
-        );
-      }
-      return withSecurityHeaders(
-        new Response(appHtml(env, new URL(req.url).searchParams.get("return")), {
-          headers: { "content-type": HTML_CT },
-        }),
-      );
+      await requireAccessUser(req, env);
+      const spa = await serveAppStatic(path, env);
+      if (spa) return withSecurityHeaders(spa);
+      return text("Not found", { status: 404 });
     }
 
     return handleRequest(req, env);
