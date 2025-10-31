@@ -7,3 +7,6 @@ export * from "./fleet";
 export * from "./devices";
 export * from "./admin";
 export * from "./metrics";
+export * from "./commissioning";
+export * from "./audit";
+export * from "./mqtt";

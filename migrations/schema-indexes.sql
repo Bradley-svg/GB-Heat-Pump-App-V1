@@ -7,3 +7,27 @@ CREATE INDEX IF NOT EXISTS ix_telemetry_device_ts ON telemetry(device_id, ts DES
 
 -- Devices housekeeping
 CREATE INDEX IF NOT EXISTS ix_devices_last_seen   ON devices(last_seen_at);
+
+-- Alerts triage + commissioning history
+CREATE INDEX IF NOT EXISTS ix_alerts_device_status
+  ON alerts(device_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_alerts_profile_created
+  ON alerts(profile_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_commissioning_device
+  ON commissioning_runs(device_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_commissioning_profile
+  ON commissioning_runs(profile_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_commissioning_status
+  ON commissioning_runs(status, updated_at DESC);
+
+-- Audit + MQTT lookups
+CREATE INDEX IF NOT EXISTS ix_audit_entity
+  ON audit_trail(entity_type, entity_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_audit_actor
+  ON audit_trail(actor_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_mqtt_topic_profile_direction
+  ON mqtt_mappings(topic, COALESCE(profile_id, ''), direction);
+CREATE INDEX IF NOT EXISTS ix_mqtt_device
+  ON mqtt_mappings(device_id);
+CREATE INDEX IF NOT EXISTS ix_mqtt_profile_enabled
+  ON mqtt_mappings(profile_id, enabled);

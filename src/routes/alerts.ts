@@ -1,10 +1,24 @@
 import type { Env } from "../env";
 import { requireAccessUser } from "../lib/access";
-import { buildDeviceLookup, buildDeviceScope, presentDeviceId } from "../lib/device";
+import {
+  buildDeviceLookup,
+  buildDeviceScope,
+  fetchDeviceMeta,
+  presentDeviceId,
+  resolveDeviceId,
+  type DeviceMeta,
+} from "../lib/device";
 import { json } from "../utils/responses";
 import { andWhere, nowISO, parseFaultsJson } from "../utils";
-import { AlertsQuerySchema } from "../schemas/alerts";
-import { validationErrorResponse } from "../utils/validation";
+import {
+  AlertsQuerySchema,
+  AlertListQuerySchema,
+  CreateAlertSchema,
+  type AlertListQuery,
+  type CreateAlertInput,
+} from "../schemas/alerts";
+import { validationErrorResponse, validateWithSchema } from "../utils/validation";
+import { createAlert, listAlerts, type AlertRecord } from "../lib/alerts-store";
 
 export async function handleAlertsFeed(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
@@ -91,4 +105,206 @@ export async function handleAlertsFeed(req: Request, env: Env) {
       active,
     },
   });
+}
+
+async function presentAlertRecord(
+  record: AlertRecord,
+  env: Env,
+  scope: ReturnType<typeof buildDeviceScope>,
+  meta: Map<string, DeviceMeta>,
+) {
+  const info = meta.get(record.device_id);
+  const outwardId = presentDeviceId(record.device_id, scope.isAdmin);
+  const lookup = await buildDeviceLookup(record.device_id, env, scope.isAdmin);
+  return {
+    alert_id: record.alert_id,
+    device_id: outwardId,
+    lookup,
+    profile_id: record.profile_id ?? info?.profile_id ?? null,
+    site: info?.site ?? null,
+    alert_type: record.alert_type,
+    severity: record.severity,
+    status: record.status,
+    summary: record.summary,
+    description: record.description,
+    metadata: record.metadata,
+    acknowledged_at: record.acknowledged_at,
+    resolved_at: record.resolved_at,
+    resolved_by: record.resolved_by,
+    created_at: record.created_at,
+    updated_at: record.updated_at,
+  };
+}
+
+export async function handleListAlertRecords(req: Request, env: Env) {
+  const user = await requireAccessUser(req, env);
+  if (!user) return json({ error: "Unauthorized" }, { status: 401 });
+
+  const scope = buildDeviceScope(user, "a");
+  if (scope.empty && !scope.isAdmin) {
+    return json({ generated_at: nowISO(), items: [] });
+  }
+
+  const url = new URL(req.url);
+  const paramsResult = validateWithSchema<AlertListQuery>(AlertListQuerySchema, {
+    status: url.searchParams.get("status") ?? undefined,
+    severity: url.searchParams.get("severity") ?? undefined,
+    device: url.searchParams.get("device") ?? undefined,
+    profile: url.searchParams.get("profile") ?? undefined,
+    limit: url.searchParams.get("limit") ?? undefined,
+    since: url.searchParams.get("since") ?? undefined,
+    until: url.searchParams.get("until") ?? undefined,
+  });
+  if (!paramsResult.success) {
+    return validationErrorResponse(paramsResult.issues);
+  }
+  const params = paramsResult.data;
+
+  if (params.since && params.until) {
+    const sinceMs = Date.parse(params.since);
+    const untilMs = Date.parse(params.until);
+    if (!Number.isNaN(sinceMs) && !Number.isNaN(untilMs) && untilMs < sinceMs) {
+      return json({ error: "Invalid range" }, { status: 400 });
+    }
+  }
+
+  let deviceId: string | undefined;
+  if (params.device) {
+    const resolved = await resolveDeviceId(params.device, env, scope.isAdmin);
+    if (!resolved) {
+      return json({ error: "Unknown device" }, { status: 404 });
+    }
+    deviceId = resolved;
+  }
+
+  let profileIds: string[] | undefined;
+  let singleProfile: string | undefined = undefined;
+  if (scope.isAdmin) {
+    if (params.profile) singleProfile = params.profile;
+  } else {
+    const allowedProfiles = scope.bind as string[];
+    if (!allowedProfiles.length) {
+      return json({ generated_at: nowISO(), items: [] });
+    }
+    if (params.profile) {
+      if (!allowedProfiles.includes(params.profile)) {
+        return json({ error: "Forbidden" }, { status: 403 });
+      }
+      profileIds = [params.profile];
+    } else {
+      profileIds = allowedProfiles;
+    }
+
+    if (deviceId) {
+      const deviceRow = await env.DB
+        .prepare(`SELECT profile_id FROM devices WHERE device_id = ?1 LIMIT 1`)
+        .bind(deviceId)
+        .first<{ profile_id: string | null }>();
+      const deviceProfile = deviceRow?.profile_id ?? null;
+      if (!deviceProfile || !allowedProfiles.includes(deviceProfile)) {
+        return json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
+  }
+
+  const limit = params.limit ?? 50;
+
+  const alerts = await listAlerts(env, {
+    status: params.status ?? undefined,
+    severity: params.severity ?? undefined,
+    device_id: deviceId,
+    profile_id: singleProfile,
+    profile_ids: profileIds,
+    since: params.since ?? undefined,
+    until: params.until ?? undefined,
+    limit,
+  });
+
+  const meta = await fetchDeviceMeta(env, alerts.map((a) => a.device_id));
+  const items = await Promise.all(alerts.map((record) => presentAlertRecord(record, env, scope, meta)));
+
+  return json({
+    generated_at: nowISO(),
+    items,
+  });
+}
+
+export async function handleCreateAlertRecord(req: Request, env: Env) {
+  const user = await requireAccessUser(req, env);
+  if (!user) return json({ error: "Unauthorized" }, { status: 401 });
+
+  const scope = buildDeviceScope(user, "a");
+  if (scope.empty && !scope.isAdmin) {
+    return json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  let payload: unknown;
+  try {
+    payload = await req.json();
+  } catch {
+    return json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const parseResult = validateWithSchema<CreateAlertInput>(CreateAlertSchema, payload);
+  if (!parseResult.success) {
+    return validationErrorResponse(parseResult.issues);
+  }
+  const body = parseResult.data;
+
+  const deviceId = await resolveDeviceId(body.device_id, env, scope.isAdmin);
+  if (!deviceId) {
+    return json({ error: "Unknown device" }, { status: 404 });
+  }
+
+  let resolvedProfile = body.profile_id ?? null;
+
+  if (!scope.isAdmin) {
+    const allowedProfiles = scope.bind as string[];
+    const deviceRow = await env.DB
+      .prepare(`SELECT profile_id FROM devices WHERE device_id = ?1 LIMIT 1`)
+      .bind(deviceId)
+      .first<{ profile_id: string | null }>();
+
+    if (!deviceRow?.profile_id || !allowedProfiles.includes(deviceRow.profile_id)) {
+      return json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    if (resolvedProfile && resolvedProfile !== deviceRow.profile_id) {
+      return json({ error: "Profile mismatch" }, { status: 400 });
+    }
+
+    resolvedProfile = deviceRow.profile_id;
+  }
+
+  const result = await createAlert(env, {
+    alert_id: body.alert_id,
+    device_id: deviceId,
+    profile_id: resolvedProfile,
+    alert_type: body.alert_type,
+    severity: body.severity,
+    status: body.status,
+    summary: body.summary ?? null,
+    description: body.description ?? null,
+    metadata: body.metadata ?? null,
+    acknowledged_at: body.acknowledged_at ?? null,
+    resolved_at: body.resolved_at ?? null,
+    resolved_by: body.resolved_by ?? null,
+  });
+
+  if (!result.ok) {
+    if (result.reason === "device_not_found") {
+      return json({ error: "Unknown device" }, { status: 404 });
+    }
+    if (result.reason === "conflict") {
+      return json({ error: "Alert already exists" }, { status: 409 });
+    }
+    return json({ error: "Server error" }, { status: 500 });
+  }
+
+  const meta = await fetchDeviceMeta(env, [result.alert.device_id]);
+  const [alert] = await Promise.all([
+    presentAlertRecord(result.alert, env, scope, meta),
+  ]);
+
+  return json({ ok: true, alert }, { status: 201 });
 }

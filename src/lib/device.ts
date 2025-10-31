@@ -84,3 +84,29 @@ export async function verifyDeviceKey(
 }
 
 export { parseFaultsJson, parseMetricsJson, userIsAdmin };
+
+export interface DeviceMeta {
+  device_id: string;
+  profile_id: string | null;
+  site: string | null;
+}
+
+export async function fetchDeviceMeta(env: Env, deviceIds: string[]): Promise<Map<string, DeviceMeta>> {
+  if (!deviceIds.length) return new Map();
+  const unique = [...new Set(deviceIds)];
+  const placeholders = unique.map((_, idx) => `?${idx + 1}`).join(",");
+  const rows = await env.DB
+    .prepare(
+      `SELECT device_id, profile_id, site
+         FROM devices
+        WHERE device_id IN (${placeholders})`,
+    )
+    .bind(...unique)
+    .all<DeviceMeta>();
+
+  const map = new Map<string, DeviceMeta>();
+  for (const row of rows.results ?? []) {
+    map.set(row.device_id, row);
+  }
+  return map;
+}

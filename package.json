@@ -15,12 +15,15 @@
     "frontend:test:coverage": "npm --prefix frontend run test:coverage",
     "migrate:apply": "wrangler d1 migrations apply gb_hp_db",
     "migrate:list": "wrangler d1 migrations list gb_hp_db",
+    "seed:dev": "wrangler d1 execute gb_hp_db --local --file ./seeds/dev/seed.sql",
     "typecheck": "tsc --noEmit",
     "build": "npm run frontend:build && wrangler deploy --dry-run --outdir ./dist",
     "test": "vitest run"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20251014.0",
+    "@miniflare/d1": "^2.14.4",
+    "better-sqlite3": "^12.4.1",
     "jsdom": "^27.1.0",
     "typescript": "^5.9.3",
     "vitest": "^1.6.0",
@@ -29,6 +32,6 @@
   "dependencies": {
     "itty-router": "^5.0.1",
     "jose": "^5.9.3",
-    "zod": "^4.1.12"
+    "zod": "^3.23.8"
   }
 }

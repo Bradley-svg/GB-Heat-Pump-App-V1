@@ -3,7 +3,7 @@ import { Router } from "itty-router";
 import type { Env } from "./env";
 import { json } from "./utils/responses";
 import { safeDecode } from "./utils";
-import { handleAlertsFeed } from "./routes/alerts";
+import { handleAlertsFeed, handleCreateAlertRecord, handleListAlertRecords } from "./routes/alerts";
 import { handleArchive } from "./routes/archive";
 import { handleClientCompact } from "./routes/client";
 import { handleDeviceHistory, handleLatest, handleListDevices } from "./routes/devices";
@@ -14,6 +14,12 @@ import { handleCommissioning } from "./routes/commissioning";
 import { handleAdminOverview } from "./routes/admin";
 import { handleHealth } from "./routes/health";
 import { handleMetrics } from "./routes/metrics";
+import {
+  handleCreateCommissioningRun,
+  handleListCommissioningRuns,
+} from "./routes/commissioning-runs";
+import { handleCreateAuditEntry, handleListAuditTrail } from "./routes/audit";
+import { handleCreateMqttMapping, handleListMqttMappings } from "./routes/mqtt";
 
 type RoutedRequest = Request & { params?: Record<string, string> };
 type RouteHandler = (req: Request, env: Env) => Promise<Response> | Response;
@@ -46,10 +52,18 @@ router
   .get("/api/fleet/summary", (req, env) => handleFleetSummary(req, env))
   .get("/api/client/compact", (req, env) => handleClientCompact(req, env))
   .get("/api/devices", (req, env) => handleListDevices(req, env))
+  .get("/api/alerts", (req, env) => handleListAlertRecords(req, env))
+  .post("/api/alerts", (req, env) => handleCreateAlertRecord(req, env))
   .get("/api/alerts/recent", (req, env) => handleAlertsFeed(req, env))
   .get("/api/commissioning/checklist", (req, env) => handleCommissioning(req, env))
+  .get("/api/commissioning/runs", (req, env) => handleListCommissioningRuns(req, env))
+  .post("/api/commissioning/runs", (req, env) => handleCreateCommissioningRun(req, env))
   .get("/api/admin/overview", (req, env) => handleAdminOverview(req, env))
   .get("/api/archive/offline", (req, env) => handleArchive(req, env))
+  .get("/api/audit/logs", (req, env) => handleListAuditTrail(req, env))
+  .post("/api/audit/logs", (req, env) => handleCreateAuditEntry(req, env))
+  .get("/api/mqtt/mappings", (req, env) => handleListMqttMappings(req, env))
+  .post("/api/mqtt/mappings", (req, env) => handleCreateMqttMapping(req, env))
   .get(
     "/api/devices/:id/latest",
     withParam("id", (req, env, deviceId) => handleLatest(req, env, deviceId)),
