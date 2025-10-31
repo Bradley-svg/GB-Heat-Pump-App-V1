@@ -91,6 +91,8 @@ clocks; decrease it to tighten replay protection.
 
 - Run `npm test` to execute the new Vitest coverage for allowed, blocked, and throttled
   ingest scenarios (`src/routes/__tests__/ingest.test.ts`).
+- Run `npm run test:security` to execute end-to-end safeguards covering signature
+  validation and origin allowlisting.
 - Inspect `ops_metrics` for `status_code` values of `429`, `401`, or preflight failures
   to monitor abuse or misconfiguration.
 - For manual verification, craft curl requests with the required headers; omit the

@@ -18,7 +18,13 @@
     "seed:dev": "wrangler d1 execute gb_hp_db --local --file ./seeds/dev/seed.sql",
     "typecheck": "tsc --noEmit",
     "build": "npm run frontend:build && wrangler deploy --dry-run --outdir ./dist",
-    "test": "vitest run"
+    "test": "vitest run src",
+    "test:integration": "vitest run tests/integration",
+    "test:smoke": "vitest run tests/smoke",
+    "test:security": "vitest run tests/security",
+    "smoke": "npm run test:smoke",
+    "security": "npm run test:security",
+    "test:ci": "npm run test && npm run test:integration && npm run test:smoke && npm run test:security"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20251014.0",

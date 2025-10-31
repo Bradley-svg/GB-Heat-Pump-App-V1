@@ -1,0 +1,51 @@
+name: Worker CI
+
+on:
+  push:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "migrations/**"
+      - "seeds/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/worker-ci.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "migrations/**"
+      - "seeds/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/worker-ci.yml"
+
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test
+
+      - name: Run integration tests
+        run: npm run test:integration
+
+      - name: Run smoke checks
+        run: npm run test:smoke
+
+      - name: Run security checks
+        run: npm run test:security
