@@ -10,6 +10,8 @@ import {
 } from "../lib/device";
 import { json } from "../utils/responses";
 import { parseMetricsJson, safeDecode } from "../utils";
+import { DeviceHistoryQuerySchema, ListDevicesQuerySchema } from "../schemas/devices";
+import { validationErrorResponse } from "../utils/validation";
 
 export async function handleLatest(req: Request, env: Env, deviceId: string) {
   const user = await requireAccessUser(req, env);
@@ -59,12 +61,17 @@ export async function handleListDevices(req: Request, env: Env) {
 
   const isAdmin = userIsAdmin(user);
   const url = new URL(req.url);
-  const mine = url.searchParams.get("mine") === "1" || !isAdmin;
-
-  const rawLimit = Number(url.searchParams.get("limit"));
-  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(100, Math.floor(rawLimit)) : 50;
-
-  const rawCursor = url.searchParams.get("cursor");
+  const paramsResult = ListDevicesQuerySchema.safeParse({
+    mine: url.searchParams.get("mine"),
+    limit: url.searchParams.get("limit"),
+    cursor: url.searchParams.get("cursor"),
+  });
+  if (!paramsResult.success) {
+    return validationErrorResponse(paramsResult.error);
+  }
+  const { mine: mineParam, limit = 50, cursor } = paramsResult.data;
+  const mine = mineParam ?? !isAdmin;
+  const rawCursor = cursor ?? null;
   let cursorPhase: "ts" | "null" | null = null;
   let cursorTs: string | null = null;
   let cursorId: string | null = null;
@@ -200,8 +207,13 @@ export async function handleDeviceHistory(req: Request, env: Env, rawDeviceId: s
   }
 
   const url = new URL(req.url);
-  const rawLimit = Number(url.searchParams.get("limit"));
-  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(500, Math.floor(rawLimit)) : 72;
+  const paramsResult = DeviceHistoryQuerySchema.safeParse({
+    limit: url.searchParams.get("limit"),
+  });
+  if (!paramsResult.success) {
+    return validationErrorResponse(paramsResult.error);
+  }
+  const { limit = 72 } = paramsResult.data;
 
   const rows = await env.DB
     .prepare(

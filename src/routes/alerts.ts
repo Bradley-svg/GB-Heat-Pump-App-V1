@@ -3,6 +3,8 @@ import { requireAccessUser } from "../lib/access";
 import { buildDeviceLookup, buildDeviceScope, presentDeviceId } from "../lib/device";
 import { json } from "../utils/responses";
 import { andWhere, nowISO, parseFaultsJson } from "../utils";
+import { AlertsQuerySchema } from "../schemas/alerts";
+import { validationErrorResponse } from "../utils/validation";
 
 export async function handleAlertsFeed(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
@@ -10,12 +12,14 @@ export async function handleAlertsFeed(req: Request, env: Env) {
 
   const scope = buildDeviceScope(user);
   const url = new URL(req.url);
-
-  const rawLimit = Number(url.searchParams.get("limit"));
-  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(100, Math.floor(rawLimit)) : 40;
-
-  const rawHours = Number(url.searchParams.get("hours"));
-  const hours = Number.isFinite(rawHours) && rawHours > 0 ? Math.min(168, Math.floor(rawHours)) : 72;
+  const paramsResult = AlertsQuerySchema.safeParse({
+    limit: url.searchParams.get("limit"),
+    hours: url.searchParams.get("hours"),
+  });
+  if (!paramsResult.success) {
+    return validationErrorResponse(paramsResult.error);
+  }
+  const { limit = 40, hours = 72 } = paramsResult.data;
   const sinceMs = Date.now() - hours * 60 * 60 * 1000;
 
   if (scope.empty) {

@@ -3,6 +3,8 @@ import { requireAccessUser } from "../lib/access";
 import { buildDeviceLookup, buildDeviceScope, presentDeviceId } from "../lib/device";
 import { json } from "../utils/responses";
 import { andWhere, nowISO, parseFaultsJson } from "../utils";
+import { ClientCompactQuerySchema } from "../schemas/client";
+import { validationErrorResponse } from "../utils/validation";
 
 export async function handleClientCompact(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
@@ -10,17 +12,15 @@ export async function handleClientCompact(req: Request, env: Env) {
 
   const scope = buildDeviceScope(user);
   const url = new URL(req.url);
-
-  const rawHours = Number(url.searchParams.get("hours"));
-  const hours = Number.isFinite(rawHours) && rawHours > 0 ? Math.min(72, Math.floor(rawHours)) : 24;
-  const sinceMs = Date.now() - hours * 60 * 60 * 1000;
-
-  const lowDeltaParam = url.searchParams.get("lowDeltaT");
-  let lowDeltaT = 2;
-  if (lowDeltaParam !== null && lowDeltaParam.trim() !== "") {
-    const parsed = Number(lowDeltaParam);
-    if (Number.isFinite(parsed) && parsed >= 0) lowDeltaT = parsed;
+  const paramsResult = ClientCompactQuerySchema.safeParse({
+    hours: url.searchParams.get("hours"),
+    lowDeltaT: url.searchParams.get("lowDeltaT"),
+  });
+  if (!paramsResult.success) {
+    return validationErrorResponse(paramsResult.error);
   }
+  const { hours = 24, lowDeltaT = 2 } = paramsResult.data;
+  const sinceMs = Date.now() - hours * 60 * 60 * 1000;
 
   if (scope.empty) {
     return json({

@@ -1,21 +1,27 @@
 import type { Env } from "../env";
 import { json, text } from "../utils/responses";
 import { nowISO } from "../utils";
+import { validationErrorResponse } from "../utils/validation";
+import { MetricsQuerySchema } from "../schemas/metrics";
+import type { MetricsQuery } from "../schemas/metrics";
 
 type MetricsFormat = "prom" | "json";
 
-function pickFormat(req: Request): MetricsFormat {
-  const url = new URL(req.url);
-  const accept = req.headers.get("accept") ?? "";
-  const format = url.searchParams.get("format");
-  if (format === "json") return "json";
-  if (format === "prom") return "prom";
+function pickFormat(explicit: MetricsQuery["format"], accept: string): MetricsFormat {
+  if (explicit) return explicit;
   if (accept.includes("application/json")) return "json";
   return "prom";
 }
 
 export async function handleMetrics(req: Request, env: Env) {
-  const format = pickFormat(req);
+  const url = new URL(req.url);
+  const paramsResult = MetricsQuerySchema.safeParse({
+    format: url.searchParams.get("format"),
+  });
+  if (!paramsResult.success) {
+    return validationErrorResponse(paramsResult.error);
+  }
+  const format = pickFormat(paramsResult.data.format, req.headers.get("accept") ?? "");
 
   const deviceStats =
     (await env.DB.prepare("SELECT COUNT(*) AS total, SUM(online) AS online FROM devices").first<{

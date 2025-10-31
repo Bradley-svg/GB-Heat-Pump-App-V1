@@ -3,6 +3,8 @@ import { requireAccessUser } from "../lib/access";
 import { buildDeviceLookup, buildDeviceScope, presentDeviceId } from "../lib/device";
 import { json } from "../utils/responses";
 import { andWhere, nowISO } from "../utils";
+import { AdminOverviewQuerySchema } from "../schemas/admin";
+import { validationErrorResponse } from "../utils/validation";
 
 export async function handleAdminOverview(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
@@ -10,6 +12,13 @@ export async function handleAdminOverview(req: Request, env: Env) {
 
   const scope = buildDeviceScope(user);
   const url = new URL(req.url);
+  const paramsResult = AdminOverviewQuerySchema.safeParse({
+    limit: url.searchParams.get("limit"),
+  });
+  if (!paramsResult.success) {
+    return validationErrorResponse(paramsResult.error);
+  }
+  const { limit } = paramsResult.data;
 
   let tenants;
   if (scope.isAdmin) {
@@ -47,9 +56,6 @@ export async function handleAdminOverview(req: Request, env: Env) {
         online_count: number | null;
       }>();
   }
-
-  const rawLimit = Number(url.searchParams.get("limit"));
-  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(100, Math.floor(rawLimit)) : 40;
 
   let opsRows;
   if (scope.isAdmin) {

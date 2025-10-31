@@ -3,44 +3,28 @@ import { claimDeviceIfUnowned, verifyDeviceKey } from "../lib/device";
 import { json } from "../utils/responses";
 import { withCors } from "../lib/cors";
 import { parseAndCheckTs, round, nowISO } from "../utils";
-
-interface TelemetryMetrics {
-  supplyC?: number | null;
-  returnC?: number | null;
-  tankC?: number | null;
-  ambientC?: number | null;
-  flowLps?: number | null;
-  compCurrentA?: number | null;
-  eevSteps?: number | null;
-  powerKW?: number | null;
-  mode?: string | null;
-  defrost?: number | null;
-}
-
-interface TelemetryBody {
-  device_id: string;
-  ts: string;
-  metrics: TelemetryMetrics;
-  faults?: unknown[];
-  rssi?: number | null;
-}
+import { validationErrorResponse } from "../utils/validation";
+import { HeartbeatPayloadSchema, TelemetryPayloadSchema } from "../schemas/ingest";
+import type { HeartbeatPayload, TelemetryPayload } from "../schemas/ingest";
 
 export async function handleIngest(req: Request, env: Env, profileId: string) {
   const t0 = Date.now();
 
-  let body: TelemetryBody;
+  let rawBody: unknown;
   try {
-    body = (await req.json()) as TelemetryBody;
-    if (JSON.stringify(body).length > 256_000) {
+    rawBody = await req.json();
+    if (JSON.stringify(rawBody).length > 256_000) {
       return withCors(json({ error: "Payload too large" }, { status: 413 }));
     }
   } catch {
     return withCors(json({ error: "Invalid JSON" }, { status: 400 }));
   }
 
-  if (!body?.device_id || !body?.ts || !body?.metrics) {
-    return withCors(json({ error: "Missing required fields" }, { status: 400 }));
+  const parsedBody = TelemetryPayloadSchema.safeParse(rawBody);
+  if (!parsedBody.success) {
+    return withCors(validationErrorResponse(parsedBody.error));
   }
+  const body: TelemetryPayload = parsedBody.data;
 
   const tsCheck = parseAndCheckTs(body.ts);
   if (!tsCheck.ok) return withCors(json({ error: tsCheck.reason }, { status: 400 }));
@@ -185,16 +169,18 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
 }
 
 export async function handleHeartbeat(req: Request, env: Env, profileId: string) {
-  let body: { device_id: string; ts?: string; rssi?: number | null };
+  let rawBody: unknown;
   try {
-    body = await req.json();
+    rawBody = await req.json();
   } catch {
     return withCors(json({ error: "Invalid JSON" }, { status: 400 }));
   }
 
-  if (!body?.device_id) {
-    return withCors(json({ error: "Missing device_id" }, { status: 400 }));
+  const parsedBody = HeartbeatPayloadSchema.safeParse(rawBody);
+  if (!parsedBody.success) {
+    return withCors(validationErrorResponse(parsedBody.error));
   }
+  const body: HeartbeatPayload = parsedBody.data;
 
   const tsStr = body.ts ?? new Date().toISOString();
   const tsCheck = parseAndCheckTs(tsStr);

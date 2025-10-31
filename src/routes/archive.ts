@@ -3,6 +3,8 @@ import { requireAccessUser } from "../lib/access";
 import { buildDeviceLookup, buildDeviceScope, presentDeviceId } from "../lib/device";
 import { json } from "../utils/responses";
 import { andWhere, nowISO, parseFaultsJson } from "../utils";
+import { ArchiveQuerySchema } from "../schemas/archive";
+import { validationErrorResponse } from "../utils/validation";
 
 export async function handleArchive(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
@@ -10,13 +12,16 @@ export async function handleArchive(req: Request, env: Env) {
 
   const scope = buildDeviceScope(user);
   const url = new URL(req.url);
-
-  const rawOffline = Number(url.searchParams.get("offlineHours"));
-  const offlineHours = Number.isFinite(rawOffline) && rawOffline > 0 ? Math.min(720, Math.floor(rawOffline)) : 72;
+  const paramsResult = ArchiveQuerySchema.safeParse({
+    offlineHours: url.searchParams.get("offlineHours"),
+    days: url.searchParams.get("days"),
+  });
+  if (!paramsResult.success) {
+    return validationErrorResponse(paramsResult.error);
+  }
+  const { offlineHours = 72, days = 14 } = paramsResult.data;
   const offlineThreshold = new Date(Date.now() - offlineHours * 60 * 60 * 1000).toISOString();
 
-  const rawDays = Number(url.searchParams.get("days"));
-  const days = Number.isFinite(rawDays) && rawDays > 0 ? Math.min(30, Math.floor(rawDays)) : 14;
   const historySinceMs = Date.now() - days * 24 * 60 * 60 * 1000;
 
   if (scope.empty) {
