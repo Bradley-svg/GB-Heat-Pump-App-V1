@@ -72,4 +72,5 @@ input,select{background:#0e1516;border:1px solid #193a30;color:var(--fg);border-
 .history-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem}
 .history-card{background:#101918;border:1px solid #1b382f;border-radius:.75rem;padding:.6rem .75rem}
 .history-card strong{font-size:16px}
-@media (max-width:720px){.nav{flex-wrap:wrap;gap:.5rem}.nav .sp{display:none}.grid.kpis{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}}
+@media (max-width:720px){.nav{flex-wrap:wrap;gap:.5rem}.nav .brand{margin-bottom:.25rem}.nav-links{flex-wrap:wrap;width:100%;margin-left:0}.nav-link{padding:.3rem .5rem}.nav .sp{display:none}.grid.kpis{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}}
+

@@ -1,0 +1,223 @@
+export interface FleetSummaryResponse {
+  devices_total: number;
+  devices_online: number;
+  online_pct: number;
+  avg_cop_24h: number | null;
+  low_deltaT_count_24h: number;
+  max_heartbeat_age_sec: number | null;
+  window_start_ms: number;
+  generated_at: string;
+}
+
+export interface ClientCompactResponse {
+  generated_at: string;
+  scope: "fleet" | "tenant" | "empty";
+  window_start_ms: number;
+  kpis: {
+    devices_total: number;
+    devices_online: number;
+    offline_count: number;
+    online_pct: number;
+    avg_cop: number | null;
+    low_deltaT_count: number;
+    open_alerts: number;
+    max_heartbeat_age_sec: number | null;
+  };
+  alerts: CompactAlert[];
+  top_devices: CompactTopDevice[];
+  trend: CompactTrendPoint[];
+}
+
+export interface CompactAlert {
+  device_id: string;
+  lookup: string;
+  site: string | null;
+  ts: string;
+  faults: string[];
+  fault_count: number;
+  updated_at: string | null;
+  active: boolean;
+}
+
+export interface CompactTopDevice {
+  device_id: string;
+  lookup: string;
+  site: string | null;
+  online: boolean;
+  last_seen_at: string | null;
+  updated_at: string | null;
+  cop: number | null;
+  deltaT: number | null;
+  thermalKW: number | null;
+  alert_count: number;
+}
+
+export interface CompactTrendPoint {
+  label: string;
+  cop: number | null;
+  thermalKW: number | null;
+  deltaT: number | null;
+}
+
+export interface DeviceListResponse {
+  items: DeviceListItem[];
+  next: string | null;
+}
+
+export interface DeviceListItem {
+  device_id: string;
+  lookup: string;
+  profile_id: string | null;
+  online: boolean;
+  last_seen_at: string | null;
+  site: string | null;
+  firmware: string | null;
+  map_version: string | null;
+}
+
+export interface DeviceLatestResponse {
+  device_id: string;
+  latest: LatestState;
+}
+
+export interface LatestState {
+  device_id?: string;
+  ts?: number | null;
+  updated_at?: string | null;
+  online?: boolean | null;
+  supplyC?: number | null;
+  returnC?: number | null;
+  deltaT?: number | null;
+  thermalKW?: number | null;
+  cop?: number | null;
+  faults?: string[] | null;
+  payload?: unknown;
+  mode?: string | null;
+  flowLps?: number | null;
+  powerKW?: number | null;
+  [key: string]: unknown;
+}
+
+export interface DeviceHistoryResponse {
+  device_id: string;
+  lookup: string;
+  items: DeviceHistoryPoint[];
+}
+
+export interface DeviceHistoryPoint {
+  ts: string;
+  deltaT: number | null;
+  thermalKW: number | null;
+  cop: number | null;
+  supplyC: number | null;
+  returnC: number | null;
+  tankC: number | null;
+  ambientC: number | null;
+  flowLps: number | null;
+  powerKW: number | null;
+  mode: string | null;
+  defrost: number | null;
+}
+
+export interface AlertsFeedResponse {
+  generated_at: string;
+  items: AlertsFeedItem[];
+  stats: {
+    total: number;
+    active: number;
+  };
+}
+
+export interface AlertsFeedItem {
+  device_id: string;
+  lookup: string;
+  site: string | null;
+  ts: string;
+  fault_count: number;
+  faults: string[];
+  active: boolean;
+  active_faults: string[];
+  last_update: string | null;
+}
+
+export interface CommissioningResponse {
+  generated_at: string;
+  summary: {
+    total: number;
+    ready: number;
+  };
+  devices: CommissioningDevice[];
+}
+
+export interface CommissioningDevice {
+  device_id: string;
+  lookup: string;
+  site: string | null;
+  online: boolean;
+  last_seen_at: string | null;
+  supplyC: number | null;
+  returnC: number | null;
+  deltaT: number | null;
+  flowLps: number | null;
+  cop: number | null;
+  thermalKW: number | null;
+  mode: string | null;
+  defrost: number | null;
+  powerKW: number | null;
+  updated_at: string | null;
+  progress?: number;
+  checklist?: CommissioningChecklistItem[];
+}
+
+export interface CommissioningChecklistItem {
+  key: string;
+  label: string;
+  detail: string;
+  pass: boolean;
+}
+
+export interface AdminOverviewResponse {
+  generated_at: string;
+  scope: "admin" | "tenant" | "empty";
+  tenants: AdminTenantRow[];
+  ops: AdminOpsRow[];
+  ops_summary: Record<string, number>;
+}
+
+export interface AdminTenantRow {
+  profile_id: string;
+  device_count: number;
+  online_count: number;
+}
+
+export interface AdminOpsRow {
+  ts: string;
+  route: string;
+  status_code: number;
+  duration_ms: number;
+  device_id: string | null;
+  lookup: string | null;
+}
+
+export interface ArchiveResponse {
+  generated_at: string;
+  offline: ArchiveOfflineEntry[];
+  history: ArchiveHistoryEntry[];
+}
+
+export interface ArchiveOfflineEntry {
+  device_id: string;
+  lookup: string;
+  site: string | null;
+  last_seen_at: string | null;
+  online: boolean;
+  cop: number | null;
+  deltaT: number | null;
+  alerts: number;
+  updated_at: string | null;
+}
+
+export interface ArchiveHistoryEntry {
+  day: string;
+  samples: number;
+}

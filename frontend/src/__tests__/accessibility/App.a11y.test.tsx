@@ -1,102 +1,71 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { JSDOM } from "jsdom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-let cleanupFn: (() => void) | null = null;
+import "@testing-library/jest-dom/vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import { axe } from "vitest-axe";
 
-function setupDom(url: string) {
-  const dom = new JSDOM("<!doctype html><html><body></body></html>", { url });
-  const { window } = dom;
-  const globals: Record<string, unknown> = {
-    window,
-    document: window.document,
-    navigator: window.navigator,
-    location: window.location,
-    history: window.history,
-    HTMLElement: window.HTMLElement,
-  };
+import App from "../../app/App";
 
-  if (!window.requestAnimationFrame) {
-    window.requestAnimationFrame = (cb: FrameRequestCallback) =>
-      setTimeout(() => cb(Date.now()), 16) as unknown as number;
-  }
+beforeEach(() => {
+  window.history.replaceState(null, "", "/app/overview");
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
 
-  if (!window.cancelAnimationFrame) {
-    window.cancelAnimationFrame = (handle: number) => clearTimeout(handle);
-  }
+  const mockResponse = (body: unknown): Response =>
+    ({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(body),
+      text: () => Promise.resolve(JSON.stringify(body ?? null)),
+    }) as Response;
 
-  for (const [key, value] of Object.entries(globals)) {
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      writable: true,
-      value,
-    });
-  }
-
-  return dom;
-}
-
-function teardownDom() {
-  delete (globalThis as any).window;
-  delete (globalThis as any).document;
-  delete (globalThis as any).navigator;
-  delete (globalThis as any).location;
-  delete (globalThis as any).history;
-  delete (globalThis as any).HTMLElement;
-}
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => mockFetch(input, mockResponse)));
+});
 
 afterEach(() => {
-  cleanupFn?.();
-  cleanupFn = null;
   vi.restoreAllMocks();
-  teardownDom();
 });
 
 describe("App accessibility", () => {
   it("renders the overview page without axe violations", async () => {
-    setupDom("https://example.com/app/overview");
-
-    const jestDomMatchersModule = await import("@testing-library/jest-dom/matchers");
-    const { default: _unused, ...jestDomMatchers } = jestDomMatchersModule as Record<string, unknown>;
-    expect.extend(jestDomMatchers as Record<string, any>);
-
-    await import("vitest-axe/extend-expect");
-    const axeMatchersModule = await import("vitest-axe/matchers");
-    expect.extend(axeMatchersModule as Record<string, any>);
-
-    const [{ render, screen, waitFor, cleanup }, { axe }, { default: App }] = await Promise.all([
-      import("@testing-library/react"),
-      import("vitest-axe"),
-      import("../../App"),
-    ]);
-    cleanupFn = cleanup;
-    vi.spyOn(window.HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
-
-    const mockResponse = (body: unknown) =>
-      ({
-        ok: true,
-        json: () => Promise.resolve(body),
-      }) as unknown as Response;
-
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((input: RequestInfo | URL) => {
-        if (typeof input === "string" && input.endsWith("/api/me")) {
-          return Promise.resolve(mockResponse({ roles: ["admin"] }));
-        }
-
-        return Promise.resolve(mockResponse({}));
-      }),
-    );
-
     const { container } = render(<App />);
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("heading", { name: /overview \(fleet\)/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /overview \(fleet\)/i })).toBeInTheDocument();
     });
 
     const results = await axe(container);
-    expect(results).toHaveNoViolations();
+    expect(results.violations).toHaveLength(0);
   });
 });
+
+function mockFetch(request: RequestInfo | URL, respond: (body: unknown) => Response): Promise<Response> {
+  const url = resolveUrl(request);
+
+  if (url.includes("/api/me")) {
+    return Promise.resolve(respond({ email: "admin@example.com", roles: ["admin"], clientIds: [] }));
+  }
+
+  if (url.includes("/api/fleet/summary")) {
+    return Promise.resolve(
+      respond({
+        devices_total: 10,
+        devices_online: 8,
+        online_pct: 80,
+        avg_cop_24h: 3.2,
+        low_deltaT_count_24h: 1,
+        max_heartbeat_age_sec: 120,
+        window_start_ms: Date.now() - 24 * 60 * 60 * 1000,
+        generated_at: new Date().toISOString(),
+      }),
+    );
+  }
+
+  return Promise.resolve(respond({}));
+}
+
+function resolveUrl(request: RequestInfo | URL): string {
+  if (typeof request === "string") return request;
+  if (request instanceof URL) return request.toString();
+  return request.url;
+}
+
