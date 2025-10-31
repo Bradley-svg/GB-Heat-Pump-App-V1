@@ -85,7 +85,7 @@ export default {
       return Response.redirect(url.origin + "/app", 302);
     }
 
-    const preflight = maybeHandlePreflight(req, path);
+    const preflight = maybeHandlePreflight(req, path, env);
     if (preflight) return preflight;
 
     if (path === "/favicon.ico") {

@@ -4,6 +4,51 @@ export async function sha256Hex(input: string) {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+export function hexToBytes(hex: string) {
+  const normalized = hex.replace(/\s+/g, "").toLowerCase();
+  if (normalized.length % 2 !== 0) {
+    throw new Error("Hex string must have an even length");
+  }
+  const bytes = new Uint8Array(normalized.length / 2);
+  for (let i = 0; i < normalized.length; i += 2) {
+    const byte = Number.parseInt(normalized.slice(i, i + 2), 16);
+    if (Number.isNaN(byte)) {
+      throw new Error("Invalid hex string");
+    }
+    bytes[i / 2] = byte;
+  }
+  return bytes;
+}
+
+export function bytesToHex(bytes: Uint8Array) {
+  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export async function hmacSha256Hex(keyHex: string, payload: string) {
+  const keyBytes = hexToBytes(keyHex);
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    keyBytes,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const data = new TextEncoder().encode(payload);
+  const signature = await crypto.subtle.sign("HMAC", cryptoKey, data);
+  return bytesToHex(new Uint8Array(signature));
+}
+
+export function timingSafeEqual(a: string, b: string) {
+  const len = Math.max(a.length, b.length);
+  let mismatch = a.length === b.length ? 0 : 1;
+  for (let i = 0; i < len; i++) {
+    const ca = i < a.length ? a.charCodeAt(i) : 0;
+    const cb = i < b.length ? b.charCodeAt(i) : 0;
+    mismatch |= ca ^ cb;
+  }
+  return mismatch === 0;
+}
+
 export function round(n: unknown, dp: number) {
   if (typeof n !== "number" || Number.isNaN(n)) return null;
   const f = Math.pow(10, dp);

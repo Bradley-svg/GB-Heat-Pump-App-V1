@@ -15,6 +15,9 @@ database_id = "ee7ad98b-3629-4985-bd7d-a60c401953a7"
 APP_BASE_URL = "https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev"
 RETURN_DEFAULT = "https://www.greenbro.co.za/"
 TIMEZONE = "Africa/Johannesburg"
+# INGEST_ALLOWED_ORIGINS = "https://devices.greenbro.io,https://app.greenbro.io"
+# INGEST_RATE_LIMIT_PER_MIN = "120"
+# INGEST_SIGNATURE_TOLERANCE_SECS = "300"
 
 # Ops thresholds (override per-env if needed)
 HEARTBEAT_INTERVAL_SECS = "30"        # expected device heartbeat period

@@ -10,6 +10,9 @@ export interface Env {
   OFFLINE_MULTIPLIER?: string;
   CURSOR_SECRET: string;
   APP_STATIC?: R2Bucket;
+  INGEST_ALLOWED_ORIGINS?: string;
+  INGEST_RATE_LIMIT_PER_MIN?: string;
+  INGEST_SIGNATURE_TOLERANCE_SECS?: string;
 }
 
 export type { User };

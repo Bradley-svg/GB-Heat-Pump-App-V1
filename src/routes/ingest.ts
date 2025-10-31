@@ -1,39 +1,199 @@
 import type { Env } from "../env";
 import { claimDeviceIfUnowned, verifyDeviceKey } from "../lib/device";
 import { json } from "../utils/responses";
-import { withCors } from "../lib/cors";
-import { parseAndCheckTs, nowISO } from "../utils";
+import { evaluateCors, withCors } from "../lib/cors";
+import {
+  parseAndCheckTs,
+  nowISO,
+  hmacSha256Hex,
+  timingSafeEqual,
+} from "../utils";
 import { validationErrorResponse } from "../utils/validation";
 import { HeartbeatPayloadSchema, TelemetryPayloadSchema } from "../schemas/ingest";
 import type { HeartbeatPayload, TelemetryPayload } from "../schemas/ingest";
 import { deriveTelemetryMetrics } from "../telemetry";
 
+const DEVICE_KEY_HEADER = "X-GREENBRO-DEVICE-KEY";
+const SIGNATURE_HEADER = "X-GREENBRO-SIGNATURE";
+const TIMESTAMP_HEADER = "X-GREENBRO-TIMESTAMP";
+const INGEST_ROUTE = "/api/ingest";
+const HEARTBEAT_ROUTE = "/api/heartbeat";
+
+type SignatureValidation =
+  | { ok: true }
+  | { ok: false; status: number; error: string };
+
+function signatureToleranceMs(env: Env) {
+  const raw = env.INGEST_SIGNATURE_TOLERANCE_SECS;
+  const parsed = raw ? Number(raw) : NaN;
+  const seconds = Number.isFinite(parsed) && parsed > 0 ? parsed : 300;
+  return seconds * 1000;
+}
+
+function parseSignatureTimestamp(raw: string): number | null {
+  const value = raw.trim();
+  if (!value) return null;
+  if (/^\d{10,}$/.test(value)) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return null;
+    if (value.length <= 10) {
+      return numeric * 1000;
+    }
+    return numeric;
+  }
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+async function recordOpsMetric(
+  env: Env,
+  route: string,
+  statusCode: number,
+  durationMs: number,
+  deviceId: string | null,
+) {
+  try {
+    await env.DB.prepare(
+      `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id) VALUES (?1, ?2, ?3, ?4, ?5)`,
+    )
+      .bind(nowISO(), route, statusCode, durationMs, deviceId)
+      .run();
+  } catch (error) {
+    console.error(`ops_metrics insert failed (${route}, ${statusCode})`, error);
+  }
+}
+
+function parsedRateLimit(env: Env): number {
+  const raw = env.INGEST_RATE_LIMIT_PER_MIN;
+  if (!raw) return 120;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return 120;
+  if (parsed <= 0) return 0;
+  return Math.floor(parsed);
+}
+
+async function isRateLimited(
+  env: Env,
+  route: string,
+  deviceId: string,
+  limitPerMinute: number,
+) {
+  if (limitPerMinute <= 0) return false;
+  const sinceIso = new Date(Date.now() - 60_000).toISOString();
+  const row = await env.DB
+    .prepare(
+      `SELECT COUNT(*) AS cnt FROM ops_metrics WHERE route = ?1 AND device_id = ?2 AND ts >= ?3`,
+    )
+    .bind(route, deviceId, sinceIso)
+    .first<{ cnt: number | string | null }>();
+  const rawCount = row?.cnt ?? 0;
+  const count = typeof rawCount === "number" ? rawCount : Number(rawCount);
+  return Number.isFinite(count) && count >= limitPerMinute;
+}
+
+async function ensureSignature(
+  req: Request,
+  env: Env,
+  payload: string,
+  deviceKeyHash: string,
+): Promise<SignatureValidation> {
+  const signatureHeader = req.headers.get(SIGNATURE_HEADER);
+  const timestampHeader = req.headers.get(TIMESTAMP_HEADER);
+  if (!signatureHeader || !timestampHeader) {
+    return { ok: false, status: 401, error: "Missing signature headers" };
+  }
+
+  const trimmedTimestamp = timestampHeader.trim();
+  const normalizedSignature = signatureHeader.trim().toLowerCase();
+  if (!trimmedTimestamp) {
+    return { ok: false, status: 400, error: "Invalid signature timestamp" };
+  }
+  if (!normalizedSignature) {
+    return { ok: false, status: 401, error: "Invalid signature" };
+  }
+
+  const tsMs = parseSignatureTimestamp(trimmedTimestamp);
+  if (tsMs === null) {
+    return { ok: false, status: 400, error: "Invalid signature timestamp" };
+  }
+
+  const toleranceMs = signatureToleranceMs(env);
+  if (Math.abs(Date.now() - tsMs) > toleranceMs) {
+    return {
+      ok: false,
+      status: 401,
+      error: "Signature timestamp outside tolerance",
+    };
+  }
+
+  const expected = await hmacSha256Hex(deviceKeyHash, `${trimmedTimestamp}.${payload}`);
+  if (!timingSafeEqual(expected, normalizedSignature)) {
+    return { ok: false, status: 401, error: "Invalid signature" };
+  }
+
+  return { ok: true };
+}
+
+function readRawBody(raw: string): unknown {
+  if (!raw) return null;
+  return JSON.parse(raw);
+}
+
+function payloadSizeOk(raw: string) {
+  return raw.length <= 256_000;
+}
+
 export async function handleIngest(req: Request, env: Env, profileId: string) {
   const t0 = Date.now();
+  const cors = evaluateCors(req, env);
+  if (!cors.allowed) {
+    return json({ error: "Origin not allowed" }, { status: 403 });
+  }
+
+  let rawBodyText: string;
+  try {
+    rawBodyText = await req.text();
+  } catch {
+    return withCors(req, env, json({ error: "Invalid JSON" }, { status: 400 }), cors);
+  }
+
+  if (!payloadSizeOk(rawBodyText)) {
+    return withCors(req, env, json({ error: "Payload too large" }, { status: 413 }), cors);
+  }
 
   let rawBody: unknown;
   try {
-    rawBody = await req.json();
-    if (JSON.stringify(rawBody).length > 256_000) {
-      return withCors(json({ error: "Payload too large" }, { status: 413 }));
-    }
+    rawBody = readRawBody(rawBodyText);
   } catch {
-    return withCors(json({ error: "Invalid JSON" }, { status: 400 }));
+    return withCors(req, env, json({ error: "Invalid JSON" }, { status: 400 }), cors);
   }
 
   const parsedBody = TelemetryPayloadSchema.safeParse(rawBody);
   if (!parsedBody.success) {
-    return withCors(validationErrorResponse(parsedBody.error));
+    return withCors(req, env, validationErrorResponse(parsedBody.error), cors);
   }
   const body: TelemetryPayload = parsedBody.data;
 
   const tsCheck = parseAndCheckTs(body.ts);
-  if (!tsCheck.ok) return withCors(json({ error: tsCheck.reason }, { status: 400 }));
+  if (!tsCheck.ok) {
+    return withCors(req, env, json({ error: tsCheck.reason }, { status: 400 }), cors);
+  }
   const tsMs = tsCheck.ms!;
 
-  const keyHeader = req.headers.get("X-GREENBRO-DEVICE-KEY");
-  if (!(await verifyDeviceKey(env, body.device_id, keyHeader))) {
-    return withCors(json({ error: "Unauthorized" }, { status: 401 }));
+  const keyHeader = req.headers.get(DEVICE_KEY_HEADER);
+  const keyVerification = await verifyDeviceKey(env, body.device_id, keyHeader);
+  if (!keyVerification.ok || !keyVerification.deviceKeyHash) {
+    return withCors(req, env, json({ error: "Unauthorized" }, { status: 401 }), cors);
+  }
+
+  const signatureCheck = await ensureSignature(req, env, rawBodyText, keyVerification.deviceKeyHash);
+  if (!signatureCheck.ok) {
+    return withCors(
+      req,
+      env,
+      json({ error: signatureCheck.error }, { status: signatureCheck.status }),
+      cors,
+    );
   }
 
   const devRow = await env.DB
@@ -42,7 +202,12 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
     .first<{ profile_id?: string | null }>();
 
   if (!devRow) {
-    return withCors(json({ error: "Unauthorized (unknown device)" }, { status: 401 }));
+    return withCors(
+      req,
+      env,
+      json({ error: "Unauthorized (unknown device)" }, { status: 401 }),
+      cors,
+    );
   }
 
   if (devRow.profile_id && devRow.profile_id !== profileId) {
@@ -51,14 +216,30 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
       urlProfileId: profileId,
       dbProfile: devRow.profile_id,
     });
-    return withCors(json({ error: "Profile mismatch for device" }, { status: 409 }));
+    return withCors(
+      req,
+      env,
+      json({ error: "Profile mismatch for device" }, { status: 409 }),
+      cors,
+    );
   }
 
   if (!devRow.profile_id) {
     const claim = await claimDeviceIfUnowned(env, body.device_id, profileId);
     if (!claim.ok && claim.reason === "claimed_by_other") {
-      return withCors(json({ error: "Profile mismatch for device" }, { status: 409 }));
+      return withCors(
+        req,
+        env,
+        json({ error: "Profile mismatch for device" }, { status: 409 }),
+        cors,
+      );
     }
+  }
+
+  const limitPerMinute = parsedRateLimit(env);
+  if (await isRateLimited(env, INGEST_ROUTE, body.device_id, limitPerMinute)) {
+    await recordOpsMetric(env, INGEST_ROUTE, 429, Date.now() - t0, body.device_id);
+    return withCors(req, env, json({ error: "Rate limit exceeded" }, { status: 429 }), cors);
   }
 
   const supply = typeof body.metrics.supplyC === "number" ? body.metrics.supplyC : null;
@@ -134,56 +315,71 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
       ).bind(body.device_id, new Date(tsMs).toISOString()),
     ]);
 
-    try {
-      const dur = Date.now() - t0;
-      await env.DB
-        .prepare(
-          `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id) VALUES (?1, ?2, ?3, ?4, ?5)`,
-        )
-        .bind(nowISO(), "/api/ingest", 200, dur, body.device_id)
-        .run();
-    } catch (e) {
-      console.error("ops_metrics insert failed (ingest)", e);
-    }
+    await recordOpsMetric(env, INGEST_ROUTE, 200, Date.now() - t0, body.device_id);
 
-    return withCors(json({ ok: true }));
+    return withCors(req, env, json({ ok: true }), cors);
   } catch (e: any) {
-    try {
-      const dur = Date.now() - t0;
-      await env.DB
-        .prepare(
-          `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id) VALUES (?1, ?2, ?3, ?4, ?5)`,
-        )
-        .bind(nowISO(), "/api/ingest", 500, dur, body.device_id)
-        .run();
-    } catch (logErr) {
-      console.error("ops_metrics insert failed (ingest error)", logErr);
-    }
-    return withCors(json({ error: "DB error", detail: String(e?.message || e) }, { status: 500 }));
+    await recordOpsMetric(env, INGEST_ROUTE, 500, Date.now() - t0, body.device_id);
+    return withCors(
+      req,
+      env,
+      json({ error: "DB error", detail: String(e?.message || e) }, { status: 500 }),
+      cors,
+    );
   }
 }
 
 export async function handleHeartbeat(req: Request, env: Env, profileId: string) {
+  const t0 = Date.now();
+  const cors = evaluateCors(req, env);
+  if (!cors.allowed) {
+    return json({ error: "Origin not allowed" }, { status: 403 });
+  }
+
+  let rawBodyText: string;
+  try {
+    rawBodyText = await req.text();
+  } catch {
+    return withCors(req, env, json({ error: "Invalid JSON" }, { status: 400 }), cors);
+  }
+
+  if (!payloadSizeOk(rawBodyText)) {
+    return withCors(req, env, json({ error: "Payload too large" }, { status: 413 }), cors);
+  }
+
   let rawBody: unknown;
   try {
-    rawBody = await req.json();
+    rawBody = readRawBody(rawBodyText);
   } catch {
-    return withCors(json({ error: "Invalid JSON" }, { status: 400 }));
+    return withCors(req, env, json({ error: "Invalid JSON" }, { status: 400 }), cors);
   }
 
   const parsedBody = HeartbeatPayloadSchema.safeParse(rawBody);
   if (!parsedBody.success) {
-    return withCors(validationErrorResponse(parsedBody.error));
+    return withCors(req, env, validationErrorResponse(parsedBody.error), cors);
   }
   const body: HeartbeatPayload = parsedBody.data;
 
   const tsStr = body.ts ?? new Date().toISOString();
   const tsCheck = parseAndCheckTs(tsStr);
-  if (!tsCheck.ok) return withCors(json({ error: tsCheck.reason }, { status: 400 }));
+  if (!tsCheck.ok) {
+    return withCors(req, env, json({ error: tsCheck.reason }, { status: 400 }), cors);
+  }
 
-  const keyHeader = req.headers.get("X-GREENBRO-DEVICE-KEY");
-  if (!(await verifyDeviceKey(env, body.device_id, keyHeader))) {
-    return withCors(json({ error: "Unauthorized" }, { status: 401 }));
+  const keyHeader = req.headers.get(DEVICE_KEY_HEADER);
+  const keyVerification = await verifyDeviceKey(env, body.device_id, keyHeader);
+  if (!keyVerification.ok || !keyVerification.deviceKeyHash) {
+    return withCors(req, env, json({ error: "Unauthorized" }, { status: 401 }), cors);
+  }
+
+  const signatureCheck = await ensureSignature(req, env, rawBodyText, keyVerification.deviceKeyHash);
+  if (!signatureCheck.ok) {
+    return withCors(
+      req,
+      env,
+      json({ error: signatureCheck.error }, { status: signatureCheck.status }),
+      cors,
+    );
   }
 
   const devRow = await env.DB
@@ -191,7 +387,14 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
     .bind(body.device_id)
     .first<{ profile_id?: string | null }>();
 
-  if (!devRow) return withCors(json({ error: "Unauthorized (unknown device)" }, { status: 401 }));
+  if (!devRow) {
+    return withCors(
+      req,
+      env,
+      json({ error: "Unauthorized (unknown device)" }, { status: 401 }),
+      cors,
+    );
+  }
 
   if (devRow.profile_id && devRow.profile_id !== profileId) {
     console.warn("Profile mismatch", {
@@ -199,14 +402,30 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
       urlProfileId: profileId,
       dbProfile: devRow.profile_id,
     });
-    return withCors(json({ error: "Profile mismatch for device" }, { status: 409 }));
+    return withCors(
+      req,
+      env,
+      json({ error: "Profile mismatch for device" }, { status: 409 }),
+      cors,
+    );
   }
 
   if (!devRow.profile_id) {
     const claim = await claimDeviceIfUnowned(env, body.device_id, profileId);
     if (!claim.ok && claim.reason === "claimed_by_other") {
-      return withCors(json({ error: "Profile mismatch for device" }, { status: 409 }));
+      return withCors(
+        req,
+        env,
+        json({ error: "Profile mismatch for device" }, { status: 409 }),
+        cors,
+      );
     }
+  }
+
+  const limitPerMinute = parsedRateLimit(env);
+  if (await isRateLimited(env, HEARTBEAT_ROUTE, body.device_id, limitPerMinute)) {
+    await recordOpsMetric(env, HEARTBEAT_ROUTE, 429, Date.now() - t0, body.device_id);
+    return withCors(req, env, json({ error: "Rate limit exceeded" }, { status: 429 }), cors);
   }
 
   const tsMs = tsCheck.ms ?? Date.now();
@@ -223,9 +442,12 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
       ).bind(body.device_id, new Date(tsMs).toISOString()),
     ]);
 
-    return withCors(json({ ok: true, server_time: new Date().toISOString() }));
+    await recordOpsMetric(env, HEARTBEAT_ROUTE, 200, Date.now() - t0, body.device_id);
+
+    return withCors(req, env, json({ ok: true, server_time: new Date().toISOString() }), cors);
   } catch (e) {
     console.error("Heartbeat update failed", e);
-    return withCors(json({ error: "DB error" }, { status: 500 }));
+    await recordOpsMetric(env, HEARTBEAT_ROUTE, 500, Date.now() - t0, body.device_id);
+    return withCors(req, env, json({ error: "DB error" }, { status: 500 }), cors);
   }
 }

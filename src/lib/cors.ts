@@ -1,25 +1,113 @@
-import { withSecurityHeaders } from "../utils/responses";
+import type { Env } from "../env";
+import { json, withSecurityHeaders } from "../utils/responses";
+
+const ALLOW_METHODS = "GET,POST,OPTIONS";
+const ALLOW_HEADERS =
+  "content-type,cf-access-jwt-assertion,x-greenbro-device-key,x-greenbro-signature,x-greenbro-timestamp";
 
 export const CORS_BASE: Record<string, string> = {
   "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET,POST,OPTIONS",
-  "access-control-allow-headers": "content-type,cf-access-jwt-assertion,x-greenbro-device-key",
+  "access-control-allow-methods": ALLOW_METHODS,
+  "access-control-allow-headers": ALLOW_HEADERS,
 };
 
-export function withCors(res: Response) {
-  const h = new Headers(res.headers);
-  for (const [k, v] of Object.entries(CORS_BASE)) h.set(k, v);
-  return new Response(res.body, { headers: h, status: res.status, statusText: res.statusText });
+export interface CorsEvaluation {
+  allowed: boolean;
+  origin: string | null;
+  allowOrigin: string | null;
 }
 
-export function maybeHandlePreflight(req: Request, pathname: string) {
+function parseAllowedOrigins(env: Env): string[] {
+  const raw = env.INGEST_ALLOWED_ORIGINS || "*";
+  return raw
+    .split(/[, \n\r]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function matchesOrigin(origin: string, rule: string) {
+  if (rule === "*") return true;
+  const normOrigin = origin.toLowerCase();
+  const normRule = rule.toLowerCase();
+  if (normRule.startsWith("*.")) {
+    const suffix = normRule.slice(1);
+    return normOrigin.endsWith(suffix);
+  }
+  return normOrigin === normRule;
+}
+
+export function evaluateCors(req: Request, env: Env): CorsEvaluation {
+  const origin = req.headers.get("Origin");
+  const allowedOrigins = parseAllowedOrigins(env);
+  if (!origin) {
+    const allowAny = allowedOrigins.includes("*");
+    return {
+      allowed: true,
+      origin: null,
+      allowOrigin: allowAny ? "*" : null,
+    };
+  }
+
+  for (const candidate of allowedOrigins) {
+    if (matchesOrigin(origin, candidate)) {
+      const allowOrigin = candidate === "*" ? "*" : origin;
+      return { allowed: true, origin, allowOrigin };
+    }
+  }
+
+  return { allowed: false, origin, allowOrigin: null };
+}
+
+export function withCors(
+  req: Request,
+  env: Env,
+  res: Response,
+  evaluation?: CorsEvaluation,
+) {
+  const result = evaluation ?? evaluateCors(req, env);
+  const headers = new Headers(res.headers);
+  if (result.allowOrigin) {
+    headers.set("access-control-allow-origin", result.allowOrigin);
+  } else {
+    headers.delete("access-control-allow-origin");
+  }
+  headers.set("access-control-allow-methods", ALLOW_METHODS);
+  headers.set("access-control-allow-headers", ALLOW_HEADERS);
+  headers.set("vary", "origin");
+  return new Response(res.body, {
+    headers,
+    status: res.status,
+    statusText: res.statusText,
+  });
+}
+
+export function maybeHandlePreflight(req: Request, pathname: string, env: Env) {
   if (req.method !== "OPTIONS") return null;
+
   if (
     pathname.startsWith("/api/ingest/") ||
     pathname.startsWith("/api/heartbeat/") ||
     /^\/api\/devices\/[^/]+\/latest$/.test(pathname)
   ) {
-    return withSecurityHeaders(new Response("", { status: 204, headers: CORS_BASE }));
+    const evaluation = evaluateCors(req, env);
+    if (!evaluation.allowed) {
+      return withCors(
+        req,
+        env,
+        json({ error: "Origin not allowed" }, { status: 403 }),
+        evaluation,
+      );
+    }
+    const headers = new Headers({
+      "access-control-allow-methods": ALLOW_METHODS,
+      "access-control-allow-headers": ALLOW_HEADERS,
+      "access-control-max-age": "600",
+      vary: "origin",
+    });
+    if (evaluation.allowOrigin) {
+      headers.set("access-control-allow-origin", evaluation.allowOrigin);
+    }
+    return withSecurityHeaders(new Response("", { status: 204, headers }));
   }
   return null;
 }

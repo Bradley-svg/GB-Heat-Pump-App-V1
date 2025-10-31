@@ -54,15 +54,33 @@ export async function claimDeviceIfUnowned(env: Env, deviceId: string, profileId
   return { ok: true as const };
 }
 
-export async function verifyDeviceKey(env: Env, deviceId: string, keyHeader: string | null) {
-  if (!keyHeader) return false;
+export interface DeviceKeyVerification {
+  ok: boolean;
+  deviceKeyHash?: string;
+  reason?:
+    | "missing_key"
+    | "unknown_device"
+    | "missing_device_key"
+    | "mismatch";
+}
+
+export async function verifyDeviceKey(
+  env: Env,
+  deviceId: string,
+  keyHeader: string | null,
+): Promise<DeviceKeyVerification> {
+  if (!keyHeader) return { ok: false, reason: "missing_key" };
   const row = await env.DB
     .prepare(`SELECT device_key_hash FROM devices WHERE device_id = ?1`)
     .bind(deviceId)
     .first<{ device_key_hash?: string }>();
-  if (!row || !row.device_key_hash) return false;
+  if (!row) return { ok: false, reason: "unknown_device" };
+  if (!row.device_key_hash) return { ok: false, reason: "missing_device_key" };
   const hash = await sha256Hex(keyHeader);
-  return hash.toLowerCase() === String(row.device_key_hash).toLowerCase();
+  if (hash.toLowerCase() !== String(row.device_key_hash).toLowerCase()) {
+    return { ok: false, reason: "mismatch" };
+  }
+  return { ok: true, deviceKeyHash: hash };
 }
 
 export { parseFaultsJson, parseMetricsJson, userIsAdmin };
