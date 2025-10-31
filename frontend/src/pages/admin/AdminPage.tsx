@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+ï»¿import { useEffect, useState } from "react";
 
 import { useApiClient } from "../../app/contexts";
 import { Page } from "../../components";
@@ -79,7 +79,7 @@ export default function AdminPage() {
         )}
       </div>
 
-      <div className="card" style={{ marginTop: "1rem" }}>
+      <div className="card mt-1">
         <div className="card-header">
           <div className="card-title">Recent operations</div>
           <span className="pill">{data.ops?.length ?? 0} events</span>
@@ -109,7 +109,7 @@ export default function AdminPage() {
                           {row.device_id}
                         </a>
                       ) : (
-                        "—"
+                        "-"
                       )}
                     </td>
                   </tr>
@@ -120,7 +120,7 @@ export default function AdminPage() {
         ) : (
           <div className="empty">No recent operations in scope</div>
         )}
-        <div className="subdued" style={{ marginTop: ".6rem" }}>
+        <div className="subdued mt-06">
           Status mix: {statusMix}
         </div>
       </div>
@@ -132,5 +132,5 @@ function getStatusMix(summary: AdminOverviewResponse["ops_summary"]): string {
   if (!summary) return "n/a";
   const entries = Object.entries(summary);
   if (!entries.length) return "n/a";
-  return entries.map(([status, count]) => `${status}: ${formatNumber(count, 0)}`).join(" · ");
+  return entries.map(([status, count]) => `${status}: ${formatNumber(count, 0)}`).join(" | ");
 }

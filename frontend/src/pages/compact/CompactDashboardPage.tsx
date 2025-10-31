@@ -73,7 +73,7 @@ export default function CompactDashboardPage() {
       case "thermalKW":
         return "Thermal output (kW)";
       case "deltaT":
-        return "?T average (°C)";
+        return "?T average (Â°C)";
       default:
         return "";
     }
@@ -134,7 +134,7 @@ export default function CompactDashboardPage() {
         <div className="card-header">
           <div>
             <div className="muted">Performance trend</div>
-            <div style={{ fontSize: "16px", fontWeight: 600, marginTop: ".2rem" }}>{trendSubtitle}</div>
+            <div className="trend-subtitle">{trendSubtitle}</div>
           </div>
           <div className="tabs">
             <button
@@ -160,7 +160,7 @@ export default function CompactDashboardPage() {
             </button>
           </div>
         </div>
-        <div style={{ padding: "0 1rem 1rem" }}>
+        <div className="card-section">
           <Sparkline
             values={trendValues}
             color={trendKey === "cop" ? "#52ff99" : trendKey === "thermalKW" ? "#7d96ff" : "#ffcc66"}
@@ -182,19 +182,18 @@ export default function CompactDashboardPage() {
             {summary.alerts.map((alert) => (
               <div className="list-item" key={alert.lookup}>
                 <div>
-                  <div style={{ fontWeight: 600 }}>{alert.device_id}</div>
+                  <div className="font-semibold">{alert.device_id}</div>
                   {alert.site ? <div className="subdued">{alert.site}</div> : null}
                   <div className="meta">Updated {formatRelative(alert.updated_at)}</div>
                 </div>
-                <div style={{ textAlign: "right" }}>
+                <div className="text-right">
                   <div>{alert.faults?.slice(0, 3).join(", ") || "Fault reported"}</div>
                   <div className="meta">
                     {alert.faults && alert.faults.length > 3 ? `+${alert.faults.length - 3} more` : ""}
                   </div>
                   <a
                     href={`/app/device?device=${encodeURIComponent(alert.lookup)}`}
-                    className="link"
-                    style={{ marginTop: ".4rem", display: "inline-block" }}
+                    className="link inline-link"
                   >
                     Open
                   </a>
@@ -232,7 +231,7 @@ export default function CompactDashboardPage() {
                         {device.device_id || "(device)"}
                       </a>
                     </td>
-                    <td>{device.site ?? "—"}</td>
+                    <td>{device.site ?? "-"}</td>
                     <td>
                       <span
                         className={`status-dot${device.online ? " ok" : ""}`}
@@ -240,7 +239,7 @@ export default function CompactDashboardPage() {
                       />
                     </td>
                     <td>{formatRelative(device.last_seen_at)}</td>
-                    <td>{device.firmware ?? "—"}</td>
+                    <td>{device.firmware ?? "-"}</td>
                   </tr>
                 ))}
               </tbody>

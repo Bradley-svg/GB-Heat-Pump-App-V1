@@ -67,11 +67,11 @@ export default function CommissioningPage() {
             {summary.ready} ready of {summary.total}
           </span>
         </div>
-        <div className="callout" style={{ marginTop: ".6rem" }}>
+        <div className="callout mt-06">
           {summary.total ? `${completionPct}% checklist complete across fleet` : "No devices in scope"}
         </div>
       </div>
-      <div className="stack" style={{ marginTop: "1rem" }}>
+      <div className="stack mt-1">
         {devices.map((device) => (
           <div className="card" key={device.lookup}>
             <div className="card-header">
@@ -86,9 +86,7 @@ export default function CommissioningPage() {
             <div className="subdued">
               Last heartbeat {formatRelative(device.last_seen_at ?? device.updated_at)}
             </div>
-            <div className="progress-bar">
-              <div style={{ width: `${Math.round(device.progress * 100)}%` }} />
-            </div>
+            <progress className="progress-bar" max={100} value={Math.round(device.progress * 100)} />
             <div className="checklist">
               {device.checklist.map((item) => (
                 <div className={`check-item${item.pass ? "" : " fail"}`} key={item.key}>
@@ -97,7 +95,7 @@ export default function CommissioningPage() {
                 </div>
               ))}
             </div>
-            <div style={{ marginTop: ".6rem" }}>
+            <div className="mt-06">
               <a href={`/app/device?device=${encodeURIComponent(device.lookup)}`} className="link">
                 Open device
               </a>

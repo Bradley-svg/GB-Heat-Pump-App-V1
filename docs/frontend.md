@@ -19,19 +19,39 @@ The dashboard expects API routes to be reachable on the same origin. When runnin
 ## Build + deploy workflow
 
 1. `npm run frontend:build`
-   - Runs TypeScript build + `vite build` with deterministic asset names (`assets/index.js`, `assets/index.css`).
+   - Runs TypeScript build + `vite build`, emitting the entry bundle and any code-split chunks under `dist/client/assets/`.
    - Executes `frontend/scripts/export-static-bundle.mjs`, refreshing `src/frontend/static-bundle.ts`.
-2. Upload the new assets to R2 (`APP_STATIC` bucket) using the following keys:
+2. Upload the new assets to R2 (`APP_STATIC` bucket).
+
+   Recommended:
 
    ```bash
-   wrangler r2 object put APP_STATIC/app/index.html --file dist/client/index.html --content-type text/html
-   wrangler r2 object put APP_STATIC/app/assets/index.js --file dist/client/assets/index.js --content-type application/javascript
-   wrangler r2 object put APP_STATIC/app/assets/index.css --file dist/client/assets/index.css --content-type text/css
+   npm run publish:r2            # uploads index.html and every file in dist/client/assets/
+   npm run publish:r2 -- --env preview
    ```
 
-   (Add `--cache-control "public, max-age=86400, immutable"` for JS/CSS if you want stronger caching.)
+   Manual example:
 
-   You can also run `npm run publish:r2` (optionally `-- --env preview`) to execute these uploads with consistent cache headers.
+   ```bash
+   wrangler r2 object put APP_STATIC/app/index.html --file dist/client/index.html --content-type text/html --cache-control "no-store"
+   for asset in dist/client/assets/*; do
+     name="$(basename "$asset")"
+     case "${name##*.}" in
+       js) type="application/javascript" ;;
+       css) type="text/css" ;;
+       map) type="application/json" ;;
+       svg) type="image/svg+xml" ;;
+       png) type="image/png" ;;
+       jpg|jpeg) type="image/jpeg" ;;
+       webp) type="image/webp" ;;
+       woff) type="font/woff" ;;
+       woff2) type="font/woff2" ;;
+       ico) type="image/x-icon" ;;
+       *) type="application/octet-stream" ;;
+     esac
+     wrangler r2 object put "APP_STATIC/app/assets/$name" --file "$asset" --content-type "$type" --cache-control "public, max-age=31536000, immutable"
+   done
+   ```
 
 3. `npm run build` (top-level) will re-run the frontend build and produce the Worker bundle in `dist/` ready for deployment.
 

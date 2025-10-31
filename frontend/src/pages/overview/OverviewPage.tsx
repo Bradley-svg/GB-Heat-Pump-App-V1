@@ -65,7 +65,7 @@ export default function OverviewPage() {
           </div>
         </div>
       </div>
-      <div className="card" style={{ marginTop: "1rem" }}>
+      <div className="card mt-1">
         <div className="card-title">Devices</div>
         <div className="subdued">
           {data.devices_online}/{data.devices_total} online

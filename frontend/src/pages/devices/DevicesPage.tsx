@@ -77,7 +77,7 @@ export default function DevicesPage() {
                         {device.device_id}
                       </a>
                     </td>
-                    <td>{device.site ?? "—"}</td>
+                    <td>{device.site ?? "â€”"}</td>
                     <td>
                       <span
                         className={`status-dot${device.online ? " ok" : ""}`}
@@ -85,7 +85,7 @@ export default function DevicesPage() {
                       />
                     </td>
                     <td>{formatRelative(device.last_seen_at)}</td>
-                    <td>{device.profile_id ?? "—"}</td>
+                    <td>{device.profile_id ?? "â€”"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -94,7 +94,7 @@ export default function DevicesPage() {
         ) : (
           <div className="empty">{loading ? "Loading..." : "No devices"}</div>
         )}
-        <div style={{ marginTop: "1rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div className="flex-between mt-1">
           <div className="subdued">{cursor ? "More devices available" : "End of list"}</div>
           {cursor ? (
             <button

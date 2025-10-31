@@ -104,14 +104,13 @@ function AlertCard({ alert }: AlertCardProps) {
             <div>{alert.faults?.join(", ") || "Fault reported"}</div>
             <div className="meta">Triggered {formatRelative(alert.ts)}</div>
           </div>
-          <div style={{ textAlign: "right" }}>
+          <div className="text-right">
             <div className="meta">
               {alert.last_update ? `Last update ${formatRelative(alert.last_update)}` : "No recent update"}
             </div>
             <a
               href={`/app/device?device=${encodeURIComponent(alert.lookup)}`}
-              className="link"
-              style={{ marginTop: ".4rem", display: "inline-block" }}
+              className="link inline-link"
             >
               Inspect device
             </a>

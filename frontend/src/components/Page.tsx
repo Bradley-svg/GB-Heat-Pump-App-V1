@@ -8,17 +8,8 @@ interface PageProps extends PropsWithChildren {
 export function Page({ title, actions = null, children }: PageProps) {
   return (
     <div className="wrap">
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "1rem",
-          flexWrap: "wrap",
-          marginBottom: "1rem",
-        }}
-      >
-        <h2 style={{ margin: 0 }}>{title}</h2>
+      <div className="page-header">
+        <h2 className="page-title">{title}</h2>
         {actions}
       </div>
       {children}

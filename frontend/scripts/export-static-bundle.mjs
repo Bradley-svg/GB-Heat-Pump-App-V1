@@ -18,6 +18,7 @@ async function main() {
   const assetExists = await fs.access(assetDir).then(() => true).catch(() => false);
   if (assetExists) {
     const names = await fs.readdir(assetDir);
+    names.sort();
     for (const name of names) {
       files.push(path.posix.join("assets", name));
     }

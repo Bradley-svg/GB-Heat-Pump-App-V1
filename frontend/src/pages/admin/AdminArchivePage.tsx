@@ -56,11 +56,11 @@ export default function AdminArchivePage() {
             {data.offline.map((row) => (
               <div className="list-item" key={row.lookup}>
                 <div>
-                  <div style={{ fontWeight: 600 }}>{row.device_id}</div>
+                  <div className="font-semibold">{row.device_id}</div>
                   {row.site ? <div className="subdued">{row.site}</div> : null}
                   <div className="meta">Last heartbeat {formatRelative(row.last_seen_at)}</div>
                 </div>
-                <div style={{ textAlign: "right" }}>
+                <div className="text-right">
                   <div className="meta">Alerts {row.alerts}</div>
                   <a href={`/app/device?device=${encodeURIComponent(row.lookup)}`} className="link">
                     Open
@@ -74,7 +74,7 @@ export default function AdminArchivePage() {
         )}
       </div>
 
-      <div className="card" style={{ marginTop: "1rem" }}>
+      <div className="card mt-1">
         <div className="card-header">
           <div className="card-title">Telemetry archive volume</div>
         </div>

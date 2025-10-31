@@ -132,7 +132,7 @@ export default function DeviceDetailPage() {
   })();
 
   const renderMetric = useCallback(
-    (key: keyof LatestState, label: string, dp = 1) => {
+    (key: keyof TelemetryLatestSnapshot, label: string, dp = 1) => {
       const value = metrics[key];
       if (value === null || value === undefined) {
         return (
@@ -164,7 +164,7 @@ export default function DeviceDetailPage() {
     <Page title="Device detail">
       <div className="card">
         <div className="flex">
-          <div style={{ flex: "1 1 220px" }}>
+          <div className="flex-basis-220">
             <label className="muted" htmlFor="device-select">
               Device
             </label>
@@ -183,8 +183,7 @@ export default function DeviceDetailPage() {
           </div>
           <button
             type="button"
-            className="btn"
-            style={{ alignSelf: "flex-end" }}
+            className="btn align-self-end"
             onClick={() => {
               if (selected) {
                 void load(selected);
@@ -197,13 +196,13 @@ export default function DeviceDetailPage() {
         </div>
 
         {error ? (
-          <div className="callout error" style={{ marginTop: "1rem" }}>
+          <div className="callout error mt-1">
             Unable to load device data
           </div>
         ) : null}
 
         {latest ? (
-          <div className="stack" style={{ marginTop: "1rem" }}>
+          <div className="stack mt-1">
             <div className="grid-3">
               <div className="card tight">
                 <div className="muted">Device ID</div>
@@ -212,7 +211,7 @@ export default function DeviceDetailPage() {
               </div>
               <div className="card tight">
                 <div className="muted">Status</div>
-                <div style={{ display: "flex", alignItems: "center", gap: ".5rem", marginTop: ".4rem" }}>
+                <div className="status-row">
                   <span
                     className={`status-dot${metrics.online ? " ok" : ""}`}
                     title={metrics.online ? "Online" : "Offline"}
@@ -240,7 +239,7 @@ export default function DeviceDetailPage() {
               {renderMetric("powerKW", "Power kW", 2)}
             </div>
 
-            <div className="grid auto" style={{ marginTop: "1rem" }}>
+            <div className="grid auto mt-1">
               <div className="card tight">
                 <div className="muted">Supply trend</div>
                 <Sparkline values={historySeries.supply} color="#52ff99" />
@@ -270,7 +269,7 @@ export default function DeviceDetailPage() {
             </div>
 
             {displayHistory.length ? (
-              <div className="card" style={{ marginTop: "1rem" }}>
+              <div className="card mt-1">
                 <div className="card-header">
                   <div className="card-title">Recent telemetry</div>
                   <div className="subdued">{displayHistory.length} buckets</div>
@@ -305,7 +304,7 @@ export default function DeviceDetailPage() {
             ) : null}
           </div>
         ) : (
-          <div className="empty" style={{ marginTop: "1rem" }}>
+          <div className="empty mt-1">
             {selected ? "Select refresh to load details" : "Choose a device to load telemetry"}
           </div>
         )}

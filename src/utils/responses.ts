@@ -44,6 +44,7 @@ export function withSecurityHeaders(res: Response, options: SecurityHeaderOption
   h.set("X-Content-Type-Options", "nosniff");
   h.set("Referrer-Policy", "no-referrer");
   h.set("Cross-Origin-Opener-Policy", "same-origin");
+  h.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
 
   return new Response(res.body, {
     headers: h,
