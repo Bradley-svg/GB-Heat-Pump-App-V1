@@ -1,7 +1,6 @@
 import type { Env, User } from "../env";
 import { parseCursorId, sealCursorId } from "./cursor";
-import { maskId, parseFaultsJson, parseMetricsJson } from "./utils";
-import { sha256Hex } from "./utils";
+import { maskId, parseFaultsJson, parseMetricsJson, sha256Hex } from "../utils";
 import { userIsAdmin } from "./access";
 
 export function buildDeviceScope(user: User, alias = "d") {

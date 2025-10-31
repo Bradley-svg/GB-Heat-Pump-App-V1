@@ -3,10 +3,9 @@ import { ASSETS } from "./assets";
 import { appHtml } from "./frontend/app-shell";
 import { landingFor, requireAccessUser } from "./lib/access";
 import { CORS_BASE, maybeHandlePreflight } from "./lib/cors";
-import { HTML_CT, json, text, withSecurityHeaders } from "./lib/http";
-import { chunk } from "./lib/utils";
-import { handleHealth } from "./routes/health";
-import { routeRequest } from "./router";
+import { HTML_CT, json, text, withSecurityHeaders } from "./utils/responses";
+import { chunk } from "./utils";
+import { handleRequest } from "./router";
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
@@ -40,8 +39,6 @@ export default {
       if (!asset) return text("Not found", { status: 404 });
       return withSecurityHeaders(new Response(asset.body, { headers: { "content-type": asset.ct } }));
     }
-
-    if (path === "/health") return handleHealth();
 
     if (path === "/app" || path === "/app/") {
       const user = await requireAccessUser(req, env);
@@ -77,10 +74,7 @@ export default {
       );
     }
 
-    const routed = await routeRequest(req, env);
-    if (routed) return routed;
-
-    return json({ error: "Not found" }, { status: 404 });
+    return handleRequest(req, env);
   },
 
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {

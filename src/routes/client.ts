@@ -1,8 +1,8 @@
 import type { Env } from "../env";
 import { requireAccessUser } from "../lib/access";
 import { buildDeviceLookup, buildDeviceScope, presentDeviceId } from "../lib/device";
-import { json } from "../lib/http";
-import { andWhere, nowISO, parseFaultsJson } from "../lib/utils";
+import { json } from "../utils/responses";
+import { andWhere, nowISO, parseFaultsJson } from "../utils";
 
 export async function handleClientCompact(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);

@@ -1,5 +1,5 @@
 import type { Env } from "../env";
-import { base64UrlDecode, base64UrlEncode } from "./utils";
+import { base64UrlDecode, base64UrlEncode } from "../utils";
 
 const cursorKeyCache = new Map<string, Promise<CryptoKey>>();
 

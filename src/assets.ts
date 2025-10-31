@@ -1,4 +1,4 @@
-import { SVG_CT } from "./lib/http";
+import { SVG_CT } from "./utils/responses";
 
 export const ASSETS: Record<string, { ct: string; body: string }> = {
   "GREENBRO LOGO APP.svg": {

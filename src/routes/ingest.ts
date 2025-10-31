@@ -1,8 +1,8 @@
 import type { Env } from "../env";
 import { claimDeviceIfUnowned, verifyDeviceKey } from "../lib/device";
-import { json } from "../lib/http";
+import { json } from "../utils/responses";
 import { withCors } from "../lib/cors";
-import { parseAndCheckTs, round, nowISO } from "../lib/utils";
+import { parseAndCheckTs, round, nowISO } from "../utils";
 
 interface TelemetryMetrics {
   supplyC?: number | null;

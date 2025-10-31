@@ -1,8 +1,8 @@
 import type { Env } from "../env";
 import { requireAccessUser } from "../lib/access";
 import { buildDeviceScope } from "../lib/device";
-import { json } from "../lib/http";
-import { andWhere, nowISO } from "../lib/utils";
+import { json } from "../utils/responses";
+import { andWhere, nowISO } from "../utils";
 
 export async function handleFleetSummary(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);

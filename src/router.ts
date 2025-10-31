@@ -1,4 +1,8 @@
+import { Router } from "itty-router";
+
 import type { Env } from "./env";
+import { json } from "./utils/responses";
+import { safeDecode } from "./utils";
 import { handleAlertsFeed } from "./routes/alerts";
 import { handleArchive } from "./routes/archive";
 import { handleClientCompact } from "./routes/client";
@@ -8,66 +12,63 @@ import { handleHeartbeat, handleIngest } from "./routes/ingest";
 import { handleMe } from "./routes/me";
 import { handleCommissioning } from "./routes/commissioning";
 import { handleAdminOverview } from "./routes/admin";
+import { handleHealth } from "./routes/health";
+import { handleMetrics } from "./routes/metrics";
 
-export type RouteHandler = (req: Request, env: Env, params: Record<string, string>) => Promise<Response>;
+type RoutedRequest = Request & { params?: Record<string, string> };
+type RouteHandler = (req: Request, env: Env) => Promise<Response> | Response;
+type ParamHandler = (req: Request, env: Env, value: string) => Promise<Response> | Response;
 
-interface Route {
-  method: string;
-  matcher: RegExp | string;
-  handler: RouteHandler;
+const router = Router();
+
+function decodeParam(req: RoutedRequest, key: string): string | null {
+  const raw = req.params?.[key] ?? null;
+  const decoded = safeDecode(raw);
+  if (decoded === null || decoded === "") return null;
+  return decoded;
 }
 
-const routes: Route[] = [
-  { method: "GET", matcher: "/api/me", handler: (req, env) => handleMe(req, env) },
-  { method: "GET", matcher: "/api/fleet/summary", handler: (req, env) => handleFleetSummary(req, env) },
-  { method: "GET", matcher: "/api/client/compact", handler: (req, env) => handleClientCompact(req, env) },
-  { method: "GET", matcher: "/api/devices", handler: (req, env) => handleListDevices(req, env) },
-  { method: "GET", matcher: "/api/alerts/recent", handler: (req, env) => handleAlertsFeed(req, env) },
-  { method: "GET", matcher: "/api/commissioning/checklist", handler: (req, env) => handleCommissioning(req, env) },
-  { method: "GET", matcher: "/api/admin/overview", handler: (req, env) => handleAdminOverview(req, env) },
-  { method: "GET", matcher: "/api/archive/offline", handler: (req, env) => handleArchive(req, env) },
-  {
-    method: "GET",
-    matcher: /^\/api\/devices\/(?<id>[^/]+)\/latest$/,
-    handler: (req, env, params) => handleLatest(req, env, decodeURIComponent(params.id)),
-  },
-  {
-    method: "GET",
-    matcher: /^\/api\/devices\/(?<id>[^/]+)\/history$/,
-    handler: (req, env, params) => handleDeviceHistory(req, env, decodeURIComponent(params.id)),
-  },
-  {
-    method: "POST",
-    matcher: /^\/api\/ingest\/(?<profile>[^/]+)$/,
-    handler: (req, env, params) => handleIngest(req, env, decodeURIComponent(params.profile)),
-  },
-  {
-    method: "POST",
-    matcher: /^\/api\/heartbeat\/(?<profile>[^/]+)$/,
-    handler: (req, env, params) => handleHeartbeat(req, env, decodeURIComponent(params.profile)),
-  },
-];
-
-export async function routeRequest(req: Request, env: Env): Promise<Response | null> {
-  const url = new URL(req.url);
-  const path = url.pathname;
-  const method = req.method.toUpperCase();
-
-  for (const route of routes) {
-    if (route.method !== method) continue;
-    if (typeof route.matcher === "string") {
-      if (route.matcher === path) {
-        return route.handler(req, env, {});
-      }
-      continue;
+function withParam(param: string, handler: ParamHandler): RouteHandler {
+  return (req, env) => {
+    const value = decodeParam(req as RoutedRequest, param);
+    if (!value) {
+      return json({ error: `Invalid ${param}` }, { status: 400 });
     }
+    return handler(req, env, value);
+  };
+}
 
-    const match = path.match(route.matcher);
-    if (match) {
-      const params = match.groups ?? {};
-      return route.handler(req, env, params);
-    }
-  }
+router.get("/health", () => handleHealth());
+router.get("/metrics", (req: Request, env: Env) => handleMetrics(req, env));
 
-  return null;
+router
+  .get("/api/me", (req, env) => handleMe(req, env))
+  .get("/api/fleet/summary", (req, env) => handleFleetSummary(req, env))
+  .get("/api/client/compact", (req, env) => handleClientCompact(req, env))
+  .get("/api/devices", (req, env) => handleListDevices(req, env))
+  .get("/api/alerts/recent", (req, env) => handleAlertsFeed(req, env))
+  .get("/api/commissioning/checklist", (req, env) => handleCommissioning(req, env))
+  .get("/api/admin/overview", (req, env) => handleAdminOverview(req, env))
+  .get("/api/archive/offline", (req, env) => handleArchive(req, env))
+  .get(
+    "/api/devices/:id/latest",
+    withParam("id", (req, env, deviceId) => handleLatest(req, env, deviceId)),
+  )
+  .get(
+    "/api/devices/:id/history",
+    withParam("id", (req, env, deviceId) => handleDeviceHistory(req, env, deviceId)),
+  )
+  .post(
+    "/api/ingest/:profile",
+    withParam("profile", (req, env, profile) => handleIngest(req, env, profile)),
+  )
+  .post(
+    "/api/heartbeat/:profile",
+    withParam("profile", (req, env, profile) => handleHeartbeat(req, env, profile)),
+  );
+
+router.all("*", () => json({ error: "Not found" }, { status: 404 }));
+
+export function handleRequest(req: Request, env: Env, ctx?: ExecutionContext) {
+  return router.handle(req, env, ctx);
 }

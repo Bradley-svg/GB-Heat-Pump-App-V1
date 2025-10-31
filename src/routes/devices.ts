@@ -8,8 +8,8 @@ import {
   resolveDeviceId,
   userIsAdmin,
 } from "../lib/device";
-import { json } from "../lib/http";
-import { parseMetricsJson, safeDecode } from "../lib/utils";
+import { json } from "../utils/responses";
+import { parseMetricsJson, safeDecode } from "../utils";
 
 export async function handleLatest(req: Request, env: Env, deviceId: string) {
   const user = await requireAccessUser(req, env);

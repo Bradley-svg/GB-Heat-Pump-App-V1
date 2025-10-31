@@ -8,14 +8,17 @@
     "migrate:apply": "wrangler d1 migrations apply gb_hp_db",
     "migrate:list": "wrangler d1 migrations list gb_hp_db",
     "typecheck": "tsc --noEmit",
-    "build": "wrangler deploy --dry-run --outdir ./dist"
+    "build": "wrangler deploy --dry-run --outdir ./dist",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20251014.0",
+    "vitest": "^1.6.0",
     "typescript": "^5.9.3",
     "wrangler": "^4.45.1"
   },
   "dependencies": {
+    "itty-router": "^5.0.1",
     "jose": "^5.9.3"
   }
 }

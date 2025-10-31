@@ -1,4 +1,4 @@
-import { withSecurityHeaders } from "./http";
+import { withSecurityHeaders } from "../utils/responses";
 
 export const CORS_BASE: Record<string, string> = {
   "access-control-allow-origin": "*",
