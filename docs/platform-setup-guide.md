@@ -56,7 +56,7 @@ Use Wrangler scripts (see `package.json`):
 npm run migrate:list      # show applied vs pending migrations
 npm run migrate:apply     # applies pending migrations to the remote alias
 ```
-> Update the script alias (`gb_hp_db`) if your Cloudflare account uses a different D1 database name. Verify with `wrangler d1 list`.
+The scripts reference the Cloudflare database name `GREENBRO_DB`. If your account uses a different name, adjust the scripts and verify with `wrangler d1 list`.
 
 For local SQLite shadow databases (Miniflare):
 ```bash
