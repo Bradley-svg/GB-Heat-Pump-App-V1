@@ -32,7 +32,7 @@ describeIfBrowser("App accessibility", () => {
     const { container } = render(<App />);
 
     const heading = await screen.findByRole("heading", { name: /overview \(fleet\)/i });
-    expect(heading).not.toBeNull();
+    expect(heading).toBeInTheDocument();
 
     const results = await axe(container);
     expect(results.violations).toHaveLength(0);

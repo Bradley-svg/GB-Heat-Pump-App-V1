@@ -25,55 +25,103 @@ function contentTypeFor(path: string): string {
   return STATIC_CONTENT_TYPES[extname(path)] || "application/octet-stream";
 }
 
-function injectAppConfig(html: string, env: Env): string {
-  const config = { ...DEFAULT_APP_CONFIG, returnDefault: env.RETURN_DEFAULT };
-  const script = `<script>window.__APP_CONFIG__=${JSON.stringify(config)};</script>`;
-  return html.replace("</head>", `  ${script}\n</head>`);
+type StaticAssetResponse = {
+  response: Response;
+  scriptHashes?: string[];
+};
+
+function defaultCacheControl(key: StaticBundleKey) {
+  return key === "index.html" ? "no-store" : "public, max-age=900, immutable";
 }
 
-async function loadFromR2(key: string, env: Env, ctHint: string): Promise<Response | null> {
+async function sha256Base64(content: string) {
+  const data = new TextEncoder().encode(content);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  const bytes = new Uint8Array(digest);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+async function injectAppConfig(html: string, env: Env): Promise<{ html: string; scriptHashes: string[] }> {
+  const config = { ...DEFAULT_APP_CONFIG, returnDefault: env.RETURN_DEFAULT };
+  const scriptContent = `window.__APP_CONFIG__=${JSON.stringify(config)};`;
+  const hash = await sha256Base64(scriptContent);
+  const scriptToken = `'sha256-${hash}'`;
+  const scriptTag = `<script>${scriptContent}</script>`;
+  const closingHead = /<\/head>/i;
+  const injected =
+    closingHead.test(html) ?
+      html.replace(closingHead, `  ${scriptTag}\n</head>`) :
+      `${scriptTag}\n${html}`;
+  return { html: injected, scriptHashes: [scriptToken] };
+}
+
+async function loadFromR2(key: string, env: Env) {
   if (!("APP_STATIC" in env) || !env.APP_STATIC) return null;
-  const obj = await env.APP_STATIC.get(APP_R2_PREFIX + key);
-  if (!obj) return null;
+  return env.APP_STATIC.get(APP_R2_PREFIX + key);
+}
+
+function r2Headers(obj: any, fallbackCt: string, key: StaticBundleKey) {
   const headers = new Headers();
-  if (obj.httpMetadata?.contentType) {
+  if (obj?.httpMetadata?.contentType) {
     headers.set("content-type", obj.httpMetadata.contentType);
   } else {
-    headers.set("content-type", ctHint);
+    headers.set("content-type", fallbackCt);
   }
-  if (obj.httpMetadata?.cacheControl) {
+  if (obj?.httpMetadata?.cacheControl) {
     headers.set("cache-control", obj.httpMetadata.cacheControl);
   }
   if (!headers.has("cache-control")) {
-    const cache = key.endsWith(".html") ? "no-store" : "public, max-age=900, immutable";
-    headers.set("cache-control", cache);
+    headers.set("cache-control", defaultCacheControl(key));
   }
-  return new Response(obj.body, { headers });
+  return headers;
 }
 
-function bundleResponse(key: StaticBundleKey, env: Env): Response {
+async function bundleResponse(key: StaticBundleKey, env: Env): Promise<StaticAssetResponse> {
   const body = STATIC_BUNDLE[key] as string;
   const ct = contentTypeFor(key);
   let payload = body;
+  let scriptHashes: string[] | undefined;
   if (key === "index.html") {
-    payload = injectAppConfig(body, env);
+    const injected = await injectAppConfig(body, env);
+    payload = injected.html;
+    scriptHashes = injected.scriptHashes;
   }
   const headers = new Headers({
     "content-type": ct,
-    "cache-control": key === "index.html" ? "no-store" : "public, max-age=900, immutable",
+    "cache-control": defaultCacheControl(key),
   });
-  return new Response(payload, { headers });
+  return { response: new Response(payload, { headers }), scriptHashes };
 }
 
-async function serveAppStatic(path: string, env: Env): Promise<Response | null> {
+async function readR2Text(obj: any) {
+  if (obj && typeof obj.text === "function") {
+    return obj.text();
+  }
+  return new Response(obj?.body).text();
+}
+
+async function serveAppStatic(path: string, env: Env): Promise<StaticAssetResponse | null> {
   const normalized = path.replace(/^\/app\/?/, "");
   const bundleKey = (normalized && !normalized.startsWith("assets/") ? "index.html" : normalized || "index.html") as StaticBundleKey;
   if (!(bundleKey in STATIC_BUNDLE)) {
     return null;
   }
   const ctHint = contentTypeFor(bundleKey);
-  const r2 = await loadFromR2(bundleKey, env, ctHint);
-  if (r2) return r2;
+  const r2 = await loadFromR2(bundleKey, env);
+  if (r2) {
+    const headers = r2Headers(r2, ctHint, bundleKey);
+    if (bundleKey === "index.html") {
+      const raw = await readR2Text(r2);
+      const injected = await injectAppConfig(raw, env);
+      return {
+        response: new Response(injected.html, { headers }),
+        scriptHashes: injected.scriptHashes,
+      };
+    }
+    return { response: new Response(r2.body, { headers }) };
+  }
   return bundleResponse(bundleKey, env);
 }
 
@@ -119,7 +167,12 @@ export default {
         }
       }
       const spa = await serveAppStatic("/app", env);
-      if (spa) return withSecurityHeaders(spa);
+      if (spa) {
+        return withSecurityHeaders(
+          spa.response,
+          spa.scriptHashes ? { scriptHashes: spa.scriptHashes } : undefined,
+        );
+      }
       return text("Not found", { status: 404 });
     }
 
@@ -131,14 +184,24 @@ export default {
 
     if (path.startsWith("/app/assets/")) {
       const assetRes = await serveAppStatic(path, env);
-      if (assetRes) return withSecurityHeaders(assetRes);
+      if (assetRes) {
+        return withSecurityHeaders(
+          assetRes.response,
+          assetRes.scriptHashes ? { scriptHashes: assetRes.scriptHashes } : undefined,
+        );
+      }
       return text("Not found", { status: 404 });
     }
 
     if (path.startsWith("/app/")) {
       await requireAccessUser(req, env);
       const spa = await serveAppStatic(path, env);
-      if (spa) return withSecurityHeaders(spa);
+      if (spa) {
+        return withSecurityHeaders(
+          spa.response,
+          spa.scriptHashes ? { scriptHashes: spa.scriptHashes } : undefined,
+        );
+      }
       return text("Not found", { status: 404 });
     }
 

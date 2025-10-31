@@ -75,13 +75,16 @@ export interface DeviceListItem {
   map_version: string | null;
 }
 
-export interface DeviceLatestResponse {
-  device_id: string;
-  latest: LatestState;
-}
+export type TelemetryMetric =
+  | "thermalKW"
+  | "cop"
+  | "deltaT"
+  | "supplyC"
+  | "returnC"
+  | "flowLps"
+  | "powerKW";
 
-export interface LatestState {
-  device_id?: string;
+export interface TelemetryLatestSnapshot {
   ts?: number | null;
   updated_at?: string | null;
   online?: boolean | null;
@@ -95,28 +98,74 @@ export interface LatestState {
   mode?: string | null;
   flowLps?: number | null;
   powerKW?: number | null;
+  tankC?: number | null;
+  ambientC?: number | null;
+  compCurrentA?: number | null;
+  eevSteps?: number | null;
+  defrost?: number | null;
+  cop_quality?: string | null;
   [key: string]: unknown;
 }
 
-export interface DeviceHistoryResponse {
-  device_id: string;
+export interface TelemetryLatestBatchItem {
   lookup: string;
-  items: DeviceHistoryPoint[];
+  device_id: string;
+  profile_id: string | null;
+  site: string | null;
+  online: boolean;
+  last_seen_at: string | null;
+  latest: TelemetryLatestSnapshot;
 }
 
-export interface DeviceHistoryPoint {
-  ts: string;
-  deltaT: number | null;
-  thermalKW: number | null;
-  cop: number | null;
-  supplyC: number | null;
-  returnC: number | null;
-  tankC: number | null;
-  ambientC: number | null;
-  flowLps: number | null;
-  powerKW: number | null;
-  mode: string | null;
-  defrost: number | null;
+export interface TelemetryLatestBatchResponse {
+  generated_at: string;
+  items: TelemetryLatestBatchItem[];
+  missing: string[];
+}
+
+export interface TelemetrySeriesMetricValue {
+  avg: number | null;
+  min?: number | null;
+  max?: number | null;
+}
+
+export interface TelemetrySeriesEntry {
+  bucket_start: string;
+  sample_count: number;
+  values: Record<string, TelemetrySeriesMetricValue>;
+}
+
+export interface TelemetrySeriesScopeDevice {
+  type: "device";
+  device_id: string;
+  lookup: string;
+}
+
+export interface TelemetrySeriesScopeProfile {
+  type: "profile";
+  profile_ids: string[];
+}
+
+export interface TelemetrySeriesScopeFleet {
+  type: "fleet";
+  profile_ids: string[] | null;
+}
+
+export type TelemetrySeriesScope =
+  | TelemetrySeriesScopeDevice
+  | TelemetrySeriesScopeProfile
+  | TelemetrySeriesScopeFleet;
+
+export interface TelemetrySeriesResponse {
+  generated_at: string;
+  scope: TelemetrySeriesScope;
+  interval_ms: number;
+  window: {
+    start: string;
+    end: string;
+  };
+  metrics: TelemetryMetric[];
+  series: TelemetrySeriesEntry[];
 }
 
 export interface AlertsFeedResponse {

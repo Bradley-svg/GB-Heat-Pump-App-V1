@@ -2,11 +2,35 @@ export const JSON_CT = "application/json;charset=utf-8";
 export const HTML_CT = "text/html;charset=utf-8";
 export const SVG_CT = "image/svg+xml;charset=utf-8";
 
-export function withSecurityHeaders(res: Response) {
+interface SecurityHeaderOptions {
+  scriptHashes?: string[];
+  scriptNonces?: string[];
+  styleHashes?: string[];
+  styleNonces?: string[];
+}
+
+function appendUnique(target: string[], values?: string[]) {
+  if (!values) return;
+  for (const value of values) {
+    if (!target.includes(value)) {
+      target.push(value);
+    }
+  }
+}
+
+export function withSecurityHeaders(res: Response, options: SecurityHeaderOptions = {}) {
+  const scriptSrc = ["'self'", "https://unpkg.com"];
+  appendUnique(scriptSrc, options.scriptHashes);
+  appendUnique(scriptSrc, options.scriptNonces);
+
+  const styleSrc = ["'self'"];
+  appendUnique(styleSrc, options.styleHashes);
+  appendUnique(styleSrc, options.styleNonces);
+
   const csp = [
     "default-src 'self'",
-    "script-src 'self' https://unpkg.com 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline'",
+    `script-src ${scriptSrc.join(" ")}`,
+    `style-src ${styleSrc.join(" ")}`,
     "img-src 'self' data:",
     "connect-src 'self'",
     "font-src 'self' data:",

@@ -6,11 +6,14 @@ import { Page } from "../../components";
 import { Sparkline } from "../../components/Sparkline";
 import { formatDate, formatNumber, formatRelative } from "../../utils/format";
 import type {
-  DeviceHistoryResponse,
-  DeviceLatestResponse,
   DeviceListItem,
   DeviceListResponse,
-  LatestState,
+  TelemetryLatestBatchItem,
+  TelemetryLatestBatchResponse,
+  TelemetryLatestSnapshot,
+  TelemetryMetric,
+  TelemetrySeriesEntry,
+  TelemetrySeriesResponse,
 } from "../../types/api";
 
 export default function DeviceDetailPage() {
@@ -20,8 +23,8 @@ export default function DeviceDetailPage() {
 
   const [devices, setDevices] = useState<DeviceListItem[]>([]);
   const [selected, setSelected] = useState<string>(queryDevice);
-  const [latest, setLatest] = useState<DeviceLatestResponse | null>(null);
-  const [history, setHistory] = useState<DeviceHistoryResponse["items"]>([]);
+  const [latest, setLatest] = useState<TelemetryLatestBatchItem | null>(null);
+  const [series, setSeries] = useState<TelemetrySeriesResponse | null>(null);
   const [selectedDisplay, setSelectedDisplay] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -57,13 +60,21 @@ export default function DeviceDetailPage() {
       setLoading(true);
       setError(false);
       try {
-        const [latestRes, historyRes] = await Promise.all([
-          api.get<DeviceLatestResponse>(`/api/devices/${encodeURIComponent(lookup)}/latest`),
-          api.get<DeviceHistoryResponse>(`/api/devices/${encodeURIComponent(lookup)}/history?limit=120`),
+        const params = new URLSearchParams({
+          scope: "device",
+          device: lookup,
+          interval: "5m",
+          limit: "120",
+          fill: "carry",
+        });
+        const [latestRes, seriesRes] = await Promise.all([
+          api.post<TelemetryLatestBatchResponse>("/api/telemetry/latest-batch", { devices: [lookup] }),
+          api.get<TelemetrySeriesResponse>(`/api/telemetry/series?${params.toString()}`),
         ]);
-        setLatest(latestRes);
-        setHistory(historyRes.items ?? []);
-        setSelectedDisplay(latestRes.device_id ?? "");
+        const batchItem = latestRes.items?.[0] ?? null;
+        setLatest(batchItem);
+        setSeries(seriesRes);
+        setSelectedDisplay(batchItem?.device_id ?? "");
         setLoading(false);
       } catch {
         setError(true);
@@ -83,22 +94,26 @@ export default function DeviceDetailPage() {
     });
   }, [load, selected, setSearchParams]);
 
-  const metrics: LatestState = useMemo(() => latest?.latest ?? {}, [latest]);
+  const metrics: TelemetryLatestSnapshot = useMemo(() => latest?.latest ?? {}, [latest]);
   const selectedDevice = useMemo(
     () => devices.find((device) => device.lookup === selected) ?? null,
     [devices, selected],
   );
 
   const historySeries = useMemo(() => {
+    const buckets = series?.series ?? [];
     return {
-      supply: history.map((row) => (typeof row.supplyC === "number" ? row.supplyC : null)),
-      return: history.map((row) => (typeof row.returnC === "number" ? row.returnC : null)),
-      thermal: history.map((row) => (typeof row.thermalKW === "number" ? row.thermalKW : null)),
-      cop: history.map((row) => (typeof row.cop === "number" ? row.cop : null)),
+      supply: buckets.map((bucket) => metricAvg(bucket, "supplyC")),
+      return: buckets.map((bucket) => metricAvg(bucket, "returnC")),
+      thermal: buckets.map((bucket) => metricAvg(bucket, "thermalKW")),
+      cop: buckets.map((bucket) => metricAvg(bucket, "cop")),
     };
-  }, [history]);
+  }, [series]);
 
-  const displayHistory = useMemo(() => history.slice(-10), [history]);
+  const displayHistory = useMemo(() => {
+    const buckets = series?.series ?? [];
+    return buckets.slice(-10).reverse();
+  }, [series]);
 
   const displayId = useMemo(() => {
     const trimmed = selectedDisplay.trim();
@@ -258,13 +273,14 @@ export default function DeviceDetailPage() {
               <div className="card" style={{ marginTop: "1rem" }}>
                 <div className="card-header">
                   <div className="card-title">Recent telemetry</div>
-                  <div className="subdued">{displayHistory.length} samples</div>
+                  <div className="subdued">{displayHistory.length} buckets</div>
                 </div>
                 <div className="min-table">
                   <table className="table">
                     <thead>
                       <tr>
                         <th>Timestamp</th>
+                        <th>Samples</th>
                         <th>Supply</th>
                         <th>Return</th>
                         <th>Thermal kW</th>
@@ -273,12 +289,13 @@ export default function DeviceDetailPage() {
                     </thead>
                     <tbody>
                       {displayHistory.map((row) => (
-                        <tr key={row.ts}>
-                          <td>{formatDate(row.ts)}</td>
-                          <td>{formatNumber(row.supplyC, 1)}</td>
-                          <td>{formatNumber(row.returnC, 1)}</td>
-                          <td>{formatNumber(row.thermalKW, 2)}</td>
-                          <td>{formatNumber(row.cop, 2)}</td>
+                        <tr key={row.bucket_start}>
+                          <td>{formatDate(row.bucket_start)}</td>
+                          <td>{row.sample_count}</td>
+                          <td>{formatNumber(metricAvg(row, "supplyC"), 1)}</td>
+                          <td>{formatNumber(metricAvg(row, "returnC"), 1)}</td>
+                          <td>{formatNumber(metricAvg(row, "thermalKW"), 2)}</td>
+                          <td>{formatNumber(metricAvg(row, "cop"), 2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -303,6 +320,12 @@ function getMetricText(value: unknown): string {
     return String(value);
   }
   return "-";
+}
+
+function metricAvg(entry: TelemetrySeriesEntry, metric: TelemetryMetric): number | null {
+  const value = entry.values?.[metric];
+  const avg = value?.avg;
+  return typeof avg === "number" && Number.isFinite(avg) ? avg : null;
 }
 
 function lastValue(values: (number | null)[]): number | null {

@@ -21,6 +21,7 @@ import {
 import { handleCreateAuditEntry, handleListAuditTrail } from "./routes/audit";
 import { handleCreateMqttMapping, handleListMqttMappings } from "./routes/mqtt";
 import { bindRequestLogger, loggerForRequest, releaseRequestLogger } from "./utils/logging";
+import { handleTelemetryLatestBatch, handleTelemetrySeries } from "./routes/telemetry";
 
 type RoutedRequest = Request & { params?: Record<string, string> };
 type RouteHandler = (req: Request, env: Env) => Promise<Response> | Response;
@@ -59,6 +60,8 @@ router
   .get("/api/commissioning/checklist", (req, env) => handleCommissioning(req, env))
   .get("/api/commissioning/runs", (req, env) => handleListCommissioningRuns(req, env))
   .post("/api/commissioning/runs", (req, env) => handleCreateCommissioningRun(req, env))
+  .post("/api/telemetry/latest-batch", (req, env) => handleTelemetryLatestBatch(req, env))
+  .get("/api/telemetry/series", (req, env) => handleTelemetrySeries(req, env))
   .get("/api/admin/overview", (req, env) => handleAdminOverview(req, env))
   .get("/api/archive/offline", (req, env) => handleArchive(req, env))
   .get("/api/audit/logs", (req, env) => handleListAuditTrail(req, env))

@@ -1,4 +1,4 @@
-# Frontend Dashboard
+ï»¿# Frontend Dashboard
 
 ## Overview
 
@@ -9,10 +9,10 @@
 
 ## Local development
 
-- `npm run frontend:dev` — start Vite dev server (port 5173).
-- `npm run frontend:watch` — same dev server, but bound to all interfaces for tunnelling.
-- `npm run frontend:lint` — run ESLint across the UI code.
-- `npm run frontend:preview` — serve the production build locally.
+- `npm run frontend:dev` â€“ start Vite dev server (port 5173).
+- `npm run frontend:watch` â€“ same dev server, but bound to all interfaces for tunnelling.
+- `npm run frontend:lint` â€“ run ESLint across the UI code.
+- `npm run frontend:preview` â€“ serve the production build locally.
 
 The dashboard expects API routes to be reachable on the same origin. When running `wrangler dev`, open both the Worker preview URL (serving `/app`) and the Vite dev server for live editing.
 
@@ -31,13 +31,15 @@ The dashboard expects API routes to be reachable on the same origin. When runnin
 
    (Add `--cache-control "public, max-age=86400, immutable"` for JS/CSS if you want stronger caching.)
 
+   You can also run `npm run publish:r2` (optionally `-- --env preview`) to execute these uploads with consistent cache headers.
+
 3. `npm run build` (top-level) will re-run the frontend build and produce the Worker bundle in `dist/` ready for deployment.
 
 ### Notes
 
 - The Worker injects `window.__APP_CONFIG__` with `returnDefault`, `apiBase`, and `assetBase` so the SPA stays in sync with worker settings.
 - If `APP_STATIC` is not bound (or a key is missing), the Worker serves the embedded bundle, ensuring `wrangler dev` works without R2 access.
-- `src/frontend/static-bundle.ts` is regenerated automatically during `frontend:build` — no manual edits required.
+- `src/frontend/static-bundle.ts` is regenerated automatically during `frontend:build` â€“ no manual edits required.
 - Update favicons/metadata within `frontend/index.html` (will be reflected automatically in both R2 assets and embedded bundle).
 
 ## Scripts quick reference
