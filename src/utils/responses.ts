@@ -19,7 +19,7 @@ function appendUnique(target: string[], values?: string[]) {
 }
 
 export function withSecurityHeaders(res: Response, options: SecurityHeaderOptions = {}) {
-  const scriptSrc = ["'self'", "https://unpkg.com"];
+  const scriptSrc = ["'self'"];
   appendUnique(scriptSrc, options.scriptHashes);
   appendUnique(scriptSrc, options.scriptNonces);
 

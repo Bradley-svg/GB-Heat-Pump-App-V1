@@ -68,4 +68,4 @@ Set `WRANGLER_BIN` if Wrangler is not on your `PATH`.
 - `docs/frontend.md` – architectural notes, static bundle details, and the dev-to-prod workflow.
 - `npm run frontend:test` suite contains examples for mocking the API client and routing contexts.
 
-Please update this README alongside changes to build/test workflows or asset publishing so contributors have a single source of truth.*** End Patch
+Please update this README alongside changes to build/test workflows or asset publishing so contributors have a single source of truth.
