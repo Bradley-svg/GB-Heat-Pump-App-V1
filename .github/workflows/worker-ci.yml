@@ -38,6 +38,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate D1 migrations locally
+        run: npm run migrate:apply:local
+
       - name: Run unit tests
         run: npm run test
 
