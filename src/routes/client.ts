@@ -5,6 +5,7 @@ import { json } from "../utils/responses";
 import { andWhere, nowISO, parseFaultsJson } from "../utils";
 import { ClientCompactQuerySchema } from "../schemas/client";
 import { validationErrorResponse } from "../utils/validation";
+import { maskTelemetryNumber } from "../telemetry";
 
 export async function handleClientCompact(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
@@ -178,9 +179,9 @@ export async function handleClientCompact(req: Request, env: Env) {
           online: !!row.online,
           last_seen_at: row.last_seen_at ?? null,
           updated_at: row.updated_at ?? null,
-          cop: row.cop ?? null,
-          deltaT: row.deltaT ?? null,
-          thermalKW: row.thermalKW ?? null,
+          cop: maskTelemetryNumber(row.cop, scope.isAdmin, 1, 2),
+          deltaT: maskTelemetryNumber(row.deltaT, scope.isAdmin, 1, 2),
+          thermalKW: maskTelemetryNumber(row.thermalKW, scope.isAdmin, 1, 2),
           alert_count: faults.length,
         };
       }),
@@ -229,12 +230,17 @@ export async function handleClientCompact(req: Request, env: Env) {
     if (typeof row.deltaT === "number") bucket.delta += row.deltaT;
   }
 
-  const trend = buckets.map((bucket) => ({
-    label: new Date(Math.min(nowMs, bucket.end)).toISOString(),
-    cop: bucket.count ? Number((bucket.cop / bucket.count).toFixed(2)) : null,
-    thermalKW: bucket.count ? Number((bucket.thermal / bucket.count).toFixed(2)) : null,
-    deltaT: bucket.count ? Number((bucket.delta / bucket.count).toFixed(2)) : null,
-  }));
+  const trend = buckets.map((bucket) => {
+    const avgCop = bucket.count ? bucket.cop / bucket.count : null;
+    const avgThermal = bucket.count ? bucket.thermal / bucket.count : null;
+    const avgDelta = bucket.count ? bucket.delta / bucket.count : null;
+    return {
+      label: new Date(Math.min(nowMs, bucket.end)).toISOString(),
+      cop: maskTelemetryNumber(avgCop, scope.isAdmin, 1, 2),
+      thermalKW: maskTelemetryNumber(avgThermal, scope.isAdmin, 1, 2),
+      deltaT: maskTelemetryNumber(avgDelta, scope.isAdmin, 1, 2),
+    };
+  });
 
   return json({
     generated_at: nowISO(),
@@ -245,7 +251,7 @@ export async function handleClientCompact(req: Request, env: Env) {
       devices_online,
       offline_count,
       online_pct,
-      avg_cop: avgRow?.v ?? null,
+      avg_cop: maskTelemetryNumber(avgRow?.v ?? null, scope.isAdmin, 1, 2),
       low_deltaT_count: lowRow?.c ?? 0,
       open_alerts: openAlertsTotal,
       max_heartbeat_age_sec: hbRow?.s ?? null,

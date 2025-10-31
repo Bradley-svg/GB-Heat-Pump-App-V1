@@ -1,17 +1,8 @@
 import type { Env } from "../env";
 import { json, text } from "../utils/responses";
-import { nowISO } from "../utils";
 import { validationErrorResponse } from "../utils/validation";
 import { MetricsQuerySchema } from "../schemas/metrics";
-import type { MetricsQuery } from "../schemas/metrics";
-
-type MetricsFormat = "prom" | "json";
-
-function pickFormat(explicit: MetricsQuery["format"], accept: string): MetricsFormat {
-  if (explicit) return explicit;
-  if (accept.includes("application/json")) return "json";
-  return "prom";
-}
+import { formatMetricsJson, formatPromMetrics, pickMetricsFormat } from "../telemetry";
 
 export async function handleMetrics(req: Request, env: Env) {
   const url = new URL(req.url);
@@ -21,7 +12,7 @@ export async function handleMetrics(req: Request, env: Env) {
   if (!paramsResult.success) {
     return validationErrorResponse(paramsResult.error);
   }
-  const format = pickFormat(paramsResult.data.format, req.headers.get("accept") ?? "");
+  const format = pickMetricsFormat(paramsResult.data.format, req.headers.get("accept") ?? "");
 
   const deviceStats =
     (await env.DB.prepare("SELECT COUNT(*) AS total, SUM(online) AS online FROM devices").first<{
@@ -43,51 +34,17 @@ export async function handleMetrics(req: Request, env: Env) {
       }>()
     ).results ?? [];
 
-  const devicesTotal = deviceStats?.total ?? 0;
-  const devicesOnline = deviceStats?.online ?? 0;
-  const devicesOffline = Math.max(0, devicesTotal - devicesOnline);
+  const deviceSummary = {
+    total: deviceStats?.total ?? null,
+    online: deviceStats?.online ?? null,
+  };
 
   if (format === "json") {
-    return json({
-      devices: {
-        total: devicesTotal,
-        online: devicesOnline,
-        offline: devicesOffline,
-      },
-      ops: opsRows.map((row) => ({
-        route: row.route ?? "unknown",
-        status_code: row.status_code ?? 0,
-        count: row.count ?? 0,
-      })),
-      generated_at: nowISO(),
-    });
+    return json(formatMetricsJson(deviceSummary, opsRows));
   }
 
-  const lines: string[] = [
-    "# HELP greenbro_devices_total Total registered devices",
-    "# TYPE greenbro_devices_total gauge",
-    `greenbro_devices_total ${devicesTotal}`,
-    "# HELP greenbro_devices_online_total Devices currently marked online",
-    "# TYPE greenbro_devices_online_total gauge",
-    `greenbro_devices_online_total ${devicesOnline}`,
-    "# HELP greenbro_devices_offline_total Devices currently marked offline",
-    "# TYPE greenbro_devices_offline_total gauge",
-    `greenbro_devices_offline_total ${devicesOffline}`,
-    "# HELP greenbro_ops_requests_total Recorded API requests by route and status",
-    "# TYPE greenbro_ops_requests_total counter",
-  ];
-
-  for (const row of opsRows) {
-    const routeLabel = (row.route ?? "unknown").replace(/"/g, '\\"');
-    const statusLabel = row.status_code ?? 0;
-    const count = row.count ?? 0;
-    lines.push(`greenbro_ops_requests_total{route="${routeLabel}",status="${statusLabel}"} ${count}`);
-  }
-
-  lines.push(`# HELP greenbro_metrics_generated_at Timestamp metrics payload produced`, "# TYPE greenbro_metrics_generated_at gauge");
-  lines.push(`greenbro_metrics_generated_at ${Math.floor(Date.now() / 1000)}`);
-
-  return text(lines.join("\n") + "\n", {
+  const promPayload = formatPromMetrics(deviceSummary, opsRows);
+  return text(promPayload, {
     headers: {
       "content-type": "text/plain; charset=utf-8",
     },

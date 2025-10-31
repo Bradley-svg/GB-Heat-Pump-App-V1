@@ -2,10 +2,11 @@ import type { Env } from "../env";
 import { claimDeviceIfUnowned, verifyDeviceKey } from "../lib/device";
 import { json } from "../utils/responses";
 import { withCors } from "../lib/cors";
-import { parseAndCheckTs, round, nowISO } from "../utils";
+import { parseAndCheckTs, nowISO } from "../utils";
 import { validationErrorResponse } from "../utils/validation";
 import { HeartbeatPayloadSchema, TelemetryPayloadSchema } from "../schemas/ingest";
 import type { HeartbeatPayload, TelemetryPayload } from "../schemas/ingest";
+import { deriveTelemetryMetrics } from "../telemetry";
 
 export async function handleIngest(req: Request, env: Env, profileId: string) {
   const t0 = Date.now();
@@ -60,23 +61,17 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
     }
   }
 
-  const supply = body.metrics.supplyC ?? null;
-  const ret = body.metrics.returnC ?? null;
-  const deltaT = typeof supply === "number" && typeof ret === "number" ? round(supply - ret, 1) : null;
-
+  const supply = typeof body.metrics.supplyC === "number" ? body.metrics.supplyC : null;
+  const ret = typeof body.metrics.returnC === "number" ? body.metrics.returnC : null;
   const flow = typeof body.metrics.flowLps === "number" ? body.metrics.flowLps : null;
+  const powerKW = typeof body.metrics.powerKW === "number" ? body.metrics.powerKW : null;
 
-  const rho = 0.997;
-  const cp = 4.186;
-
-  const thermalKW = deltaT !== null && flow !== null ? round(rho * cp * flow * (deltaT as number), 2) : null;
-
-  let cop: number | null = null;
-  let cop_quality: "measured" | null = null;
-  if (thermalKW !== null && typeof body.metrics.powerKW === "number" && body.metrics.powerKW > 0.05) {
-    cop = round((thermalKW as number) / body.metrics.powerKW, 2) as number;
-    cop_quality = "measured";
-  }
+  const { deltaT, thermalKW, cop, cop_quality } = deriveTelemetryMetrics({
+    supplyC: supply,
+    returnC: ret,
+    flowLps: flow,
+    powerKW,
+  });
 
   const faults_json = JSON.stringify(body.faults || []);
   const status_json = JSON.stringify({

@@ -5,6 +5,7 @@ import { json } from "../utils/responses";
 import { andWhere, nowISO } from "../utils";
 import { FleetSummaryQuerySchema } from "../schemas/fleet";
 import { validationErrorResponse } from "../utils/validation";
+import { maskTelemetryNumber } from "../telemetry";
 
 export async function handleFleetSummary(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
@@ -99,7 +100,7 @@ export async function handleFleetSummary(req: Request, env: Env) {
     devices_total,
     devices_online,
     online_pct,
-    avg_cop_24h: avgRow?.v ?? null,
+    avg_cop_24h: maskTelemetryNumber(avgRow?.v ?? null, scope.isAdmin, 1, 2),
     low_deltaT_count_24h: lowRow?.c ?? 0,
     max_heartbeat_age_sec: hbRow?.s ?? null,
     window_start_ms: sinceMs,

@@ -5,6 +5,7 @@ import { json } from "../utils/responses";
 import { andWhere, nowISO, parseFaultsJson } from "../utils";
 import { ArchiveQuerySchema } from "../schemas/archive";
 import { validationErrorResponse } from "../utils/validation";
+import { maskTelemetryNumber } from "../telemetry";
 
 export async function handleArchive(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
@@ -66,8 +67,8 @@ export async function handleArchive(req: Request, env: Env) {
         site: row.site ?? null,
         last_seen_at: row.last_seen_at ?? null,
         online: !!row.online,
-        cop: row.cop ?? null,
-        deltaT: row.deltaT ?? null,
+        cop: maskTelemetryNumber(row.cop, scope.isAdmin, 1, 2),
+        deltaT: maskTelemetryNumber(row.deltaT, scope.isAdmin, 1, 2),
         alerts: parseFaultsJson(row.faults_json).length,
         updated_at: row.updated_at ?? null,
       })),
