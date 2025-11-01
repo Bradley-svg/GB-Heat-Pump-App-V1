@@ -28,7 +28,7 @@ export function TopNav({ user, assetBase, logoutReturn }: TopNavProps) {
   const allowedLinks = NAV_LINKS.filter((link) => {
     if (!link.role) return true;
     const requiredRole = link.role.toLowerCase();
-    return normalizedRoles.some((role) => role.includes(requiredRole));
+    return normalizedRoles.includes(requiredRole);
   });
 
   return (

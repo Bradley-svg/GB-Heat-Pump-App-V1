@@ -2,6 +2,18 @@
 import type { JWTPayload } from "jose";
 import type { AccessUser } from "./types";
 
+const ROLE_MAP: Record<string, AccessUser["roles"][number]> = {
+  admin: "admin",
+  contractor: "contractor",
+  client: "client",
+};
+
+export function canonicalRole(candidate: string): AccessUser["roles"][number] | null {
+  const normalized = candidate.trim().toLowerCase();
+  if (!normalized) return null;
+  return ROLE_MAP[normalized] ?? null;
+}
+
 /**
  * Canonical RBAC helpers.
  * - roles from roles[] or groups[]
@@ -21,12 +33,12 @@ export function deriveUserFromClaims(claims: JWTPayload): AccessUser {
 
   const roles = new Set<AccessUser["roles"][number]>();
   for (const r of rawRoles) {
-    const v = r.toLowerCase();
-    if (v.includes("admin")) roles.add("admin");
-    else if (v.includes("contractor")) roles.add("contractor");
-    else if (v.includes("client")) roles.add("client");
+    const canonical = canonicalRole(r);
+    if (canonical) {
+      roles.add(canonical);
+    }
   }
-  // ❌ no default grant — unknown users have zero roles
+  // No default grant - unknown users have zero roles
 
   // ---- clientIds
   const groupsUnknown: unknown[] = Array.isArray((claims as any).groups)
@@ -52,6 +64,6 @@ export function landingFor(user: AccessUser): string {
   if (user.roles.includes("admin")) return "/app/overview";
   if (user.roles.includes("client")) return "/app/compact";
   if (user.roles.includes("contractor")) return "/app/devices";
-  // ❗ no roles => explicit unauthorized landing
+  // no roles => explicit unauthorized landing
   return "/app/unauthorized";
 }

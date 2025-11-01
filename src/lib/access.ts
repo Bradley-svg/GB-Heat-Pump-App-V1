@@ -24,7 +24,7 @@ export async function requireAccessUser(req: Request, env: Env): Promise<User | 
 }
 
 export function userIsAdmin(user: User) {
-  return user.roles?.some((r: string) => r.toLowerCase().includes("admin")) ?? false;
+  return user.roles?.includes("admin") ?? false;
 }
 
 export { landingFor };

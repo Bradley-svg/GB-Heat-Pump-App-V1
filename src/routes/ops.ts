@@ -103,7 +103,7 @@ export async function handleOpsOverview(req: Request, env: Env) {
         lookup = await buildDeviceLookup(row.device_id, env, true);
       } catch (error) {
         log.error("ops.recent_lookup_failed", { device_id: row.device_id, error });
-        continue;
+        lookup = null;
       }
     }
     recent.push({

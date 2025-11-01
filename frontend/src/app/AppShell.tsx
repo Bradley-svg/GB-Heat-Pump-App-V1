@@ -29,19 +29,32 @@ export function AppShell() {
     return <UnauthorizedScreen returnUrl={config.returnDefault} />;
   }
 
+  const user = currentUser.user;
+  const normalizedRoles = user.roles.map((role) => role.toLowerCase());
+  const isAdmin = normalizedRoles.includes("admin");
+
   return (
     <BrowserRouter basename="/app">
-      <AppLayout user={currentUser.user}>
+      <AppLayout user={user}>
         <Suspense fallback={<LoadingScreen message="Loading page..." />}>
           <Routes>
-            <Route index element={<Navigate to={landingPathFor(currentUser.user)} replace />} />
+            <Route index element={<Navigate to={landingPathFor(user)} replace />} />
             <Route path="overview" element={<OverviewPage />} />
             <Route path="compact" element={<CompactDashboardPage />} />
             <Route path="devices" element={<DevicesPage />} />
             <Route path="device" element={<DeviceDetailPage />} />
             <Route path="alerts" element={<AlertsPage />} />
-                        <Route path="ops" element={<OpsPage />} />
-<Route path="commissioning" element={<CommissioningPage />} />
+            <Route
+              path="ops"
+              element={
+                isAdmin ? (
+                  <OpsPage />
+                ) : (
+                  <UnauthorizedScreen returnUrl={config.returnDefault} />
+                )
+              }
+            />
+            <Route path="commissioning" element={<CommissioningPage />} />
             <Route path="admin" element={<AdminPage />} />
             <Route path="admin/archive" element={<AdminArchivePage />} />
             <Route
@@ -58,9 +71,9 @@ export function AppShell() {
 
 function landingPathFor(user: CurrentUser): string {
   const roles = user.roles.map((role) => role.toLowerCase());
-  if (roles.some((role) => role.includes("admin"))) return "overview";
-  if (roles.some((role) => role.includes("client"))) return "compact";
-  if (roles.some((role) => role.includes("contractor"))) return "devices";
+  if (roles.includes("admin")) return "overview";
+  if (roles.includes("client")) return "compact";
+  if (roles.includes("contractor")) return "devices";
   return "unauthorized";
 }
 

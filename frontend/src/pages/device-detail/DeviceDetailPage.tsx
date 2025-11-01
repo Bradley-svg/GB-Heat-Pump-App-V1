@@ -21,7 +21,7 @@ export default function DeviceDetailPage() {
   const currentUser = useCurrentUserState();
   const user = currentUser.user;
   const isAdmin = useMemo(
-    () => (user?.roles ?? []).some((role) => role.toLowerCase().includes("admin")),
+    () => (user?.roles ?? []).some((role) => role.toLowerCase() === "admin"),
     [user?.roles],
   );
   const [mineOnly, setMineOnly] = useState<boolean>(() => !isAdmin);

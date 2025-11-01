@@ -104,6 +104,21 @@ describe("handleOpsOverview", () => {
     }
   });
 
+  it("rejects users with client-admin style roles", async () => {
+    const { env, sqlite } = createTestEnv();
+    requireAccessUserMock.mockResolvedValueOnce({
+      email: "alias@example.com",
+      roles: ["client-admin"] as unknown as User["roles"],
+      clientIds: [],
+    });
+    try {
+      const res = await handleOpsOverview(new Request("https://example.com/api/ops/overview"), env);
+      expect(res.status).toBe(403);
+    } finally {
+      sqlite.close();
+    }
+  });
+
   it("returns metrics summary and recent events for admins", async () => {
     const { env, sqlite } = createTestEnv();
     requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
@@ -125,7 +140,7 @@ describe("handleOpsOverview", () => {
     }
   });
 
-  it("logs and skips lookup failures for individual recent rows", async () => {
+  it("logs lookup failures but retains the affected recent row", async () => {
     const { env, sqlite } = createTestEnv();
     requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
     const nowIso = new Date().toISOString();
@@ -145,7 +160,12 @@ describe("handleOpsOverview", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as any;
       expect(Array.isArray(body.recent)).toBe(true);
-      expect(body.recent.length).toBe(0);
+      expect(body.recent.length).toBe(1);
+      expect(body.recent[0]).toMatchObject({
+        route: "/api/failure-case",
+        device_id: "dev-1001",
+        lookup: null,
+      });
       expect(body.ops_summary?.total_requests).toBeGreaterThanOrEqual(1);
     } finally {
       buildDeviceLookupSpy.mockRestore();
