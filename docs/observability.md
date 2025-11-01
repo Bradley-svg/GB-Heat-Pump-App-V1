@@ -172,6 +172,59 @@ These fields are designed to feed dashboards or alerting pipelines without addit
 - **Datadog**: Use Logpush HTTPS destination. Map `level` to severity, create monitors on `request.failed`, `heartbeat.rate_limited`, etc.
 - **BigQuery / warehouse**: Use Logpush to GCS/S3, load into warehouse for longer retention and ML-based anomaly detection.
 
+## MQTT mapping operations
+
+The platform now exposes a dedicated MQTT mapping console to manage topic routing safely. The page lives at `/app/admin/mqtt` and is only visible to users with the `admin` role.
+
+- The list view loads 20 mappings at a time, sorted by creation timestamp (newest first). Use the **Topic contains**, **Direction**, and **Status** filters to narrow the scope; **Load more** will page through older entries using the cursor supplied by the API.
+- All create, update, and delete actions flow through the Workers API and are automatically recorded in the audit trail (`mqtt.mapping.created`, `mqtt.mapping.updated`, `mqtt.mapping.deleted`).
+
+### Field reference & payload schema
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `mapping_id` | `string` | Optional on create; auto-generated if omitted. |
+| `topic` | `string` | Full MQTT topic. Must be unique per `(topic, profile_id, direction)` tuple. |
+| `profile_id` | `string | null` | Optional tenant scope. Leave blank for global mappings. |
+| `device_id` | `string | null` | Optional device binding. Admins may enter raw device IDs. |
+| `direction` | `"ingress" | "egress"` | Ingress routes inbound commands; egress publishes telemetry. |
+| `qos` | `0 | 1 | 2` | Defaults to `0`. |
+| `transform` | `object | null` | JSON object applied by the worker before publishing. Must be valid JSON. |
+| `description` | `string | null` | Free-form operator note (<= 512 chars). |
+| `enabled` | `boolean` | Disabled mappings are ignored by the broker. Defaults to `true`. |
+
+**Create example**
+
+```json
+{
+  "mapping_id": "mqtt-ops-fanout",
+  "topic": "greenbro/profile-west/commands/fanout",
+  "profile_id": "profile-west",
+  "direction": "ingress",
+  "qos": 1,
+  "enabled": true,
+  "transform": { "mode": "eco" },
+  "description": "Fan out profile-wide efficiency command"
+}
+```
+
+**Update example**
+
+```json
+{
+  "description": "Disable while commissioning new firmware",
+  "enabled": false
+}
+```
+
+### Operator workflow & safety checklist
+
+1. **Review existing mappings** – Filter by topic or direction and expand the list if needed. Confirm the device/profile bindings before editing.
+2. **Edit or create carefully** – The form normalizes blank strings to `null` so leaving `device_id` or `profile_id` empty unbinds the mapping. Use valid JSON for `transform`; malformed payloads are rejected.
+3. **Audit awareness** – Every mutation creates an audit record with actor email, IP, and before/after metadata. Reference `/api/audit/logs?entity_type=mqtt_mapping` for change history during incident reviews.
+4. **Safe deletion** – Deleting a mapping removes it immediately from the worker. Use the enable toggle when you need a reversible pause; delete only once the alternative routing is confirmed.
+5. **Post-change verification** – After updating, trigger the relevant MQTT path (e.g., send a dry-run command) and monitor the audit + telemetry feeds to confirm the change behaves as expected.
+
 ## Next steps checklist
 
 - [ ] Configure your alerting platform to use the documented thresholds.

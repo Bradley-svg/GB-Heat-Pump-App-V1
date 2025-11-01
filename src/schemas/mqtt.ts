@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { numericParam } from "./params";
+import { numericParam, optionalTrimmedString } from "./params";
 
 export const MQTT_DIRECTIONS = ["ingress", "egress"] as const;
 
@@ -19,6 +19,8 @@ export const MqttMappingsQuerySchema = z
     direction: MqttDirectionSchema.optional(),
     enabled: enabledParam.optional(),
     limit: numericParam({ integer: true, min: 1, max: 200, defaultValue: 100 }),
+    cursor: optionalTrimmedString,
+    topic: optionalTrimmedString,
   })
   .strict();
 
@@ -30,11 +32,35 @@ export const CreateMqttMappingSchema = z
     topic: z.string().trim().min(1),
     direction: MqttDirectionSchema,
     qos: z.union([z.number().int().min(0).max(2), z.literal(0), z.literal(1), z.literal(2)]).default(0),
-    transform: z.record(z.any()).optional(),
-    description: z.string().trim().min(1).max(512).optional(),
+    transform: z.union([z.record(z.any()), z.null()]).optional(),
+    description: z.union([z.string().trim().min(1).max(512), z.null()]).optional(),
     enabled: z.boolean().optional(),
   })
   .strict();
 
 export type MqttMappingsQuery = z.infer<typeof MqttMappingsQuerySchema>;
 export type CreateMqttMappingInput = z.infer<typeof CreateMqttMappingSchema>;
+
+const optionalNullableString = z
+  .union([z.string().trim().min(1), z.null()])
+  .optional();
+
+const optionalNullableRecord = z.union([z.record(z.any()), z.null()]).optional();
+
+export const UpdateMqttMappingSchema = z
+  .object({
+    device_id: optionalNullableString,
+    profile_id: optionalNullableString,
+    topic: z.string().trim().min(1).optional(),
+    direction: MqttDirectionSchema.optional(),
+    qos: z.union([z.number().int().min(0).max(2), z.literal(0), z.literal(1), z.literal(2)]).optional(),
+    transform: optionalNullableRecord,
+    description: optionalNullableString,
+    enabled: z.boolean().optional(),
+  })
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "At least one property must be provided.",
+  });
+
+export type UpdateMqttMappingInput = z.infer<typeof UpdateMqttMappingSchema>;

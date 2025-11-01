@@ -20,7 +20,12 @@ import {
   handleListCommissioningRuns,
 } from "./routes/commissioning-runs";
 import { handleCreateAuditEntry, handleListAuditTrail } from "./routes/audit";
-import { handleCreateMqttMapping, handleListMqttMappings } from "./routes/mqtt";
+import {
+  handleCreateMqttMapping,
+  handleDeleteMqttMapping,
+  handleListMqttMappings,
+  handleUpdateMqttMapping,
+} from "./routes/mqtt";
 import { bindRequestLogger, loggerForRequest, releaseRequestLogger } from "./utils/logging";
 import { handleTelemetryLatestBatch, handleTelemetrySeries } from "./routes/telemetry";
 
@@ -70,6 +75,14 @@ router
   .post("/api/audit/logs", (req, env) => handleCreateAuditEntry(req, env))
   .get("/api/mqtt/mappings", (req, env) => handleListMqttMappings(req, env))
   .post("/api/mqtt/mappings", (req, env) => handleCreateMqttMapping(req, env))
+  .put(
+    "/api/mqtt/mappings/:id",
+    withParam("id", (req, env, mappingId) => handleUpdateMqttMapping(req, env, mappingId)),
+  )
+  .delete(
+    "/api/mqtt/mappings/:id",
+    withParam("id", (req, env, mappingId) => handleDeleteMqttMapping(req, env, mappingId)),
+  )
   .get(
     "/api/devices/:id/latest",
     withParam("id", (req, env, deviceId) => handleLatest(req, env, deviceId)),

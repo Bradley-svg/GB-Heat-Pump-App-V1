@@ -316,6 +316,43 @@ export interface OpsWindowMeta {
   days: number;
 }
 
+export interface MqttMapping {
+  mapping_id: string;
+  device_id: string | null;
+  lookup: string | null;
+  profile_id: string | null;
+  site: string | null;
+  topic: string;
+  direction: "ingress" | "egress";
+  qos: number;
+  transform: Record<string, unknown> | null;
+  description: string | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MqttMappingsResponse {
+  generated_at: string;
+  mappings: MqttMapping[];
+  next: string | null;
+}
+
+export interface CreateMqttMappingResponse {
+  ok: true;
+  mapping: MqttMapping;
+}
+
+export interface UpdateMqttMappingResponse {
+  ok: true;
+  mapping: MqttMapping;
+}
+
+export interface DeleteMqttMappingResponse {
+  ok: true;
+  mapping: MqttMapping;
+}
+
 export interface ArchiveResponse {
   generated_at: string;
   offline: ArchiveOfflineEntry[];

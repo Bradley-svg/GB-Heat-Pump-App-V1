@@ -16,6 +16,7 @@ const NAV_LINKS: { to: string; label: string; role: string | null; exact?: boole
   { to: "/ops", label: "Ops", role: "admin" },
   { to: "/commissioning", label: "Commissioning", role: "contractor" },
   { to: "/admin", label: "Admin", role: "admin", exact: true },
+  { to: "/admin/mqtt", label: "MQTT", role: "admin" },
   { to: "/admin/archive", label: "Archives", role: "admin" },
 ];
 

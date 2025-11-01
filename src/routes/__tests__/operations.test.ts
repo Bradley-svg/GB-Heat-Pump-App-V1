@@ -12,7 +12,12 @@ import { sealCursorId } from "../../lib/cursor";
 import { handleListAlertRecords, handleCreateAlertRecord } from "../alerts";
 import { handleListCommissioningRuns, handleCreateCommissioningRun } from "../commissioning-runs";
 import { handleListAuditTrail, handleCreateAuditEntry } from "../audit";
-import { handleListMqttMappings, handleCreateMqttMapping } from "../mqtt";
+import {
+  handleListMqttMappings,
+  handleCreateMqttMapping,
+  handleUpdateMqttMapping,
+  handleDeleteMqttMapping,
+} from "../mqtt";
 import { handleOpsOverview } from "../ops";
 import { OPS_METRICS_WINDOW_DAYS } from "../../lib/ops-metrics";
 
@@ -331,53 +336,130 @@ describe("operations routes integration", () => {
     }
   });
 
-  it("manages MQTT mappings across tenants", async () => {
+  it("blocks non-admin users from managing MQTT mappings", async () => {
     const { env, sqlite } = createTestEnv();
-    const deviceToken = await sealCursorId(env, "dev-1001");
-
-    requireAccessUserMock
-      .mockResolvedValueOnce(ADMIN_USER)
-      .mockResolvedValueOnce(TENANT_USER)
-      .mockResolvedValueOnce(ADMIN_USER);
+    requireAccessUserMock.mockResolvedValue(TENANT_USER);
 
     try {
       const listRes = await handleListMqttMappings(
-        new Request("https://example.com/api/mqtt/mappings?limit=10"),
+        new Request("https://example.com/api/mqtt/mappings?limit=5"),
         env,
       );
-      expect(listRes.status).toBe(200);
-      const listBody = (await listRes.json()) as any;
-      expect(Array.isArray(listBody.mappings)).toBe(true);
-      expect(listBody.mappings.length).toBeGreaterThanOrEqual(2);
+      expect(listRes.status).toBe(403);
 
       const createReq = new Request("https://example.com/api/mqtt/mappings", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          device_id: deviceToken,
+          topic: "greenbro/dev-1001/test",
+          direction: "egress",
+        }),
+      });
+      const createRes = await handleCreateMqttMapping(createReq, env);
+      expect(createRes.status).toBe(403);
+
+      const updateReq = new Request("https://example.com/api/mqtt/mappings/mqtt-0001", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ description: "blocked" }),
+      });
+      const updateRes = await handleUpdateMqttMapping(updateReq, env, "mqtt-0001");
+      expect(updateRes.status).toBe(403);
+
+      const deleteRes = await handleDeleteMqttMapping(
+        new Request("https://example.com/api/mqtt/mappings/mqtt-0001", { method: "DELETE" }),
+        env,
+        "mqtt-0001",
+      );
+      expect(deleteRes.status).toBe(403);
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("allows admins to paginate and perform CRUD on MQTT mappings with audit trail", async () => {
+    const { env, sqlite } = createTestEnv();
+    requireAccessUserMock.mockResolvedValue(ADMIN_USER);
+
+    try {
+      const firstPageRes = await handleListMqttMappings(
+        new Request("https://example.com/api/mqtt/mappings?limit=1"),
+        env,
+      );
+      expect(firstPageRes.status).toBe(200);
+      const firstPageBody = (await firstPageRes.json()) as any;
+      expect(firstPageBody.mappings).toHaveLength(1);
+      expect(typeof firstPageBody.next).toBe("string");
+
+      const secondPageRes = await handleListMqttMappings(
+        new Request(`https://example.com/api/mqtt/mappings?limit=1&cursor=${firstPageBody.next}`),
+        env,
+      );
+      expect(secondPageRes.status).toBe(200);
+      const secondPageBody = (await secondPageRes.json()) as any;
+      expect(secondPageBody.mappings.length).toBeGreaterThanOrEqual(1);
+
+      const createReq = new Request("https://example.com/api/mqtt/mappings", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mapping_id: "mqtt-test-1",
+          device_id: "dev-1001",
+          profile_id: "profile-west",
           topic: "greenbro/dev-1001/commands/test",
           direction: "ingress",
           qos: 0,
           transform: { mode: "eco" },
           description: "Integration mapping",
+          enabled: true,
         }),
       });
       const createRes = await handleCreateMqttMapping(createReq, env);
       expect(createRes.status).toBe(201);
-      const createBody = (await createRes.json()) as any;
-      expect(createBody.mapping.topic).toBe("greenbro/dev-1001/commands/test");
-      expect(createBody.mapping.profile_id).toBe("profile-west");
+      const createdBody = (await createRes.json()) as any;
+      expect(createdBody.mapping.mapping_id).toBe("mqtt-test-1");
+      expect(createdBody.mapping.device_id).toBe("dev-1001");
+
+      const updateReq = new Request("https://example.com/api/mqtt/mappings/mqtt-test-1", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          description: "Updated integration mapping",
+          enabled: false,
+        }),
+      });
+      const updateRes = await handleUpdateMqttMapping(updateReq, env, "mqtt-test-1");
+      expect(updateRes.status).toBe(200);
+      const updatedBody = (await updateRes.json()) as any;
+      expect(updatedBody.mapping.description).toBe("Updated integration mapping");
+      expect(updatedBody.mapping.enabled).toBe(false);
+
+      const deleteRes = await handleDeleteMqttMapping(
+        new Request("https://example.com/api/mqtt/mappings/mqtt-test-1", { method: "DELETE" }),
+        env,
+        "mqtt-test-1",
+      );
+      expect(deleteRes.status).toBe(200);
+      const deleteBody = (await deleteRes.json()) as any;
+      expect(deleteBody.mapping.mapping_id).toBe("mqtt-test-1");
 
       const confirmRes = await handleListMqttMappings(
-        new Request("https://example.com/api/mqtt/mappings?limit=20"),
+        new Request("https://example.com/api/mqtt/mappings?topic=commands%2Ftest"),
         env,
       );
       const confirmBody = (await confirmRes.json()) as any;
-      expect(
-        confirmBody.mappings.some(
-          (mapping: any) => mapping.description === "Integration mapping",
-        ),
-      ).toBe(true);
+      expect(confirmBody.mappings.some((row: any) => row.mapping_id === "mqtt-test-1")).toBe(false);
+
+      const auditRows = sqlite
+        .prepare(
+          `SELECT action FROM audit_trail WHERE entity_type = 'mqtt_mapping' AND entity_id = ? ORDER BY created_at ASC`,
+        )
+        .all("mqtt-test-1") as { action: string }[];
+      expect(auditRows.map((row) => row.action)).toEqual([
+        "mqtt.mapping.created",
+        "mqtt.mapping.updated",
+        "mqtt.mapping.deleted",
+      ]);
     } finally {
       sqlite.close();
     }

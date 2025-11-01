@@ -19,6 +19,8 @@ export interface RequestOptions extends Omit<RequestInit, "body"> {
 export interface ApiClient {
   get<T>(path: string, options?: RequestOptions): Promise<T>;
   post<T>(path: string, body: unknown, options?: RequestOptions): Promise<T>;
+  put<T>(path: string, body: unknown, options?: RequestOptions): Promise<T>;
+  delete<T>(path: string, options?: RequestOptions): Promise<T>;
 }
 
 const HTTP_PATTERN = /^https?:\/\//i;
@@ -193,6 +195,33 @@ class FetchApiClient implements ApiClient {
       {
         method: "POST",
         body: JSON.stringify(body),
+        ...rest,
+      },
+      signal,
+    );
+  }
+
+  put<T>(path: string, body: unknown, options?: RequestOptions): Promise<T> {
+    const { signal, ...rest } = options ?? {};
+    return requestJson<T>(
+      this.apiBase,
+      path,
+      {
+        method: "PUT",
+        body: JSON.stringify(body),
+        ...rest,
+      },
+      signal,
+    );
+  }
+
+  delete<T>(path: string, options?: RequestOptions): Promise<T> {
+    const { signal, ...rest } = options ?? {};
+    return requestJson<T>(
+      this.apiBase,
+      path,
+      {
+        method: "DELETE",
         ...rest,
       },
       signal,
