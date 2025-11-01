@@ -23,6 +23,7 @@ describe.sequential("Worker integration", () => {
   };
 
   let currentUser: User | null = adminUser;
+  let workerApp: typeof import("../../src/app").default;
   let handleFleetSummary: typeof import("../../src/routes/fleet").handleFleetSummary;
   let handleIngest: typeof import("../../src/routes/ingest").handleIngest;
   let handleRequest: typeof import("../../src/router").handleRequest;
@@ -33,6 +34,7 @@ describe.sequential("Worker integration", () => {
     requireAccessUserSpy = vi
       .spyOn(accessModule, "requireAccessUser")
       .mockImplementation(async () => currentUser);
+    ({ default: workerApp } = await import("../../src/app"));
     ({ handleFleetSummary } = await import("../../src/routes/fleet"));
     ({ handleIngest } = await import("../../src/routes/ingest"));
     ({ handleRequest } = await import("../../src/router"));
@@ -44,6 +46,18 @@ describe.sequential("Worker integration", () => {
 
   afterAll(() => {
     requireAccessUserSpy?.mockRestore();
+  });
+
+  it("redirects /app to landing without duplicating base paths", async () => {
+    currentUser = adminUser;
+    const { env, dispose } = await createWorkerEnv({ APP_BASE_URL: "https://app.example.com/app" });
+    try {
+      const response = await workerApp.fetch(new Request("https://app.example.com/app"), env);
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe("https://app.example.com/app/overview");
+    } finally {
+      dispose();
+    }
   });
 
   it("computes fleet summary with seeded telemetry data", async () => {

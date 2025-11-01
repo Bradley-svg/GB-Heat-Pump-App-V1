@@ -2,9 +2,19 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const opsPageRender = vi.hoisted(() => vi.fn(() => <div>Ops Mock</div>));
+const adminPageRender = vi.hoisted(() => vi.fn(() => <div>Admin Mock</div>));
+const adminArchivePageRender = vi.hoisted(() => vi.fn(() => <div>Admin Archive Mock</div>));
 
 vi.mock("../pages/ops/OpsPage", () => ({
   default: opsPageRender,
+}));
+
+vi.mock("../pages/admin/AdminPage", () => ({
+  default: adminPageRender,
+}));
+
+vi.mock("../pages/admin/AdminArchivePage", () => ({
+  default: adminArchivePageRender,
 }));
 
 import { AppShell } from "../app/AppShell";
@@ -21,6 +31,8 @@ const defaultConfig = {
 afterEach(() => {
   vi.clearAllMocks();
   opsPageRender.mockClear();
+  adminPageRender.mockClear();
+  adminArchivePageRender.mockClear();
   window.history.replaceState({}, "", "/");
 });
 
@@ -58,6 +70,8 @@ describe("AppShell role gating", () => {
 
     await waitFor(() => {
       expect(screen.queryByText("Ops")).not.toBeInTheDocument();
+      expect(screen.queryByText("Admin")).not.toBeInTheDocument();
+      expect(screen.queryByText("Archives")).not.toBeInTheDocument();
     });
   });
 
@@ -70,6 +84,28 @@ describe("AppShell role gating", () => {
 
     expect(await screen.findByText("Unauthorized")).toBeInTheDocument();
     expect(opsPageRender).not.toHaveBeenCalled();
+  });
+
+  it("prevents direct Admin routing for non-admins", async () => {
+    renderAppShell(["client"]);
+    act(() => {
+      window.history.pushState({}, "", "/app/admin");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    expect(await screen.findByText("Unauthorized")).toBeInTheDocument();
+    expect(adminPageRender).not.toHaveBeenCalled();
+  });
+
+  it("prevents direct Admin Archive routing for non-admins", async () => {
+    renderAppShell(["client"]);
+    act(() => {
+      window.history.pushState({}, "", "/app/admin/archive");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    expect(await screen.findByText("Unauthorized")).toBeInTheDocument();
+    expect(adminArchivePageRender).not.toHaveBeenCalled();
   });
 
   it("treats client-admin role as non-admin", async () => {
@@ -97,5 +133,27 @@ describe("AppShell role gating", () => {
     await waitFor(() => {
       expect(opsPageRender).toHaveBeenCalled();
     });
+  });
+
+  it("allows admin routes for admins", async () => {
+    renderAppShell(["admin"]);
+    act(() => {
+      window.history.pushState({}, "", "/app/admin");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    await waitFor(() => {
+      expect(adminPageRender).toHaveBeenCalled();
+    });
+  });
+
+  it("only marks the nested admin tab active on archive pages", async () => {
+    renderAppShell(["admin"], "/app/admin/archive");
+
+    const adminLink = await screen.findByRole("link", { name: "Admin" });
+    const archiveLink = await screen.findByRole("link", { name: "Archives" });
+
+    expect(adminLink).not.toHaveClass("active");
+    expect(archiveLink).toHaveClass("active");
   });
 });

@@ -55,8 +55,26 @@ export function AppShell() {
               }
             />
             <Route path="commissioning" element={<CommissioningPage />} />
-            <Route path="admin" element={<AdminPage />} />
-            <Route path="admin/archive" element={<AdminArchivePage />} />
+            <Route
+              path="admin"
+              element={
+                isAdmin ? (
+                  <AdminPage />
+                ) : (
+                  <UnauthorizedScreen returnUrl={config.returnDefault} />
+                )
+              }
+            />
+            <Route
+              path="admin/archive"
+              element={
+                isAdmin ? (
+                  <AdminArchivePage />
+                ) : (
+                  <UnauthorizedScreen returnUrl={config.returnDefault} />
+                )
+              }
+            />
             <Route
               path="unauthorized"
               element={<UnauthorizedScreen returnUrl={config.returnDefault} />}

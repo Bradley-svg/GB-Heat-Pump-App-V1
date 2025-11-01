@@ -1,4 +1,4 @@
-﻿import { Link, useLocation } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 
 import type { CurrentUser } from "../hooks/use-current-user";
 
@@ -8,19 +8,18 @@ interface TopNavProps {
   logoutReturn: string;
 }
 
-const NAV_LINKS: { to: string; label: string; role: string | null }[] = [
+const NAV_LINKS: { to: string; label: string; role: string | null; exact?: boolean }[] = [
   { to: "/overview", label: "Overview", role: "admin" },
   { to: "/compact", label: "My Sites", role: "client" },
   { to: "/devices", label: "Devices", role: null },
   { to: "/alerts", label: "Alerts", role: null },
   { to: "/ops", label: "Ops", role: "admin" },
   { to: "/commissioning", label: "Commissioning", role: "contractor" },
-  { to: "/admin", label: "Admin", role: "admin" },
+  { to: "/admin", label: "Admin", role: "admin", exact: true },
   { to: "/admin/archive", label: "Archives", role: "admin" },
 ];
 
 export function TopNav({ user, assetBase, logoutReturn }: TopNavProps) {
-  const location = useLocation();
   const roles = user.roles.length ? user.roles.join(", ") : "no-role";
   const logoutHref = `/app/logout?return=${encodeURIComponent(logoutReturn)}`;
   const normalizedRoles = user.roles.map((role) => role.toLowerCase());
@@ -39,13 +38,14 @@ export function TopNav({ user, assetBase, logoutReturn }: TopNavProps) {
       </div>
       <nav className="nav-links">
         {allowedLinks.map((link) => (
-          <Link
+          <NavLink
             key={link.to}
-            className={`nav-link${location.pathname.startsWith(link.to) ? " active" : ""}`}
             to={link.to}
+            className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
+            end={link.exact ?? false}
           >
             {link.label}
-          </Link>
+          </NavLink>
         ))}
       </nav>
       <span className="tag">{roles}</span>
@@ -56,4 +56,3 @@ export function TopNav({ user, assetBase, logoutReturn }: TopNavProps) {
     </header>
   );
 }
-

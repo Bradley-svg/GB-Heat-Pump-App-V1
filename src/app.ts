@@ -188,9 +188,13 @@ export default {
     if (path === "/app" || path === "/app/") {
       const user = await requireAccessUser(req, env);
       if (user) {
-        const landing = env.APP_BASE_URL + landingFor(user);
-        if (url.pathname !== landing) {
-          return Response.redirect(landing, 302);
+        const landingPath = landingFor(user);
+        if (!landingPath.startsWith("/") || landingPath.startsWith("//")) {
+          throw new Error(`Invalid landing path: ${landingPath}`);
+        }
+        const landingUrl = new URL(landingPath, env.APP_BASE_URL);
+        if (url.pathname !== landingUrl.pathname) {
+          return Response.redirect(landingUrl.toString(), 302);
         }
       }
       const spa = await serveAppStatic("/app", env);
