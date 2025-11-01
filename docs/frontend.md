@@ -53,14 +53,16 @@ The dashboard expects API routes to be reachable on the same origin. When runnin
    done
    ```
 
+   The publish script now copies Worker-owned SVG assets (logos, gear icons) to both `app/assets/…` and `assets/…`, so remote `APP_ASSET_BASE` deployments serve the same brand resources as the Worker.
+
 3. `npm run build` (top-level) will re-run the frontend build and produce the Worker bundle in `dist/` ready for deployment.
 
 ### Notes
 
 - The Worker injects `window.__APP_CONFIG__` with `returnDefault`, `apiBase`, and `assetBase` so the SPA stays in sync with worker settings.
-- Override SPA endpoints by setting `APP_API_BASE` and/or `APP_ASSET_BASE` in `wrangler.toml` (or per-environment vars). These values propagate through the injected config and are escaped for safe inline scripting.
+- Override SPA endpoints by setting `APP_API_BASE` and/or `APP_ASSET_BASE` in `wrangler.toml` (or per-environment vars). Values are trimmed, `APP_ASSET_BASE` is normalized with a trailing slash, and the CSP automatically includes both origins so browsers can reach remote APIs/CDNs.
 - If `APP_STATIC` is not bound (or a key is missing), the Worker serves the embedded bundle, ensuring `wrangler dev` works without R2 access.
-- `src/frontend/static-bundle.ts` is regenerated automatically during `frontend:build` – no manual edits required.
+- `src/frontend/static-bundle.ts` is regenerated automatically during `frontend:build` - no manual edits required.
 - Update favicons/metadata within `frontend/index.html` (will be reflected automatically in both R2 assets and embedded bundle).
 
 ## Scripts quick reference

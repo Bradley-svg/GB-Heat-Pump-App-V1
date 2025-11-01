@@ -2,11 +2,15 @@ export const JSON_CT = "application/json;charset=utf-8";
 export const HTML_CT = "text/html;charset=utf-8";
 export const SVG_CT = "image/svg+xml;charset=utf-8";
 
-interface SecurityHeaderOptions {
+export interface SecurityHeaderOptions {
   scriptHashes?: string[];
   scriptNonces?: string[];
   styleHashes?: string[];
   styleNonces?: string[];
+  styleSrc?: string[];
+  connectSrc?: string[];
+  imgSrc?: string[];
+  fontSrc?: string[];
 }
 
 function appendUnique(target: string[], values?: string[]) {
@@ -26,14 +30,24 @@ export function withSecurityHeaders(res: Response, options: SecurityHeaderOption
   const styleSrc = ["'self'"];
   appendUnique(styleSrc, options.styleHashes);
   appendUnique(styleSrc, options.styleNonces);
+  appendUnique(styleSrc, options.styleSrc);
+
+  const connectSrc = ["'self'"];
+  appendUnique(connectSrc, options.connectSrc);
+
+  const imgSrc = ["'self'", "data:"];
+  appendUnique(imgSrc, options.imgSrc);
+
+  const fontSrc = ["'self'", "data:"];
+  appendUnique(fontSrc, options.fontSrc);
 
   const csp = [
     "default-src 'self'",
     `script-src ${scriptSrc.join(" ")}`,
     `style-src ${styleSrc.join(" ")}`,
-    "img-src 'self' data:",
-    "connect-src 'self'",
-    "font-src 'self' data:",
+    `img-src ${imgSrc.join(" ")}`,
+    `connect-src ${connectSrc.join(" ")}`,
+    `font-src ${fontSrc.join(" ")}`,
     "object-src 'none'",
     "base-uri 'self'",
     "frame-ancestors 'none'",

@@ -28,5 +28,13 @@ describe("App config serialization safeguards", () => {
     expect(config.assetBase).toBe("/assets/");
     expect(config.returnDefault).toBe("https://return.test/");
   });
-});
 
+  it("normalizes custom asset bases to include a trailing slash", () => {
+    const env = {
+      ...baseEnv,
+      APP_ASSET_BASE: "https://cdn.example.com/brand",
+    } as Env;
+    const config = resolveAppConfig(env);
+    expect(config.assetBase).toBe("https://cdn.example.com/brand/");
+  });
+});

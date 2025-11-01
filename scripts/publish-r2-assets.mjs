@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import assetManifest from "../src/assets-manifest.json" assert { type: "json" };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,6 +11,7 @@ const repoRoot = path.resolve(__dirname, "..");
 const clientDist = path.join(repoRoot, "dist", "client");
 const assetDir = path.join(clientDist, "assets");
 const wranglerConfig = path.join(repoRoot, "wrangler.toml");
+const workerAssetNames = new Set(Object.keys(assetManifest ?? {}));
 
 const LONG_CACHE = "public,max-age=31536000,immutable";
 const CONTENT_TYPES = new Map([
@@ -51,12 +53,22 @@ function collectUploads() {
   for (const entry of entries) {
     if (!entry.isFile()) continue;
     const assetName = entry.name;
+    const filePath = path.join(assetDir, assetName);
+    const contentType = contentTypeFor(assetName);
     uploads.push({
       key: `app/assets/${assetName}`,
-      file: path.join(assetDir, assetName),
-      contentType: contentTypeFor(assetName),
+      file: filePath,
+      contentType,
       cacheControl: LONG_CACHE,
     });
+    if (workerAssetNames.has(assetName)) {
+      uploads.push({
+        key: `assets/${assetName}`,
+        file: filePath,
+        contentType,
+        cacheControl: LONG_CACHE,
+      });
+    }
   }
 
   uploads.sort((a, b) => a.key.localeCompare(b.key));

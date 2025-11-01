@@ -3,12 +3,20 @@ import { ASSETS } from "./assets";
 import { STATIC_BUNDLE, type StaticBundleKey } from "./frontend/static-bundle";
 import { landingFor, requireAccessUser } from "./lib/access";
 import { CORS_BASE, maybeHandlePreflight } from "./lib/cors";
-import { HTML_CT, json, text, withSecurityHeaders } from "./utils/responses";
+import {
+  HTML_CT,
+  json,
+  text,
+  withSecurityHeaders,
+  type SecurityHeaderOptions,
+} from "./utils/responses";
 import { chunk } from "./utils";
 import { handleRequest } from "./router";
 import { systemLogger } from "./utils/logging";
+import { resolveAppConfig, serializeAppConfig } from "./app-config";
+import { baseSecurityHeaderOptions, mergeSecurityHeaderOptions } from "./utils/security-options";
+export { resolveAppConfig, serializeAppConfig } from "./app-config";
 
-const DEFAULT_APP_CONFIG = { apiBase: "", assetBase: "/assets/" };
 const STATIC_CONTENT_TYPES: Record<string, string> = {
   ".html": HTML_CT,
   ".js": "application/javascript;charset=utf-8",
@@ -30,14 +38,17 @@ type StaticAssetResponse = {
   scriptHashes?: string[];
 };
 
-const JSON_HTML_SAFE_CHARS = /[<>&\u2028\u2029]/g;
-const JSON_HTML_SAFE_REPLACEMENTS: Record<string, string> = {
-  "<": "\\u003C",
-  ">": "\\u003E",
-  "&": "\\u0026",
-  "\u2028": "\\u2028",
-  "\u2029": "\\u2029",
-};
+function ensureTrailingSlash(value: string) {
+  return value.endsWith("/") ? value : `${value}/`;
+}
+
+function rewriteStaticAssetBase(html: string, assetBase: string) {
+  if (!assetBase) return html;
+  const normalized = ensureTrailingSlash(assetBase);
+  return html.replace(/(href|src)=(["'])\/assets\/([^"']+)/g, (_match, attr, quote, suffix) => {
+    return `${attr}=${quote}${normalized}${suffix}`;
+  });
+}
 
 function defaultCacheControl(key: StaticBundleKey) {
   if (key === "index.html") return "no-store";
@@ -56,30 +67,18 @@ async function sha256Base64(content: string) {
   return btoa(binary);
 }
 
-export function resolveAppConfig(env: Env) {
-  return {
-    apiBase: env.APP_API_BASE ?? DEFAULT_APP_CONFIG.apiBase,
-    assetBase: env.APP_ASSET_BASE ?? DEFAULT_APP_CONFIG.assetBase,
-    returnDefault: env.RETURN_DEFAULT,
-  };
-}
-
-export function serializeAppConfig(config: ReturnType<typeof resolveAppConfig>) {
-  const json = JSON.stringify(config);
-  return json.replace(JSON_HTML_SAFE_CHARS, (char) => JSON_HTML_SAFE_REPLACEMENTS[char] ?? char);
-}
-
 async function injectAppConfig(html: string, env: Env): Promise<{ html: string; scriptHashes: string[] }> {
   const config = resolveAppConfig(env);
+  const rewrittenHtml = rewriteStaticAssetBase(html, config.assetBase);
   const scriptContent = `window.__APP_CONFIG__=${serializeAppConfig(config)};`;
   const hash = await sha256Base64(scriptContent);
   const scriptToken = `'sha256-${hash}'`;
   const scriptTag = `<script>${scriptContent}</script>`;
   const closingHead = /<\/head>/i;
   const injected =
-    closingHead.test(html) ?
-      html.replace(closingHead, `  ${scriptTag}\n</head>`) :
-      `${scriptTag}\n${html}`;
+    closingHead.test(rewrittenHtml) ?
+      rewrittenHtml.replace(closingHead, `  ${scriptTag}\n</head>`) :
+      `${scriptTag}\n${rewrittenHtml}`;
   return { html: injected, scriptHashes: [scriptToken] };
 }
 
@@ -155,33 +154,36 @@ export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
     const path = url.pathname;
+    const baseSecurity = baseSecurityHeaderOptions(env);
+    const applySecurity = (response: Response, overrides?: SecurityHeaderOptions) =>
+      withSecurityHeaders(response, mergeSecurityHeaderOptions(baseSecurity, overrides));
 
     if (path === "/") {
       return Response.redirect(url.origin + "/app", 302);
     }
 
     const preflight = maybeHandlePreflight(req, path, env);
-    if (preflight) return preflight;
+    if (preflight) return applySecurity(preflight);
 
     if (path === "/favicon.ico") {
-      return withSecurityHeaders(new Response("", { status: 204 }));
+      return applySecurity(new Response("", { status: 204 }));
     }
 
     if (path === "/sw-brand.js") {
-      return withSecurityHeaders(
+      return applySecurity(
         new Response("// stub\n", { headers: { "content-type": "application/javascript" } }),
       );
     }
 
     if (req.method === "OPTIONS") {
-      return withSecurityHeaders(new Response("", { status: 204, headers: CORS_BASE }));
+      return applySecurity(new Response("", { status: 204, headers: CORS_BASE }));
     }
 
     if (path.startsWith("/assets/")) {
       const name = decodeURIComponent(path.replace("/assets/", ""));
       const asset = ASSETS[name];
       if (!asset) return text("Not found", { status: 404 });
-      return withSecurityHeaders(new Response(asset.body, { headers: { "content-type": asset.ct } }));
+      return applySecurity(new Response(asset.body, { headers: { "content-type": asset.ct } }));
     }
 
     if (path === "/app" || path === "/app/") {
@@ -194,10 +196,8 @@ export default {
       }
       const spa = await serveAppStatic("/app", env);
       if (spa) {
-        return withSecurityHeaders(
-          spa.response,
-          spa.scriptHashes ? { scriptHashes: spa.scriptHashes } : undefined,
-        );
+        const overrides = spa.scriptHashes ? { scriptHashes: spa.scriptHashes } : undefined;
+        return applySecurity(spa.response, overrides);
       }
       return text("Not found", { status: 404 });
     }
@@ -211,10 +211,8 @@ export default {
     if (path.startsWith("/app/assets/")) {
       const assetRes = await serveAppStatic(path, env);
       if (assetRes) {
-        return withSecurityHeaders(
-          assetRes.response,
-          assetRes.scriptHashes ? { scriptHashes: assetRes.scriptHashes } : undefined,
-        );
+        const overrides = assetRes.scriptHashes ? { scriptHashes: assetRes.scriptHashes } : undefined;
+        return applySecurity(assetRes.response, overrides);
       }
       return text("Not found", { status: 404 });
     }
@@ -223,10 +221,8 @@ export default {
       await requireAccessUser(req, env);
       const spa = await serveAppStatic(path, env);
       if (spa) {
-        return withSecurityHeaders(
-          spa.response,
-          spa.scriptHashes ? { scriptHashes: spa.scriptHashes } : undefined,
-        );
+        const overrides = spa.scriptHashes ? { scriptHashes: spa.scriptHashes } : undefined;
+        return applySecurity(spa.response, overrides);
       }
       return text("Not found", { status: 404 });
     }
