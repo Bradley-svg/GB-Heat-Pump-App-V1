@@ -33,6 +33,14 @@ describe("createApiClient url joining", () => {
     expect(join("", "/api/devices")).toBe("/api/devices");
   });
 
+  it("supports relative bases without a leading slash", () => {
+    expect(join("api", "devices")).toBe("api/devices");
+  });
+
+  it("supports root-relative bases", () => {
+    expect(join("/api", "devices")).toBe("/api/devices");
+  });
+
   it("prefers absolute paths over the configured base", () => {
     const absolutePath = "https://override.example.com/resource";
     const normalizedBase = normalizeApiBase("https://api.example.com/v1");
@@ -41,5 +49,37 @@ describe("createApiClient url joining", () => {
 
   it("trims whitespace from the configured base before joining", () => {
     expect(join("  https://api.example.com/base  ", "segment")).toBe("https://api.example.com/base/segment");
+  });
+
+  it("preserves query strings on the base when appending paths", () => {
+    expect(join("https://api.example.com/v1?token=abc", "telemetry")).toBe(
+      "https://api.example.com/v1/telemetry?token=abc",
+    );
+  });
+
+  it("preserves fragments on the base when appending paths", () => {
+    expect(join("https://api.example.com/v1#anchor", "telemetry")).toBe(
+      "https://api.example.com/v1/telemetry#anchor",
+    );
+  });
+
+  it("merges resource query parameters after base parameters", () => {
+    expect(join("https://api.example.com/v1?token=abc", "telemetry?limit=10")).toBe(
+      "https://api.example.com/v1/telemetry?token=abc&limit=10",
+    );
+  });
+
+  it("prefers resource fragments when provided", () => {
+    expect(join("https://api.example.com/v1#anchor", "telemetry#override")).toBe(
+      "https://api.example.com/v1/telemetry#override",
+    );
+  });
+
+  it("drops bases with unsupported schemes", () => {
+    expect(normalizeApiBase("ftp://api.example.com")).toBe("");
+  });
+
+  it("rejects javascript schemes", () => {
+    expect(normalizeApiBase("javascript:alert(1)")).toBe("");
   });
 });

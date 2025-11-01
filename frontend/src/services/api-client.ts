@@ -23,51 +23,115 @@ export interface ApiClient {
 
 const HTTP_PATTERN = /^https?:\/\//i;
 const PROTOCOL_RELATIVE_PATTERN = /^\/\//;
+const PLACEHOLDER_ORIGIN = "https://api-base.invalid";
 
 function isAbsoluteUrl(candidate: string): boolean {
   return HTTP_PATTERN.test(candidate) || PROTOCOL_RELATIVE_PATTERN.test(candidate);
+}
+
+function sanitizeBasePath(pathname: string): string {
+  if (!pathname || pathname === "/") {
+    return "/";
+  }
+  const collapsed = pathname.replace(/\/{2,}/g, "/");
+  if (collapsed.endsWith("/")) {
+    return collapsed.replace(/\/+$/, "/");
+  }
+  return collapsed;
+}
+
+function splitSuffix(input: string): { path: string; search: string; hash: string } {
+  const match = input.match(/^([^?#]*)(\?[^#]*)?(#.*)?$/);
+  return {
+    path: match?.[1] ?? "",
+    search: match?.[2] ?? "",
+    hash: match?.[3] ?? "",
+  };
+}
+
+function mergeSearch(baseSearch: string, pathSearch: string): string {
+  if (!baseSearch) return pathSearch;
+  if (!pathSearch) return baseSearch;
+
+  const params = new URLSearchParams(baseSearch.slice(1));
+  const additional = new URLSearchParams(pathSearch.slice(1));
+  additional.forEach((value, key) => {
+    params.append(key, value);
+  });
+
+  const combined = params.toString();
+  return combined ? `?${combined}` : "";
+}
+
+function combinePath(basePath: string, resourcePath: string): string {
+  const sanitizedBase = sanitizeBasePath(basePath);
+  if (!resourcePath) {
+    return sanitizedBase;
+  }
+  const normalizedBase = sanitizedBase.endsWith("/") ? sanitizedBase : `${sanitizedBase}/`;
+  const trimmedResource = resourcePath.startsWith("/") ? resourcePath.slice(1) : resourcePath;
+  const combined = `${normalizedBase}${trimmedResource}`;
+  return sanitizeBasePath(combined);
 }
 
 function normalizeApiBase(base: string | undefined): string {
   const trimmed = base?.trim() ?? "";
   if (!trimmed) return "";
 
-  const [, pathPart = "", suffix = ""] = trimmed.match(/^([^?#]*)(.*)$/) ?? [];
+  const hasScheme = /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed);
+  if (hasScheme && !HTTP_PATTERN.test(trimmed)) {
+    return "";
+  }
 
-  if (!suffix) {
-    let normalizedPath = pathPart.replace(/\/+$/, "");
-    if (!normalizedPath) {
-      normalizedPath = "/";
+  try {
+    const isRootRelative = trimmed.startsWith("/");
+    const url = hasScheme ? new URL(trimmed) : new URL(trimmed, PLACEHOLDER_ORIGIN);
+    url.pathname = sanitizeBasePath(url.pathname);
+    const serialized = url.toString();
+    if (hasScheme) {
+      return serialized;
     }
-    return normalizedPath;
+    const withoutPlaceholder = serialized.replace(PLACEHOLDER_ORIGIN, "");
+    if (isRootRelative) {
+      return withoutPlaceholder;
+    }
+    return withoutPlaceholder.startsWith("/") ? withoutPlaceholder.slice(1) : withoutPlaceholder;
+  } catch {
+    return "";
   }
-
-  const collapsedPath = pathPart.endsWith("/") ? pathPart.replace(/\/+$/, "/") : pathPart;
-  const safePath = collapsedPath || "/";
-  return `${safePath}${suffix}`;
-}
-
-function joinWithBase(base: string, path: string): string {
-  if (!base) return path;
-  if (!path) return base;
-
-  const trailing = base.endsWith("/");
-  const leading = path.startsWith("/");
-
-  if (trailing && leading) {
-    return base + path.slice(1);
-  }
-  if (!trailing && !leading) {
-    return `${base}/${path}`;
-  }
-  return base + path;
 }
 
 function buildUrl(apiBase: string, path: string) {
   if (isAbsoluteUrl(path)) {
     return path;
   }
-  return joinWithBase(apiBase, path);
+  if (!apiBase) {
+    return path;
+  }
+  if (!path) {
+    return apiBase;
+  }
+
+  try {
+    const baseUrl = new URL(apiBase);
+    const suffix = splitSuffix(path);
+    baseUrl.pathname = combinePath(baseUrl.pathname, suffix.path);
+    baseUrl.search = mergeSearch(baseUrl.search, suffix.search);
+    baseUrl.hash = suffix.hash || baseUrl.hash;
+    return baseUrl.toString();
+  } catch {
+    const placeholderBase = new URL(apiBase, PLACEHOLDER_ORIGIN);
+    const suffix = splitSuffix(path);
+    placeholderBase.pathname = combinePath(placeholderBase.pathname, suffix.path);
+    placeholderBase.search = mergeSearch(placeholderBase.search, suffix.search);
+    placeholderBase.hash = suffix.hash || placeholderBase.hash;
+    const serialized = placeholderBase.toString();
+    const withoutPlaceholder = serialized.replace(PLACEHOLDER_ORIGIN, "");
+    if (!apiBase.startsWith("/") && withoutPlaceholder.startsWith("/")) {
+      return withoutPlaceholder.slice(1);
+    }
+    return withoutPlaceholder;
+  }
 }
 
 async function requestJson<T>(

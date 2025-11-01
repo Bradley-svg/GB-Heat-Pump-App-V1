@@ -1,4 +1,4 @@
-# Frontend Dashboard
+ï»¿# Frontend Dashboard
 
 ## Overview
 
@@ -9,10 +9,10 @@
 
 ## Local development
 
-- `npm run frontend:dev` – start Vite dev server (port 5173).
-- `npm run frontend:watch` – same dev server, but bound to all interfaces for tunnelling.
-- `npm run frontend:lint` – run ESLint across the UI code.
-- `npm run frontend:preview` – serve the production build locally.
+- `npm run frontend:dev` â€“ start Vite dev server (port 5173).
+- `npm run frontend:watch` â€“ same dev server, but bound to all interfaces for tunnelling.
+- `npm run frontend:lint` â€“ run ESLint across the UI code.
+- `npm run frontend:preview` â€“ serve the production build locally.
 
 The dashboard expects API routes to be reachable on the same origin. When running `wrangler dev`, open both the Worker preview URL (serving `/app`) and the Vite dev server for live editing.
 
@@ -60,7 +60,7 @@ The dashboard expects API routes to be reachable on the same origin. When runnin
 ### Notes
 
 - The Worker injects `window.__APP_CONFIG__` with `returnDefault`, `apiBase`, and `assetBase` so the SPA stays in sync with worker settings.
-- Override SPA endpoints by setting `APP_API_BASE` and/or `APP_ASSET_BASE` in `wrangler.toml` (or per-environment vars). Values are trimmed, `APP_ASSET_BASE` is normalized with a trailing slash (defaulting to `/app/assets/`), and the CSP automatically includes the configured origin so browsers can reach remote APIs/CDNs. Point `APP_ASSET_BASE` at the `/app/assets/` prefix on your CDN (for example, `https://cdn.example.com/app/assets/`).
+- Override SPA endpoints by setting `APP_API_BASE` and/or `APP_ASSET_BASE` in `wrangler.toml` (or per-environment vars). `APP_API_BASE` accepts HTTPS URLs or relative paths (query strings and fragments are preserved); non-HTTP(S) schemes are rejected and the Worker falls back to the default while logging a warning. `APP_ASSET_BASE` accepts HTTPS origins, protocol-relative URLs, or relative paths and is normalized with a trailing slash (defaulting to `/app/assets/`). Invalid schemes (for example `javascript:` or `data:`) are ignored in favour of the default, and an operator warning is emitted. Point `APP_ASSET_BASE` at the `/app/assets/` prefix on your CDN (for example, `https://cdn.example.com/app/assets/`).
 - If `APP_STATIC` is not bound (or a key is missing), the Worker serves the embedded bundle, ensuring `wrangler dev` works without R2 access.
 - `src/frontend/static-bundle.ts` is regenerated automatically during `frontend:build` - no manual edits required.
 - Update favicons/metadata within `frontend/index.html` (will be reflected automatically in both R2 assets and embedded bundle).
@@ -76,3 +76,4 @@ The dashboard expects API routes to be reachable on the same origin. When runnin
 | `npm run frontend:lint` | Run ESLint |
 | `npm run build` | Build frontend + worker bundle (no deploy) |
 | `npm run deploy` | Deploy worker via Wrangler |
+

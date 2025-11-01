@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { resolveAppConfig, serializeAppConfig } from "../../src/app";
 import type { Env } from "../../src/env";
@@ -27,6 +27,28 @@ describe("App config serialization safeguards", () => {
     expect(config.apiBase).toBe("");
     expect(config.assetBase).toBe("/app/assets/");
     expect(config.returnDefault).toBe("https://return.test/");
+  });
+
+  it("rejects API bases with unsupported schemes and logs diagnostics", () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const env = {
+      ...baseEnv,
+      APP_API_BASE: "javascript:alert(1)",
+    } as Env;
+    const config = resolveAppConfig(env);
+    const messages = logSpy.mock.calls.map(([entry]) => String(entry));
+    logSpy.mockRestore();
+    expect(config.apiBase).toBe("");
+    expect(messages.some((line) => line.includes("api_base_invalid_scheme"))).toBe(true);
+  });
+
+  it("preserves query strings and fragments on valid API bases", () => {
+    const env = {
+      ...baseEnv,
+      APP_API_BASE: "https://api.example.com/v1?token=abc#frag",
+    } as Env;
+    const config = resolveAppConfig(env);
+    expect(config.apiBase).toBe("https://api.example.com/v1?token=abc#frag");
   });
 
   it("normalizes custom asset bases to include a trailing slash", () => {

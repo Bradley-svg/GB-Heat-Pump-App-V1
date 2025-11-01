@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { expandAssetBase, normalizeAssetBase } from "../asset-base";
 
@@ -22,6 +22,15 @@ describe("normalizeAssetBase", () => {
 
   it("returns relative paths without introducing a leading slash", () => {
     expect(normalizeAssetBase("cdn/assets", "/app/assets/")).toBe("cdn/assets/");
+  });
+
+  it("rejects asset bases with unsupported schemes and logs a warning", () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(normalizeAssetBase("javascript:alert(1)", "/app/assets/")).toBe("/app/assets/");
+    expect(normalizeAssetBase("data:text/plain;base64,Zm9v", "/app/assets/")).toBe("/app/assets/");
+    const loggedMessages = spy.mock.calls.map(([entry]) => String(entry));
+    spy.mockRestore();
+    expect(loggedMessages.some((entry) => entry.includes("asset_base_invalid_scheme"))).toBe(true);
   });
 });
 

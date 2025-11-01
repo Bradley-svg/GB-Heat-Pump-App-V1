@@ -1,5 +1,18 @@
+import { systemLogger } from "./logging";
+
 const PLACEHOLDER_ORIGIN = "https://asset-base.invalid";
 const ABSOLUTE_SCHEME = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
+const ALLOWED_ABSOLUTE_SCHEMES = new Set(["http:", "https:"]);
+
+class UnsupportedAssetSchemeError extends Error {
+  readonly scheme: string;
+
+  constructor(scheme: string) {
+    super(`Unsupported asset base scheme: ${scheme}`);
+    this.name = "UnsupportedAssetSchemeError";
+    this.scheme = scheme.toLowerCase();
+  }
+}
 
 type AssetBaseKind = "absolute" | "protocol-relative" | "root-relative" | "relative";
 
@@ -20,6 +33,10 @@ function parseAssetBase(raw: string): ParsedAssetBase {
     return { url, kind: "protocol-relative", original: trimmed };
   }
   if (ABSOLUTE_SCHEME.test(trimmed)) {
+    const scheme = trimmed.slice(0, trimmed.indexOf(":") + 1).toLowerCase();
+    if (!ALLOWED_ABSOLUTE_SCHEMES.has(scheme)) {
+      throw new UnsupportedAssetSchemeError(scheme);
+    }
     const url = new URL(trimmed);
     return { url, kind: "absolute", original: trimmed };
   }
@@ -114,7 +131,14 @@ export function normalizeAssetBase(value: string | undefined, fallback: string):
     const parsed = parseAssetBase(candidate);
     ensureTrailingSlash(parsed.url);
     return serializeAssetUrl(parsed);
-  } catch {
+  } catch (err) {
+    if (err instanceof UnsupportedAssetSchemeError && candidate !== fallback) {
+      systemLogger({ scope: "app_config" }).warn("asset_base_invalid_scheme", {
+        value: candidate,
+        fallback,
+        scheme: err.scheme,
+      });
+    }
     if (candidate !== fallback) {
       return normalizeAssetBase(undefined, fallback);
     }
