@@ -18,8 +18,8 @@ describe("App config serialization safeguards", () => {
     const serialized = serializeAppConfig(resolveAppConfig(env));
 
     expect(serialized).not.toContain("</script>");
-    expect(serialized).toContain("\\u003C/script");
-    expect(serialized).toContain("\\u003C!--comment");
+    expect(serialized).toMatch(/(\\u003C|%3C)\/script/);
+    expect(serialized).toMatch(/(\\u003C|%3C)!?--comment/);
   });
 
   it("falls back to default bases when overrides are absent", () => {

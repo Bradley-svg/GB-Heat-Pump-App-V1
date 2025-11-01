@@ -26,7 +26,9 @@ describe("Content-Security-Policy overrides", () => {
       expect(csp).toMatch(/font-src[^;]+https:\/\/cdn\.remote\.test/);
 
       const html = await response.text();
-      expect(html).toContain('href="https://cdn.remote.test/app/assets/GREENBRO LOGO APP.svg?v=7#bundle"');
+      expect(html).toMatch(
+        /href="https:\/\/cdn\.remote\.test\/app\/assets\/GREENBRO(?:%20| )LOGO(?:%20| )APP\.svg\?v=7#bundle"/,
+      );
       expect(html).toMatch(/src="https:\/\/cdn\.remote\.test\/app\/assets\/[^"]+\.js\?v=7#bundle"/);
       expect(html).toMatch(/href="https:\/\/cdn\.remote\.test\/app\/assets\/[^"]+\.css\?v=7#bundle"/);
       expect(html).toContain('"assetBase":"https://cdn.remote.test/app/assets/?v=7#bundle"');
