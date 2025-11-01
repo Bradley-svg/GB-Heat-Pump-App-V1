@@ -58,6 +58,7 @@ The dashboard expects API routes to be reachable on the same origin. When runnin
 ### Notes
 
 - The Worker injects `window.__APP_CONFIG__` with `returnDefault`, `apiBase`, and `assetBase` so the SPA stays in sync with worker settings.
+- Override SPA endpoints by setting `APP_API_BASE` and/or `APP_ASSET_BASE` in `wrangler.toml` (or per-environment vars). These values propagate through the injected config and are escaped for safe inline scripting.
 - If `APP_STATIC` is not bound (or a key is missing), the Worker serves the embedded bundle, ensuring `wrangler dev` works without R2 access.
 - `src/frontend/static-bundle.ts` is regenerated automatically during `frontend:build` – no manual edits required.
 - Update favicons/metadata within `frontend/index.html` (will be reflected automatically in both R2 assets and embedded bundle).

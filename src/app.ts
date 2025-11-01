@@ -30,8 +30,21 @@ type StaticAssetResponse = {
   scriptHashes?: string[];
 };
 
+const JSON_HTML_SAFE_CHARS = /[<>&\u2028\u2029]/g;
+const JSON_HTML_SAFE_REPLACEMENTS: Record<string, string> = {
+  "<": "\\u003C",
+  ">": "\\u003E",
+  "&": "\\u0026",
+  "\u2028": "\\u2028",
+  "\u2029": "\\u2029",
+};
+
 function defaultCacheControl(key: StaticBundleKey) {
-  return key === "index.html" ? "no-store" : "public, max-age=900, immutable";
+  if (key === "index.html") return "no-store";
+  if (key.startsWith("assets/")) {
+    return "public, max-age=31536000, immutable";
+  }
+  return "public, max-age=900, immutable";
 }
 
 async function sha256Base64(content: string) {
@@ -43,9 +56,22 @@ async function sha256Base64(content: string) {
   return btoa(binary);
 }
 
+export function resolveAppConfig(env: Env) {
+  return {
+    apiBase: env.APP_API_BASE ?? DEFAULT_APP_CONFIG.apiBase,
+    assetBase: env.APP_ASSET_BASE ?? DEFAULT_APP_CONFIG.assetBase,
+    returnDefault: env.RETURN_DEFAULT,
+  };
+}
+
+export function serializeAppConfig(config: ReturnType<typeof resolveAppConfig>) {
+  const json = JSON.stringify(config);
+  return json.replace(JSON_HTML_SAFE_CHARS, (char) => JSON_HTML_SAFE_REPLACEMENTS[char] ?? char);
+}
+
 async function injectAppConfig(html: string, env: Env): Promise<{ html: string; scriptHashes: string[] }> {
-  const config = { ...DEFAULT_APP_CONFIG, returnDefault: env.RETURN_DEFAULT };
-  const scriptContent = `window.__APP_CONFIG__=${JSON.stringify(config)};`;
+  const config = resolveAppConfig(env);
+  const scriptContent = `window.__APP_CONFIG__=${serializeAppConfig(config)};`;
   const hash = await sha256Base64(scriptContent);
   const scriptToken = `'sha256-${hash}'`;
   const scriptTag = `<script>${scriptContent}</script>`;

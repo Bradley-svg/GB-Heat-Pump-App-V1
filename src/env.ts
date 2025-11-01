@@ -6,6 +6,8 @@ export interface Env {
   ACCESS_AUD: string;
   APP_BASE_URL: string;
   RETURN_DEFAULT: string;
+  APP_API_BASE?: string;
+  APP_ASSET_BASE?: string;
   HEARTBEAT_INTERVAL_SECS?: string;
   OFFLINE_MULTIPLIER?: string;
   CURSOR_SECRET: string;
