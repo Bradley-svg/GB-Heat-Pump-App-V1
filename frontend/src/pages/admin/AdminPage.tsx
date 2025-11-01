@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useApiClient } from "../../app/contexts";
 import { Page } from "../../components";

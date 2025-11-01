@@ -1,4 +1,4 @@
-﻿import { screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import DeviceDetailPage from "../pages/device-detail/DeviceDetailPage";

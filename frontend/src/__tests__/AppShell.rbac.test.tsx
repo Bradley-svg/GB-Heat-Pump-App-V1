@@ -68,11 +68,9 @@ describe("AppShell role gating", () => {
   it("hides Ops navigation for non-admins", async () => {
     renderAppShell(["client"]);
 
-    await waitFor(() => {
-      expect(screen.queryByText("Ops")).not.toBeInTheDocument();
-      expect(screen.queryByText("Admin")).not.toBeInTheDocument();
-      expect(screen.queryByText("Archives")).not.toBeInTheDocument();
-    });
+    await waitFor(() => expect(screen.queryByText("Ops")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("Admin")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("Archives")).not.toBeInTheDocument());
   });
 
   it("prevents direct Ops routing for non-admins", async () => {

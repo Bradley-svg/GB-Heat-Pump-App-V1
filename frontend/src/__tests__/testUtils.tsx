@@ -1,4 +1,4 @@
-﻿import { render } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { Mock } from "vitest";

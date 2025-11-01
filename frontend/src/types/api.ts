@@ -1,4 +1,4 @@
-﻿export interface FleetSummaryResponse {
+export interface FleetSummaryResponse {
   devices_total: number;
   devices_online: number;
   online_pct: number;
