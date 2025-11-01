@@ -1,4 +1,5 @@
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import OverviewPage from "../pages/overview/OverviewPage";
@@ -50,14 +51,44 @@ describe("OverviewPage", () => {
   });
 
   it("shows an error callout when the summary request fails", async () => {
-    const getImplementation: ApiClient["get"] = <T,>() => Promise.reject<T>(new Error("network"));
-    const getMock = vi.fn(getImplementation);
+    const getMock = vi.fn<ApiClient["get"]>().mockRejectedValue(new Error("network"));
     const apiClient = createApiClientMock({ get: mockApiGet(getMock) });
 
     renderWithApi(<OverviewPage />, apiClient, "/app/overview");
 
-    await screen.findByText("Failed to load fleet metrics");
+    const retryButton = await screen.findByRole("button", { name: /retry now/i });
+    expect(retryButton).toBeInTheDocument();
+    expect(screen.getByText("Failed to load fleet metrics")).toBeInTheDocument();
+    expect(screen.getByText(/network/i)).toBeInTheDocument();
+    expect(screen.getByText(/Retrying in \d+s/i)).toBeInTheDocument();
     expect(getMock).toHaveBeenCalled();
+  });
+
+  it("recovers after clicking retry on the error callout", async () => {
+    const getMock = vi
+      .fn<ApiClient["get"]>()
+      .mockRejectedValueOnce(new Error("temporary failure"))
+      .mockResolvedValueOnce({
+        devices_total: 1,
+        devices_online: 1,
+        online_pct: 100,
+        avg_cop_24h: 3.2,
+        low_deltaT_count_24h: 0,
+        max_heartbeat_age_sec: 0,
+        window_start_ms: Date.now(),
+        generated_at: new Date().toISOString(),
+      } satisfies FleetSummaryResponse);
+    const apiClient = createApiClientMock({ get: mockApiGet(getMock) });
+    const user = userEvent.setup();
+
+    renderWithApi(<OverviewPage />, apiClient, "/app/overview");
+
+    const retryButton = await screen.findByRole("button", { name: /retry now/i });
+    await user.click(retryButton);
+
+    expect(await screen.findByText("100%")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /retry now/i })).not.toBeInTheDocument();
+    expect(getMock).toHaveBeenCalledTimes(2);
   });
 });
 

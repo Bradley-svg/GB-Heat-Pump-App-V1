@@ -1,4 +1,5 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import OpsPage from "../pages/ops/OpsPage";
@@ -95,13 +96,15 @@ describe("OpsPage", () => {
 
     renderWithApi(<OpsPage />, api);
 
-    await waitFor(() => {
-      expect(screen.getByText(/Unable to load operations metrics/i)).toBeInTheDocument();
-    });
+    const retryButton = await screen.findByRole("button", { name: /retry now/i });
+    expect(retryButton).toBeInTheDocument();
+    expect(screen.getByText(/Unable to load operations metrics/i)).toBeInTheDocument();
+    expect(screen.getByText(/network failure/i)).toBeInTheDocument();
+    expect(screen.getByText(/Retrying in \d+s/i)).toBeInTheDocument();
   });
 
   it("schedules periodic refreshes and reuses the API client", async () => {
-    const intervalSpy = vi.spyOn(global, "setInterval");
+    const timeoutSpy = vi.spyOn(global, "setTimeout");
     const getMock = vi.fn().mockResolvedValue(sampleResponse);
     const api = createApiClientMock({ get: getMock });
 
@@ -109,17 +112,85 @@ describe("OpsPage", () => {
       renderWithApi(<OpsPage />, api);
 
       expect(await screen.findByText(/Requests observed/i)).toBeInTheDocument();
-      expect(intervalSpy).toHaveBeenCalled();
-      const [callback, delay] = intervalSpy.mock.calls[0] as [() => void, number];
-      expect(delay).toBe(60_000);
+      const refreshCall = timeoutSpy.mock.calls.find(([, delay]) => delay === 60_000);
+      expect(refreshCall).toBeDefined();
+      const [callback] = refreshCall as [() => void, number];
 
-      callback();
-
-      await waitFor(() => {
-        expect(getMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+      await act(async () => {
+        callback();
+        await Promise.resolve();
       });
+
+      expect(getMock.mock.calls.length).toBeGreaterThanOrEqual(2);
     } finally {
-      intervalSpy.mockRestore();
+      timeoutSpy.mockRestore();
+    }
+  });
+
+  it("allows manual retry to recover after an error", async () => {
+    const getMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("temporary outage"))
+      .mockResolvedValueOnce(sampleResponse);
+    const api = createApiClientMock({ get: getMock });
+    const user = userEvent.setup();
+
+    renderWithApi(<OpsPage />, api);
+
+    const retryButton = await screen.findByRole("button", { name: /retry now/i });
+    expect(retryButton).toBeInTheDocument();
+    expect(getMock).toHaveBeenCalledTimes(1);
+
+    await user.click(retryButton);
+
+    expect(await screen.findByText(/Requests observed/i)).toBeInTheDocument();
+    expect(getMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries with exponential backoff after consecutive failures", async () => {
+    vi.useFakeTimers();
+    try {
+      const getMock = vi
+        .fn()
+        .mockRejectedValueOnce(new Error("network blip"))
+        .mockRejectedValueOnce(new Error("still failing"))
+        .mockResolvedValue(sampleResponse);
+      const api = createApiClientMock({ get: getMock });
+
+      renderWithApi(<OpsPage />, api);
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(screen.getByRole("button", { name: /retry now/i })).toBeInTheDocument();
+      expect(getMock).toHaveBeenCalledTimes(1);
+      expect(screen.getByText(/Attempt 1/)).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2_000);
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(getMock).toHaveBeenCalledTimes(2);
+      expect(screen.getByText(/Attempt 2/)).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_000);
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(getMock).toHaveBeenCalledTimes(3);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(screen.getByText(/Requests observed/i)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

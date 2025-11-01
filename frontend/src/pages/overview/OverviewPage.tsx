@@ -1,32 +1,45 @@
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
 
 import { useApiClient } from "../../app/contexts";
-import { Page } from "../../components";
+import { useApiRequest } from "../../app/hooks/use-api-request";
+import { Page, RequestErrorCallout } from "../../components";
 import { formatNumber, formatPercent, formatRelative } from "../../utils/format";
 import type { FleetSummaryResponse } from "../../types/api";
 
 export default function OverviewPage() {
   const api = useApiClient();
-  const [data, setData] = useState<FleetSummaryResponse | null>(null);
-  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const fetchSummary = useCallback(
+    ({ signal }: { signal: AbortSignal }) =>
+      api.get<FleetSummaryResponse>("/api/fleet/summary", { signal }),
+    [api],
+  );
 
-  useEffect(() => {
-    const controller = new AbortController();
-    setState("loading");
-    api
-      .get<FleetSummaryResponse>("/api/fleet/summary", { signal: controller.signal })
-      .then((payload) => {
-        setData(payload);
-        setState("ready");
-      })
-      .catch((error) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        setState("error");
-      });
-    return () => controller.abort();
-  }, [api]);
+  const {
+    phase,
+    data,
+    error,
+    retry,
+    isRetryScheduled,
+    nextRetryInMs,
+    attempts,
+    isFetching,
+  } = useApiRequest(fetchSummary);
 
-  if (state === "loading") {
+  const hasData = Boolean(data);
+  const errorTitle = hasData ? "Issues loading latest fleet metrics" : "Failed to load fleet metrics";
+  const errorCallout = error ? (
+    <RequestErrorCallout
+      title={errorTitle}
+      error={error}
+      onRetry={retry}
+      retryScheduled={isRetryScheduled}
+      nextRetryInMs={nextRetryInMs}
+      attempts={attempts}
+      busy={isFetching}
+    />
+  ) : null;
+
+  if (!hasData && phase === "loading") {
     return (
       <Page title="Overview (Fleet)">
         <div className="card">Loading...</div>
@@ -34,16 +47,17 @@ export default function OverviewPage() {
     );
   }
 
-  if (state === "error" || !data) {
+  if (!hasData) {
     return (
       <Page title="Overview (Fleet)">
-        <div className="card callout error">Failed to load fleet metrics</div>
+        {errorCallout ?? <div className="card callout error">Failed to load fleet metrics</div>}
       </Page>
     );
   }
 
   return (
     <Page title="Overview (Fleet)">
+      {errorCallout ? <div style={{ marginBottom: "1rem" }}>{errorCallout}</div> : null}
       <div className="grid kpis">
         <div className="card tight">
           <div className="muted">Online %</div>

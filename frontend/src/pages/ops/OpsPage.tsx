@@ -1,57 +1,47 @@
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
 
 import { useApiClient } from "../../app/contexts";
-import { Page } from "../../components";
+import { useApiRequest } from "../../app/hooks/use-api-request";
+import { Page, RequestErrorCallout } from "../../components";
 import { formatDate, formatNumber, formatPercent } from "../../utils/format";
 import type { OpsOverviewResponse } from "../../types/api";
 
-type LoadState = "loading" | "ready" | "error";
-
 export default function OpsPage() {
   const api = useApiClient();
-  const [state, setState] = useState<LoadState>("loading");
-  const [data, setData] = useState<OpsOverviewResponse | null>(null);
+  const fetchOverview = useCallback(
+    ({ signal }: { signal: AbortSignal }) =>
+      api.get<OpsOverviewResponse>("/api/ops/overview", { signal }),
+    [api],
+  );
 
-  useEffect(() => {
-    let disposed = false;
-    let controller: AbortController | null = null;
-    let refreshTimer: ReturnType<typeof setInterval> | null = null;
+  const {
+    phase,
+    data,
+    error,
+    retry,
+    isRetryScheduled,
+    nextRetryInMs,
+    attempts,
+    isFetching,
+  } = useApiRequest(fetchOverview, {
+    autoRefreshMs: 60_000,
+  });
 
-    const load = (options?: { silent?: boolean }) => {
-      controller?.abort();
-      controller = new AbortController();
-      if (!options?.silent) {
-        setState("loading");
-      }
-      api
-        .get<OpsOverviewResponse>("/api/ops/overview", { signal: controller.signal })
-        .then((payload) => {
-          if (disposed) return;
-          setData(payload);
-          setState("ready");
-        })
-        .catch((error) => {
-          if (disposed) return;
-          if (error instanceof DOMException && error.name === "AbortError") return;
-          if (!options?.silent) {
-            setState("error");
-          }
-        });
-    };
+  const hasData = Boolean(data);
+  const errorTitle = hasData ? "Issues loading latest operations data" : "Unable to load operations metrics";
+  const errorCallout = error ? (
+    <RequestErrorCallout
+      title={errorTitle}
+      error={error}
+      onRetry={retry}
+      retryScheduled={isRetryScheduled}
+      nextRetryInMs={nextRetryInMs}
+      attempts={attempts}
+      busy={isFetching}
+    />
+  ) : null;
 
-    load();
-    refreshTimer = setInterval(() => load({ silent: true }), 60_000);
-
-    return () => {
-      disposed = true;
-      controller?.abort();
-      if (refreshTimer) {
-        clearInterval(refreshTimer);
-      }
-    };
-  }, [api]);
-
-  if (state === "loading") {
+  if (!hasData && phase === "loading") {
     return (
       <Page title="Operations">
         <div className="card">Loading...</div>
@@ -59,10 +49,12 @@ export default function OpsPage() {
     );
   }
 
-  if (state === "error" || !data) {
+  if (!hasData) {
     return (
       <Page title="Operations">
-        <div className="card callout error">Unable to load operations metrics</div>
+        {errorCallout ?? (
+          <div className="card callout error">Unable to load operations metrics</div>
+        )}
       </Page>
     );
   }
@@ -78,6 +70,7 @@ export default function OpsPage() {
 
   return (
     <Page title="Operations">
+      {errorCallout ? <div style={{ marginBottom: "1rem" }}>{errorCallout}</div> : null}
       <div className="grid kpis">
         <div className="card tight">
           <div className="muted">Requests observed</div>
