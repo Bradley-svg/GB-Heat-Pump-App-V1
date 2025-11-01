@@ -63,9 +63,9 @@ export async function handleListDevices(req: Request, env: Env) {
   const isAdmin = userIsAdmin(user);
   const url = new URL(req.url);
   const paramsResult = ListDevicesQuerySchema.safeParse({
-    mine: url.searchParams.get("mine"),
-    limit: url.searchParams.get("limit"),
-    cursor: url.searchParams.get("cursor"),
+    mine: url.searchParams.get("mine") ?? undefined,
+    limit: url.searchParams.get("limit") ?? undefined,
+    cursor: url.searchParams.get("cursor") ?? undefined,
   });
   if (!paramsResult.success) {
     return validationErrorResponse(paramsResult.error);
