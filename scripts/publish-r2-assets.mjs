@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,8 +9,9 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
 const clientDist = path.join(repoRoot, "dist", "client");
 const assetDir = path.join(clientDist, "assets");
+const wranglerConfig = path.join(repoRoot, "wrangler.toml");
 
-const LONG_CACHE = "public, max-age=31536000, immutable";
+const LONG_CACHE = "public,max-age=31536000,immutable";
 const CONTENT_TYPES = new Map([
   [".js", "application/javascript"],
   [".css", "text/css"],
@@ -76,6 +77,18 @@ function parseArgs(argv) {
   return args;
 }
 
+function resolveBucketName() {
+  if (process.env.R2_BUCKET_NAME) return process.env.R2_BUCKET_NAME;
+  if (process.env.APP_STATIC_BUCKET) return process.env.APP_STATIC_BUCKET;
+  if (existsSync(wranglerConfig)) {
+    const source = readFileSync(wranglerConfig, "utf8");
+    const match = source.match(/\[\[r2_buckets\]\][^\[]*?binding\s*=\s*"APP_STATIC"[^\[]*?bucket_name\s*=\s*"([^"]+)"/);
+    if (match) return match[1];
+  }
+  console.warn("[publish-r2-assets] Warning: falling back to bucket name APP_STATIC. Set R2_BUCKET_NAME env var to override.");
+  return "APP_STATIC";
+}
+
 if (!existsSync(clientDist)) {
   console.error("[publish-r2-assets] Error: missing frontend build output at %s", clientDist);
   console.error("Run `npm run frontend:build` before publishing assets.");
@@ -84,7 +97,11 @@ if (!existsSync(clientDist)) {
 
 const uploads = collectUploads();
 const { env, dryRun } = parseArgs(process.argv);
-const wranglerBin = process.env.WRANGLER_BIN ?? "wrangler";
+const defaultWrangler = process.platform === "win32" ? "npx.cmd" : "npx";
+const wranglerBin = process.env.WRANGLER_BIN ?? defaultWrangler;
+const bucketName = resolveBucketName();
+const target = (process.env.R2_TARGET ?? "remote").toLowerCase();
+const locationArgs = target === "local" ? ["--local"] : ["--remote"];
 
 for (const asset of uploads) {
   if (!existsSync(asset.file)) {
@@ -98,13 +115,14 @@ for (const asset of uploads) {
     "r2",
     "object",
     "put",
-    `APP_STATIC/${asset.key}`,
+    `${bucketName}/${asset.key}`,
     "--file",
     asset.file,
     "--content-type",
     asset.contentType,
     "--cache-control",
     asset.cacheControl,
+    ...locationArgs,
   ];
 
   if (env) {
@@ -117,7 +135,11 @@ for (const asset of uploads) {
     continue;
   }
 
-  const result = spawnSync(wranglerBin, args, { stdio: "inherit" });
+    const fullArgs = /(npx(?:\.cmd)?|pnpx(?:\.cmd)?|yarn)$/i.test(wranglerBin) ? ["wrangler", ...args] : args;
+  const result = spawnSync(wranglerBin, fullArgs, { stdio: "inherit", shell: process.platform === "win32" });
+  if (result.error) {
+    console.error("[publish-r2-assets] Spawn failed:", result.error);
+  }
   if (result.status !== 0) {
     console.error("[publish-r2-assets] Error: upload failed for %s", asset.key);
     process.exit(result.status ?? 1);
@@ -125,3 +147,8 @@ for (const asset of uploads) {
 }
 
 console.log(`[publish-r2-assets] Uploaded ${uploads.length} assets.`);
+
+
+
+
+
