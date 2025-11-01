@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import AlertsPage from "../pages/alerts/AlertsPage";
 import type { ApiClient } from "../services/api-client";
 import type { AlertsFeedResponse } from "../types/api";
-import { createApiClientMock, renderWithApi } from "./testUtils";
+import { createApiClientMock, mockApiGet, renderWithApi } from "./testUtils";
 
 describe("AlertsPage", () => {
   it("renders recent alerts with the requested window", async () => {
@@ -34,7 +34,7 @@ describe("AlertsPage", () => {
       };
 
       const getMock = vi.fn<ApiClient["get"]>().mockResolvedValue(feed);
-      const apiClient = createApiClientMock({ get: getMock });
+      const apiClient = createApiClientMock({ get: mockApiGet(getMock) });
 
       renderWithApi(<AlertsPage />, apiClient, "/app/alerts?hours=48");
 
@@ -53,10 +53,12 @@ describe("AlertsPage", () => {
 
   it("shows an error callout when the feed request fails", async () => {
     const getMock = vi.fn<ApiClient["get"]>().mockRejectedValue(new Error("boom"));
-    const apiClient = createApiClientMock({ get: getMock });
+    const apiClient = createApiClientMock({ get: mockApiGet(getMock) });
 
     renderWithApi(<AlertsPage />, apiClient, "/app/alerts");
 
     await screen.findByText("Unable to load alerts");
+    expect(getMock).toHaveBeenCalledTimes(1);
   });
 });
+

@@ -61,7 +61,11 @@ function safeParseJson(payload: string): unknown {
 }
 
 class FetchApiClient implements ApiClient {
-  constructor(private readonly config: AppConfig) {}
+  private readonly config: AppConfig;
+
+  constructor(config: AppConfig) {
+    this.config = config;
+  }
 
   get<T>(path: string, options?: RequestOptions): Promise<T> {
     const { signal, ...rest } = options ?? {};

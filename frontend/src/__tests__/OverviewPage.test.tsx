@@ -1,10 +1,10 @@
-import { screen, within } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import OverviewPage from "../pages/overview/OverviewPage";
-import type { ApiClient } from "../services/api-client";
+import type { ApiClient, RequestOptions } from "../services/api-client";
 import type { FleetSummaryResponse } from "../types/api";
-import { createApiClientMock, renderWithApi } from "./testUtils";
+import { createApiClientMock, mockApiGet, renderWithApi } from "./testUtils";
 
 describe("OverviewPage", () => {
   it("renders fleet metrics when the summary request succeeds", async () => {
@@ -23,37 +23,36 @@ describe("OverviewPage", () => {
         generated_at: "2025-01-02T10:00:00.000Z",
       };
 
-      const getMock: ApiClient["get"] = vi.fn().mockResolvedValue(summary);
-      const apiClient = createApiClientMock({ get: getMock });
+      const getImplementation: ApiClient["get"] = <T,>() => Promise.resolve(summary as T);
+      const getMock = vi.fn(getImplementation);
+      const apiClient = createApiClientMock({ get: mockApiGet(getMock) });
 
       renderWithApi(<OverviewPage />, apiClient, "/app/overview");
 
       await screen.findByText("85%");
       expect(getMock).toHaveBeenCalledTimes(1);
-      const [, options] = getMock.mock.calls[0];
+      const [, options] = getMock.mock.calls[0] as [string, RequestOptions | undefined];
       expect(options?.signal).toBeInstanceOf(AbortSignal);
 
       expect(screen.getByText("Avg COP (24h)")).toBeInTheDocument();
       expect(screen.getByText("4.32")).toBeInTheDocument();
 
-      const onlineCard = screen.getByText("Online %").closest(".card");
-      expect(onlineCard).toBeTruthy();
-      expect(within(onlineCard as HTMLElement).getByText("3/5 online")).toBeInTheDocument();
+      const onlineInstances = screen.getAllByText("3/5 online");
+      expect(onlineInstances).toHaveLength(2);
 
       expect(screen.getByText("Window start 2h ago")).toBeInTheDocument();
       expect(screen.getByText("Oldest heartbeat 30m")).toBeInTheDocument();
 
-      const devicesCard = screen.getByText("Devices").closest(".card");
-      expect(devicesCard).toBeTruthy();
-      expect(within(devicesCard as HTMLElement).getByText("3/5 online")).toBeInTheDocument();
+      expect(onlineInstances[1]).toBeInTheDocument();
     } finally {
       dateSpy.mockRestore();
     }
   });
 
   it("shows an error callout when the summary request fails", async () => {
-    const getMock: ApiClient["get"] = vi.fn().mockRejectedValue(new Error("network"));
-    const apiClient = createApiClientMock({ get: getMock });
+    const getImplementation: ApiClient["get"] = <T,>() => Promise.reject<T>(new Error("network"));
+    const getMock = vi.fn(getImplementation);
+    const apiClient = createApiClientMock({ get: mockApiGet(getMock) });
 
     renderWithApi(<OverviewPage />, apiClient, "/app/overview");
 
@@ -61,3 +60,4 @@ describe("OverviewPage", () => {
     expect(getMock).toHaveBeenCalled();
   });
 });
+

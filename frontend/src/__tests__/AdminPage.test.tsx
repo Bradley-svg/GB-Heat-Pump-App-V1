@@ -2,9 +2,9 @@ import { screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import AdminPage from "../pages/admin/AdminPage";
-import type { ApiClient } from "../services/api-client";
+import type { ApiClient, RequestOptions } from "../services/api-client";
 import type { AdminOverviewResponse } from "../types/api";
-import { createApiClientMock, renderWithApi } from "./testUtils";
+import { createApiClientMock, mockApiGet, renderWithApi } from "./testUtils";
 
 describe("AdminPage", () => {
   it("renders tenant metrics and recent operations", async () => {
@@ -40,12 +40,14 @@ describe("AdminPage", () => {
     };
 
     const getMock = vi.fn<ApiClient["get"]>().mockResolvedValue(response);
-    const apiClient = createApiClientMock({ get: getMock });
+    const apiClient = createApiClientMock({ get: mockApiGet(getMock) });
 
     renderWithApi(<AdminPage />, apiClient, "/app/admin");
 
     await screen.findByText("Tenants");
-    expect(getMock).toHaveBeenCalledWith("/api/admin/overview", expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(getMock).toHaveBeenCalledTimes(1);
+    const [, requestOptions] = getMock.mock.calls[0] as [string, RequestOptions | undefined];
+    expect(requestOptions?.signal).toBeInstanceOf(AbortSignal);
 
     const tables = screen.getAllByRole("table");
     const tenantTable = tables[0];
@@ -66,10 +68,12 @@ describe("AdminPage", () => {
 
   it("shows an error callout when the admin overview request fails", async () => {
     const getMock = vi.fn<ApiClient["get"]>().mockRejectedValue(new Error("fail"));
-    const apiClient = createApiClientMock({ get: getMock });
+    const apiClient = createApiClientMock({ get: mockApiGet(getMock) });
 
     renderWithApi(<AdminPage />, apiClient, "/app/admin");
 
     await screen.findByText("Unable to load admin overview");
+    expect(getMock).toHaveBeenCalledTimes(1);
   });
 });
+

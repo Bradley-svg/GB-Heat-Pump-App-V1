@@ -6,15 +6,12 @@ import type { ReactElement } from "react";
 import { ApiClientContext } from "../app/contexts";
 import DeviceDetailPage from "../pages/device-detail/DeviceDetailPage";
 import type { ApiClient } from "../services/api-client";
+import { createApiClientMock, mockApiGet, mockApiPost } from "./testUtils";
 import type {
   DeviceListResponse,
   TelemetryLatestBatchResponse,
   TelemetrySeriesResponse,
 } from "../types/api";
-
-interface LatestBatchRequest {
-  devices: string[];
-}
 
 function renderWithProviders(
   ui: ReactElement,
@@ -111,37 +108,37 @@ describe("DeviceDetailPage telemetry integration", () => {
   };
 
   it("renders telemetry details using batch and series endpoints", async () => {
-    const getMock = vi.fn<(path: string) => Promise<DeviceListResponse | TelemetrySeriesResponse>>((path) => {
-      if (path.startsWith("/api/devices?")) return Promise.resolve(deviceList);
-      if (path.startsWith("/api/telemetry/series")) return Promise.resolve(seriesResponse);
-      return Promise.reject(new Error(`Unexpected GET ${path}`));
-    });
-    const postMock = vi.fn<
-      (path: string, body: LatestBatchRequest) => Promise<TelemetryLatestBatchResponse>
-    >((path, _body) => {
-      if (path === "/api/telemetry/latest-batch") return Promise.resolve(latestBatch);
-      return Promise.reject(new Error(`Unexpected POST ${path}`));
-    });
-    const apiClient: ApiClient = {
-      get: getMock,
-      post: postMock,
+    const getImplementation: ApiClient["get"] = <T,>(path: string) => {
+      if (path.startsWith("/api/devices?")) return Promise.resolve(deviceList as T);
+      if (path.startsWith("/api/telemetry/series")) return Promise.resolve(seriesResponse as T);
+      return Promise.reject<T>(new Error(`Unexpected GET ${path}`));
     };
+    const postImplementation: ApiClient["post"] = <T,>(path: string, _body: unknown) => {
+      if (path === "/api/telemetry/latest-batch") return Promise.resolve(latestBatch as T);
+      return Promise.reject<T>(new Error(`Unexpected POST ${path}`));
+    };
+    const getMock = vi.fn(getImplementation);
+    const postMock = vi.fn(postImplementation);
+    const apiClient = createApiClientMock({
+      get: mockApiGet(getMock),
+      post: mockApiPost(postMock),
+    });
 
     renderWithProviders(<DeviceDetailPage />, apiClient, "/app/device?device=token-1001");
 
     await screen.findByText("Cape Town Plant");
     await waitFor(() => expect(postMock).toHaveBeenCalled());
 
-    expect(postMock).toHaveBeenCalledWith("/api/telemetry/latest-batch", {
-      devices: ["token-1001"],
-    });
+    expect(postMock).toHaveBeenCalledWith(
+      "/api/telemetry/latest-batch",
+      { devices: ["token-1001"] },
+      undefined,
+    );
     const hasSeriesCall = getMock.mock.calls.some((call) => {
       const [path] = call;
       return typeof path === "string" && path.includes("device=token-1001");
     });
     expect(hasSeriesCall).toBe(true);
-
-    expect(screen.getByText("Cape Town Plant")).toBeInTheDocument();
     expect(screen.getByText(/Latest 4\.4 kW/)).toBeInTheDocument();
 
     const table = screen.getByRole("table");
@@ -152,20 +149,24 @@ describe("DeviceDetailPage telemetry integration", () => {
   });
 
   it("shows an error state when telemetry requests fail", async () => {
-    const getMock = vi.fn<(path: string) => Promise<DeviceListResponse | TelemetrySeriesResponse>>((path) => {
-      if (path.startsWith("/api/devices?")) return Promise.resolve(deviceList);
-      return Promise.reject(new Error(`Unexpected GET ${path}`));
-    });
-    const postMock = vi.fn<
-      (path: string, body: LatestBatchRequest) => Promise<TelemetryLatestBatchResponse>
-    >((_path, _body) => Promise.reject(new Error("upstream failure")));
-    const apiClient: ApiClient = {
-      get: getMock,
-      post: postMock,
+    const getImplementation: ApiClient["get"] = <T,>(path: string) => {
+      if (path.startsWith("/api/devices?")) return Promise.resolve(deviceList as T);
+      return Promise.reject<T>(new Error(`Unexpected GET ${path}`));
     };
+    const postImplementation: ApiClient["post"] = <T,>(_path: string, _body: unknown) =>
+      Promise.reject<T>(new Error("upstream failure"));
+    const getMock = vi.fn(getImplementation);
+    const postMock = vi.fn(postImplementation);
+    const apiClient = createApiClientMock({
+      get: mockApiGet(getMock),
+      post: mockApiPost(postMock),
+    });
 
     renderWithProviders(<DeviceDetailPage />, apiClient, "/app/device?device=token-1001");
 
     await expect(screen.findByText("Unable to load device data")).resolves.toBeInTheDocument();
   });
 });
+
+
+

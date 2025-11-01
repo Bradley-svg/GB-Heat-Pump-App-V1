@@ -435,7 +435,7 @@ async function resolveSeriesConfig(
 }
 
 function resolveMetrics(csv: string | undefined | null) {
-  if (!csv) return TELEMETRY_ALLOWED_METRICS;
+  if (!csv) return [...TELEMETRY_ALLOWED_METRICS];
   const parts = csv
     .split(",")
     .map((part) => part.trim())

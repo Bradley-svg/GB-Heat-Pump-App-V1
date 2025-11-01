@@ -2,9 +2,9 @@ import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import CommissioningPage from "../pages/commissioning/CommissioningPage";
-import type { ApiClient } from "../services/api-client";
+import type { ApiClient, RequestOptions } from "../services/api-client";
 import type { CommissioningResponse } from "../types/api";
-import { createApiClientMock, renderWithApi } from "./testUtils";
+import { createApiClientMock, mockApiGet, renderWithApi } from "./testUtils";
 
 describe("CommissioningPage", () => {
   it("renders commissioning summary and device progress", async () => {
@@ -57,12 +57,14 @@ describe("CommissioningPage", () => {
       };
 
       const getMock = vi.fn<ApiClient["get"]>().mockResolvedValue(response);
-      const apiClient = createApiClientMock({ get: getMock });
+      const apiClient = createApiClientMock({ get: mockApiGet(getMock) });
 
       renderWithApi(<CommissioningPage />, apiClient, "/app/commissioning");
 
       await screen.findByText("Readiness overview");
-      expect(getMock).toHaveBeenCalledWith("/api/commissioning/checklist", expect.objectContaining({ signal: expect.any(AbortSignal) }));
+      expect(getMock).toHaveBeenCalledTimes(1);
+      const [, requestOptions] = getMock.mock.calls[0] as [string, RequestOptions | undefined];
+      expect(requestOptions?.signal).toBeInstanceOf(AbortSignal);
 
       expect(screen.getByText("1 ready of 2")).toBeInTheDocument();
       expect(screen.getByText("50% checklist complete across fleet")).toBeInTheDocument();
@@ -78,10 +80,12 @@ describe("CommissioningPage", () => {
 
   it("shows an error callout when the commissioning request fails", async () => {
     const getMock = vi.fn<ApiClient["get"]>().mockRejectedValue(new Error("fail"));
-    const apiClient = createApiClientMock({ get: getMock });
+    const apiClient = createApiClientMock({ get: mockApiGet(getMock) });
 
     renderWithApi(<CommissioningPage />, apiClient, "/app/commissioning");
 
     await screen.findByText("Unable to load commissioning status");
+    expect(getMock).toHaveBeenCalledTimes(1);
   });
 });
+

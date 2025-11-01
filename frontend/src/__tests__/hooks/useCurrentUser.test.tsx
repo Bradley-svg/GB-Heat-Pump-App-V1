@@ -55,3 +55,4 @@ describe("useCurrentUser", () => {
     expect(result.current.user).toBeNull();
   });
 });
+
