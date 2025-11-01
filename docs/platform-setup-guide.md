@@ -24,7 +24,11 @@ If you need non-interactive automation (for example CI seeding R2), mint a **Ser
 
 ### 1.3 Local development tips
 - `wrangler dev --remote` runs the Worker on Cloudflare, so Access policies apply naturally.
-- For purely local development (`--local`), inject a JWT into `Cf-Access-Jwt-Assertion` manually (generate via `cloudflared access login`), or temporarily stub `requireAccessUser` in tests.
+- For purely local development (`--local`), you can enable the Access shim by setting `DEV_ALLOW_USER` to a mock Access user. Example session commands:
+  - Bash: `export DEV_ALLOW_USER='{"email":"admin@example.com","roles":["admin"],"clientIds":["profile-west"]}' && wrangler dev --local`
+  - PowerShell: `$env:DEV_ALLOW_USER='{"email":"admin@example.com","roles":["admin"]}' ; wrangler dev --local`
+  The shim only activates when `Cf-Access-Jwt-Assertion` is missing; any supplied JWT is still fully verified.
+- If you prefer to exercise the real flow, inject a JWT into `Cf-Access-Jwt-Assertion` manually (generate via `cloudflared access login`), or temporarily stub `requireAccessUser` in tests.
 - Ensure secrets exist in the preview environment: `wrangler secret put ACCESS_AUD --env preview`.
 
 ### 1.4 Access workflow diagram
