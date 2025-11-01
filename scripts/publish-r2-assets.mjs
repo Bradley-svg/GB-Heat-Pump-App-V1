@@ -3,7 +3,6 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import assetManifest from "../src/assets-manifest.json" assert { type: "json" };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,6 +10,9 @@ const repoRoot = path.resolve(__dirname, "..");
 const clientDist = path.join(repoRoot, "dist", "client");
 const assetDir = path.join(clientDist, "assets");
 const wranglerConfig = path.join(repoRoot, "wrangler.toml");
+
+const manifestPath = path.join(repoRoot, "src", "assets-manifest.json");
+const assetManifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 const workerAssetNames = new Set(Object.keys(assetManifest ?? {}));
 
 const LONG_CACHE = "public,max-age=31536000,immutable";
@@ -32,6 +34,15 @@ const CONTENT_TYPES = new Map([
 function contentTypeFor(name) {
   const ext = path.extname(name).toLowerCase();
   return CONTENT_TYPES.get(ext) ?? "application/octet-stream";
+}
+
+function formatArg(value) {
+  if (process.platform === "win32" && /\s/.test(value)) {
+    // Escape any embedded quotes by doubling them
+    const escaped = value.replace(/"/g, '""');
+    return `"${escaped}"`;
+  }
+  return value;
 }
 
 function collectUploads() {
@@ -127,9 +138,9 @@ for (const asset of uploads) {
     "r2",
     "object",
     "put",
-    `${bucketName}/${asset.key}`,
+    formatArg(`${bucketName}/${asset.key}`),
     "--file",
-    asset.file,
+    formatArg(asset.file),
     "--content-type",
     asset.contentType,
     "--cache-control",
