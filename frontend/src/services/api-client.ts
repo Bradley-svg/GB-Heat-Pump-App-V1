@@ -22,11 +22,12 @@ export interface ApiClient {
 }
 
 const HTTP_PATTERN = /^https?:\/\//i;
-const PROTOCOL_RELATIVE_PATTERN = /^\/\//;
 const PLACEHOLDER_ORIGIN = "https://api-base.invalid";
+const SUFFIX_PATTERN = /^([^?#]*)(\?[^#]*)?(#.*)?$/;
 
 function isAbsoluteUrl(candidate: string): boolean {
-  return HTTP_PATTERN.test(candidate) || PROTOCOL_RELATIVE_PATTERN.test(candidate);
+  const lower = candidate.toLowerCase();
+  return lower.startsWith("http://") || lower.startsWith("https://") || candidate.startsWith("//");
 }
 
 function sanitizeBasePath(pathname: string): string {
@@ -41,7 +42,7 @@ function sanitizeBasePath(pathname: string): string {
 }
 
 function splitSuffix(input: string): { path: string; search: string; hash: string } {
-  const match = input.match(/^([^?#]*)(\?[^#]*)?(#.*)?$/);
+  const match = SUFFIX_PATTERN.exec(input);
   return {
     path: match?.[1] ?? "",
     search: match?.[2] ?? "",
@@ -165,11 +166,9 @@ function safeParseJson(payload: string): unknown {
 }
 
 class FetchApiClient implements ApiClient {
-  private readonly config: AppConfig;
   private readonly apiBase: string;
 
   constructor(config: AppConfig) {
-    this.config = config;
     this.apiBase = normalizeApiBase(config.apiBase);
   }
 

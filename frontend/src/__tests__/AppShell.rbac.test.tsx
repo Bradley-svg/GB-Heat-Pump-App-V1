@@ -63,7 +63,7 @@ describe("AppShell role gating", () => {
 
   it("prevents direct Ops routing for non-admins", async () => {
     renderAppShell(["client"]);
-    await act(async () => {
+    act(() => {
       window.history.pushState({}, "", "/app/ops");
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
@@ -74,7 +74,7 @@ describe("AppShell role gating", () => {
 
   it("treats client-admin role as non-admin", async () => {
     renderAppShell(["client-admin"]);
-    await act(async () => {
+    act(() => {
       window.history.pushState({}, "", "/app/ops");
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
@@ -88,7 +88,7 @@ describe("AppShell role gating", () => {
 
   it("shows Ops navigation and route for admins", async () => {
     renderAppShell(["admin"]);
-    await act(async () => {
+    act(() => {
       window.history.pushState({}, "", "/app/ops");
       window.dispatchEvent(new PopStateEvent("popstate"));
     });

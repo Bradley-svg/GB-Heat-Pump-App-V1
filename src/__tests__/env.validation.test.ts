@@ -1,12 +1,21 @@
+import type { D1PreparedStatement } from "@cloudflare/workers-types";
 import { describe, expect, it } from "vitest";
 
 import { validateEnv, EnvValidationError, type Env } from "../env";
 
 function createEnv(overrides: Partial<Env> = {}): Env {
+  const preparedStatement = {
+    bind: () => preparedStatement,
+    first: async () => null,
+    run: async () => ({ results: [], success: true, meta: { duration: 0 } }),
+    all: async () => ({ results: [] }),
+    raw: async () => [],
+  } as unknown as D1PreparedStatement;
   const base = {
     DB: {
-      prepare: () => ({}),
-    },
+      prepare: () => preparedStatement,
+      batch: async () => [],
+    } as unknown as Env["DB"],
     ACCESS_JWKS_URL: "https://access.example.com/cdn-cgi/access/certs",
     ACCESS_AUD: "test-audience",
     APP_BASE_URL: "https://app.example.com/app",
