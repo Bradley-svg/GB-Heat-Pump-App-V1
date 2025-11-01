@@ -1,3 +1,4 @@
+import { normalizeAssetBase } from "./utils/asset-base";
 import type { Env } from "./env";
 
 export interface ResolvedAppConfig {
@@ -19,26 +20,15 @@ const JSON_HTML_SAFE_REPLACEMENTS: Record<string, string> = {
   "\u2028": "\\u2028",
   "\u2029": "\\u2029",
 };
-
-function normalizeConfiguredBase(
-  value: string | undefined,
-  fallback: string,
-  { ensureTrailingSlash = false }: { ensureTrailingSlash?: boolean } = {},
-) {
+function normalizeApiBase(value: string | undefined, fallback: string): string {
   const trimmed = value?.trim() ?? "";
-  let normalized = trimmed.length ? trimmed : fallback;
-  if (ensureTrailingSlash && !normalized.endsWith("/")) {
-    normalized = `${normalized}/`;
-  }
-  return normalized;
+  return trimmed.length ? trimmed : fallback;
 }
 
 export function resolveAppConfig(env: Env): ResolvedAppConfig {
   return {
-    apiBase: normalizeConfiguredBase(env.APP_API_BASE, DEFAULT_APP_CONFIG.apiBase),
-    assetBase: normalizeConfiguredBase(env.APP_ASSET_BASE, DEFAULT_APP_CONFIG.assetBase, {
-      ensureTrailingSlash: true,
-    }),
+    apiBase: normalizeApiBase(env.APP_API_BASE, DEFAULT_APP_CONFIG.apiBase),
+    assetBase: normalizeAssetBase(env.APP_ASSET_BASE, DEFAULT_APP_CONFIG.assetBase),
     returnDefault: env.RETURN_DEFAULT,
   };
 }

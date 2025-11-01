@@ -15,6 +15,8 @@ import { handleRequest } from "./router";
 import { systemLogger } from "./utils/logging";
 import { resolveAppConfig, serializeAppConfig } from "./app-config";
 import { baseSecurityHeaderOptions, mergeSecurityHeaderOptions } from "./utils/security-options";
+import { expandAssetBase } from "./utils/asset-base";
+import { resolveLogoutReturn } from "./utils/return-url";
 export { resolveAppConfig, serializeAppConfig } from "./app-config";
 
 const STATIC_CONTENT_TYPES: Record<string, string> = {
@@ -38,15 +40,11 @@ type StaticAssetResponse = {
   scriptHashes?: string[];
 };
 
-function ensureTrailingSlash(value: string) {
-  return value.endsWith("/") ? value : `${value}/`;
-}
-
 function rewriteStaticAssetBase(html: string, assetBase: string) {
   if (!assetBase) return html;
-  const normalized = ensureTrailingSlash(assetBase);
   return html.replace(/(href|src)=(["'])\/(?:app\/)?assets\/([^"']+)/g, (_match, attr, quote, suffix) => {
-    return `${attr}=${quote}${normalized}${suffix}`;
+    const rewritten = expandAssetBase(assetBase, suffix);
+    return `${attr}=${quote}${rewritten}`;
   });
 }
 
@@ -203,9 +201,10 @@ export default {
     }
 
     if (path === "/app/logout") {
-      const ret = url.searchParams.get("return") || env.RETURN_DEFAULT;
-      const logoutUrl = new URL(`/cdn-cgi/access/logout?return=${encodeURIComponent(ret)}`, url).toString();
-      return Response.redirect(logoutUrl, 302);
+      const ret = resolveLogoutReturn(url.searchParams.get("return"), env, url);
+      const logoutUrl = new URL("/cdn-cgi/access/logout", url);
+      logoutUrl.searchParams.set("return", ret);
+      return Response.redirect(logoutUrl.toString(), 302);
     }
 
     if (path.startsWith("/app/assets/")) {

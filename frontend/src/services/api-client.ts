@@ -21,22 +21,62 @@ export interface ApiClient {
   post<T>(path: string, body: unknown, options?: RequestOptions): Promise<T>;
 }
 
-function buildUrl(config: AppConfig, path: string) {
-  if (path.startsWith("http://") || path.startsWith("https://")) {
+const HTTP_PATTERN = /^https?:\/\//i;
+const PROTOCOL_RELATIVE_PATTERN = /^\/\//;
+
+function isAbsoluteUrl(candidate: string): boolean {
+  return HTTP_PATTERN.test(candidate) || PROTOCOL_RELATIVE_PATTERN.test(candidate);
+}
+
+function normalizeApiBase(base: string | undefined): string {
+  const trimmed = base?.trim() ?? "";
+  if (!trimmed) return "";
+
+  const [, pathPart = "", suffix = ""] = trimmed.match(/^([^?#]*)(.*)$/) ?? [];
+
+  if (!suffix) {
+    let normalizedPath = pathPart.replace(/\/+$/, "");
+    if (!normalizedPath) {
+      normalizedPath = "/";
+    }
+    return normalizedPath;
+  }
+
+  const collapsedPath = pathPart.endsWith("/") ? pathPart.replace(/\/+$/, "/") : pathPart;
+  const safePath = collapsedPath || "/";
+  return `${safePath}${suffix}`;
+}
+
+function joinWithBase(base: string, path: string): string {
+  if (!base) return path;
+  if (!path) return base;
+
+  const trailing = base.endsWith("/");
+  const leading = path.startsWith("/");
+
+  if (trailing && leading) {
+    return base + path.slice(1);
+  }
+  if (!trailing && !leading) {
+    return `${base}/${path}`;
+  }
+  return base + path;
+}
+
+function buildUrl(apiBase: string, path: string) {
+  if (isAbsoluteUrl(path)) {
     return path;
   }
-  const base = config.apiBase ?? "";
-  if (!base) return path;
-  return `${base}${path}`;
+  return joinWithBase(apiBase, path);
 }
 
 async function requestJson<T>(
-  config: AppConfig,
+  apiBase: string,
   path: string,
   init: RequestInit,
   signal?: AbortSignal,
 ): Promise<T> {
-  const url = buildUrl(config, path);
+  const url = buildUrl(apiBase, path);
   const headers = new Headers(init.headers);
   if (!headers.has("accept")) headers.set("accept", "application/json");
   if (init.body && !headers.has("content-type")) {
@@ -62,15 +102,17 @@ function safeParseJson(payload: string): unknown {
 
 class FetchApiClient implements ApiClient {
   private readonly config: AppConfig;
+  private readonly apiBase: string;
 
   constructor(config: AppConfig) {
     this.config = config;
+    this.apiBase = normalizeApiBase(config.apiBase);
   }
 
   get<T>(path: string, options?: RequestOptions): Promise<T> {
     const { signal, ...rest } = options ?? {};
     return requestJson<T>(
-      this.config,
+      this.apiBase,
       path,
       {
         method: "GET",
@@ -83,7 +125,7 @@ class FetchApiClient implements ApiClient {
   post<T>(path: string, body: unknown, options?: RequestOptions): Promise<T> {
     const { signal, ...rest } = options ?? {};
     return requestJson<T>(
-      this.config,
+      this.apiBase,
       path,
       {
         method: "POST",
@@ -98,3 +140,8 @@ class FetchApiClient implements ApiClient {
 export function createApiClient(config: AppConfig): ApiClient {
   return new FetchApiClient(config);
 }
+
+export const __testables = {
+  normalizeApiBase,
+  buildUrl,
+};

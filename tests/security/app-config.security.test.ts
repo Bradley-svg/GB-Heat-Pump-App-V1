@@ -37,4 +37,13 @@ describe("App config serialization safeguards", () => {
     const config = resolveAppConfig(env);
     expect(config.assetBase).toBe("https://cdn.example.com/brand/");
   });
+
+  it("preserves query strings and fragments on asset bases", () => {
+    const env = {
+      ...baseEnv,
+      APP_ASSET_BASE: "https://cdn.example.com/brand?v=5#hash",
+    } as Env;
+    const config = resolveAppConfig(env);
+    expect(config.assetBase).toBe("https://cdn.example.com/brand/?v=5#hash");
+  });
 });
