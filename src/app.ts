@@ -1,4 +1,4 @@
-import type { Env } from "./env";
+import { validateEnv, type Env } from "./env";
 import { ASSETS } from "./assets";
 import { STATIC_BUNDLE, type StaticBundleKey } from "./frontend/static-bundle";
 import { landingFor, requireAccessUser } from "./lib/access";
@@ -150,6 +150,7 @@ async function serveAppStatic(path: string, env: Env): Promise<StaticAssetRespon
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
+    validateEnv(env);
     const url = new URL(req.url);
     const path = url.pathname;
     const baseSecurity = baseSecurityHeaderOptions(env);

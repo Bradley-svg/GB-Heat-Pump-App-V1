@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+﻿import { Link, useLocation } from "react-router-dom";
 
 import type { CurrentUser } from "../hooks/use-current-user";
 
@@ -13,6 +13,7 @@ const NAV_LINKS: { to: string; label: string; role: string | null }[] = [
   { to: "/compact", label: "My Sites", role: "client" },
   { to: "/devices", label: "Devices", role: null },
   { to: "/alerts", label: "Alerts", role: null },
+  { to: "/ops", label: "Ops", role: "admin" },
   { to: "/commissioning", label: "Commissioning", role: "contractor" },
   { to: "/admin", label: "Admin", role: "admin" },
   { to: "/admin/archive", label: "Archives", role: "admin" },
@@ -55,3 +56,4 @@ export function TopNav({ user, assetBase, logoutReturn }: TopNavProps) {
     </header>
   );
 }
+

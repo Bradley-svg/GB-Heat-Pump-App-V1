@@ -1,22 +1,35 @@
-import { render } from "@testing-library/react";
+﻿import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { Mock } from "vitest";
 
-import { ApiClientContext } from "../app/contexts";
+import { ApiClientContext, CurrentUserContext } from "../app/contexts";
 import type { ApiClient, RequestOptions } from "../services/api-client";
+import type { CurrentUserState } from "../app/hooks/use-current-user";
 
 export function renderWithApi(
   ui: ReactElement,
   apiClient: ApiClient,
   route = "/app",
+  currentUser?: CurrentUserState,
 ) {
+  const userState: CurrentUserState =
+    currentUser ?? {
+      status: "ready",
+      user: { email: "admin@example.com", roles: ["admin"], clientIds: [] },
+      error: null,
+      refresh: () => {
+        // no-op for tests
+      },
+    };
   return render(
     <MemoryRouter initialEntries={[route]}>
       <ApiClientContext.Provider value={apiClient}>
-        <Routes>
-          <Route path="*" element={ui} />
-        </Routes>
+        <CurrentUserContext.Provider value={userState}>
+          <Routes>
+            <Route path="*" element={ui} />
+          </Routes>
+        </CurrentUserContext.Provider>
       </ApiClientContext.Provider>
     </MemoryRouter>,
   );
@@ -48,3 +61,5 @@ export function mockApiPost(fn: ApiPostMock): ApiClient["post"] {
     return fn(path, body, options) as Promise<T>;
   };
 }
+
+

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { useApiClient } from "../../app/contexts";
+import { useApiClient, useCurrentUserState } from "../../app/contexts";
 import { Page } from "../../components";
 import { Sparkline } from "../../components/Sparkline";
 import { formatDate, formatNumber, formatRelative } from "../../utils/format";
@@ -18,6 +18,13 @@ import type {
 
 export default function DeviceDetailPage() {
   const api = useApiClient();
+  const currentUser = useCurrentUserState();
+  const user = currentUser.user;
+  const isAdmin = useMemo(
+    () => (user?.roles ?? []).some((role) => role.toLowerCase().includes("admin")),
+    [user?.roles],
+  );
+  const [mineOnly, setMineOnly] = useState<boolean>(() => !isAdmin);
   const [searchParams, setSearchParams] = useSearchParams();
   const queryDevice = searchParams.get("device") ?? "";
 
@@ -28,22 +35,31 @@ export default function DeviceDetailPage() {
   const [selectedDisplay, setSelectedDisplay] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const scopeMine = isAdmin ? mineOnly : true;
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadDevices() {
       try {
-        const payload = await api.get<DeviceListResponse>("/api/devices?mine=1&limit=50");
+        const params = new URLSearchParams({
+          limit: "50",
+          mine: scopeMine ? "1" : "0",
+        });
+        const payload = await api.get<DeviceListResponse>(`/api/devices?${params.toString()}`);
         if (cancelled) return;
         const items = payload.items ?? [];
         setDevices(items);
-        if (!selected && items.length > 0) {
-          setSelected(items[0].lookup);
-        }
+        setSelected((prev) => {
+          if (prev && items.some((device) => device.lookup === prev)) {
+            return prev;
+          }
+          return items[0]?.lookup ?? "";
+        });
       } catch {
         if (!cancelled) {
           setDevices([]);
+          setSelected("");
         }
       }
     }
@@ -52,7 +68,7 @@ export default function DeviceDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [api, selected]);
+  }, [api, scopeMine]);
 
   const load = useCallback(
     async (lookup: string) => {
@@ -131,6 +147,27 @@ export default function DeviceDetailPage() {
     return "";
   })();
 
+  const actions = isAdmin ? (
+    <div className="tabs" role="group" aria-label="Device scope filter">
+      <button
+        type="button"
+        className={`btn ghost${scopeMine ? " active" : ""}`}
+        aria-pressed={scopeMine}
+        onClick={() => setMineOnly(true)}
+      >
+        Assigned
+      </button>
+      <button
+        type="button"
+        className={`btn ghost${!scopeMine ? " active" : ""}`}
+        aria-pressed={!scopeMine}
+        onClick={() => setMineOnly(false)}
+      >
+        All devices
+      </button>
+    </div>
+  ) : null;
+
   const renderMetric = useCallback(
     (key: keyof TelemetryLatestSnapshot, label: string, dp = 1) => {
       const value = metrics[key];
@@ -161,7 +198,7 @@ export default function DeviceDetailPage() {
   );
 
   return (
-    <Page title="Device detail">
+    <Page title="Device detail" actions={actions}>
       <div className="card">
         <div className="flex">
           <div className="flex-basis-220">

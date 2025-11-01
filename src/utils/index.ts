@@ -1,4 +1,4 @@
-export async function sha256Hex(input: string) {
+﻿export async function sha256Hex(input: string) {
   const data = new TextEncoder().encode(input);
   const digest = await crypto.subtle.digest("SHA-256", data);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -61,8 +61,8 @@ export function nowISO() {
 
 export function maskId(id: string | null | undefined) {
   if (!id) return "";
-  if (id.length <= 4) return "****";
-  return id.slice(0, 3) + "�?�" + id.slice(-2);
+  if (id.length <= 4) return "***";
+  return id.slice(0, 3) + "***" + id.slice(-2);
 }
 
 export function parseAndCheckTs(ts: string) {
@@ -133,3 +133,4 @@ export function parseMetricsJson(jsonStr: string | null | undefined): Record<str
     return {};
   }
 }
+

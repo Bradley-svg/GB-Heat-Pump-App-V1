@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+﻿import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { useAppConfig, useCurrentUserState } from "./contexts";
@@ -14,6 +14,7 @@ const DeviceDetailPage = lazy(() => import("../pages/device-detail/DeviceDetailP
 const AlertsPage = lazy(() => import("../pages/alerts/AlertsPage"));
 const CommissioningPage = lazy(() => import("../pages/commissioning/CommissioningPage"));
 const AdminPage = lazy(() => import("../pages/admin/AdminPage"));
+const OpsPage = lazy(() => import("../pages/ops/OpsPage"));
 const AdminArchivePage = lazy(() => import("../pages/admin/AdminArchivePage"));
 
 export function AppShell() {
@@ -39,7 +40,8 @@ export function AppShell() {
             <Route path="devices" element={<DevicesPage />} />
             <Route path="device" element={<DeviceDetailPage />} />
             <Route path="alerts" element={<AlertsPage />} />
-            <Route path="commissioning" element={<CommissioningPage />} />
+                        <Route path="ops" element={<OpsPage />} />
+<Route path="commissioning" element={<CommissioningPage />} />
             <Route path="admin" element={<AdminPage />} />
             <Route path="admin/archive" element={<AdminArchivePage />} />
             <Route
@@ -61,3 +63,5 @@ function landingPathFor(user: CurrentUser): string {
   if (roles.some((role) => role.includes("contractor"))) return "devices";
   return "unauthorized";
 }
+
+

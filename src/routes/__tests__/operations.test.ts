@@ -12,6 +12,7 @@ import { handleListAlertRecords, handleCreateAlertRecord } from "../alerts";
 import { handleListCommissioningRuns, handleCreateCommissioningRun } from "../commissioning-runs";
 import { handleListAuditTrail, handleCreateAuditEntry } from "../audit";
 import { handleListMqttMappings, handleCreateMqttMapping } from "../mqtt";
+import { handleOpsOverview } from "../ops";
 
 const requireAccessUserMock = vi.spyOn(accessModule, "requireAccessUser");
 
@@ -50,8 +51,8 @@ function createTestEnv() {
 
   const env = {
     DB: db,
-    ACCESS_JWKS_URL: "",
-    ACCESS_AUD: "",
+    ACCESS_JWKS_URL: "https://access.test/.well-known/jwks.json",
+    ACCESS_AUD: "test-audience",
     APP_BASE_URL: "https://example.com/app",
     RETURN_DEFAULT: "https://example.com",
     HEARTBEAT_INTERVAL_SECS: "30",
@@ -76,6 +77,47 @@ const TENANT_USER: User = {
 
 afterEach(() => {
   requireAccessUserMock.mockReset();
+});
+
+describe("handleOpsOverview", () => {
+  it("requires authentication", async () => {
+    const { env, sqlite } = createTestEnv();
+    requireAccessUserMock.mockResolvedValueOnce(null);
+    try {
+      const res = await handleOpsOverview(new Request("https://example.com/api/ops/overview"), env);
+      expect(res.status).toBe(401);
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("rejects non-admin users", async () => {
+    const { env, sqlite } = createTestEnv();
+    requireAccessUserMock.mockResolvedValueOnce(TENANT_USER);
+    try {
+      const res = await handleOpsOverview(new Request("https://example.com/api/ops/overview"), env);
+      expect(res.status).toBe(403);
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("returns metrics summary and recent events for admins", async () => {
+    const { env, sqlite } = createTestEnv();
+    requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
+    try {
+      const res = await handleOpsOverview(new Request("https://example.com/api/ops/overview?limit=5"), env);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as any;
+      expect(body.scope).toBe("admin");
+      expect(body.ops_summary?.total_requests).toBeGreaterThanOrEqual(0);
+      expect(Array.isArray(body.ops)).toBe(true);
+      expect(Array.isArray(body.recent)).toBe(true);
+      expect(body.recent.length).toBeLessThanOrEqual(5);
+    } finally {
+      sqlite.close();
+    }
+  });
 });
 
 describe("operations routes integration", () => {

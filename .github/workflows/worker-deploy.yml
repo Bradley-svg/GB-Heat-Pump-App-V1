@@ -44,6 +44,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run worker test suites
+        run: npm run test:ci
+
       - name: Apply D1 migrations (preview)
         if: ${{ fromJSON(github.event.inputs.apply_migrations) && github.event.inputs.environment == 'preview' }}
         run: npm run migrate:apply:preview

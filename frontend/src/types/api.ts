@@ -1,4 +1,4 @@
-export interface FleetSummaryResponse {
+﻿export interface FleetSummaryResponse {
   devices_total: number;
   devices_online: number;
   online_pct: number;
@@ -248,6 +248,67 @@ export interface AdminOpsRow {
   lookup: string | null;
 }
 
+export interface OpsOverviewResponse {
+  generated_at: string;
+  scope: "admin";
+  devices: {
+    total: number;
+    online: number;
+    offline: number;
+    offline_ratio: number;
+  };
+  ops: OpsMetricRow[];
+  ops_summary: OpsSummary;
+  thresholds: OpsThresholds | null;
+  recent: OpsRecentEvent[];
+}
+
+export interface OpsMetricRow {
+  route: string;
+  status_code: number;
+  count: number;
+  total_duration_ms: number;
+  avg_duration_ms: number;
+  max_duration_ms: number;
+}
+
+export interface OpsSummary {
+  total_requests: number;
+  server_error_rate: number;
+  client_error_rate: number;
+  slow_rate: number;
+  slow_routes: OpsSlowRoute[];
+  top_server_error_routes: OpsErrorRoute[];
+}
+
+export interface OpsSlowRoute {
+  route: string;
+  status_code: number;
+  avg_duration_ms: number;
+  count: number;
+}
+
+export interface OpsErrorRoute {
+  route: string;
+  status_code: number;
+  count: number;
+}
+
+export interface OpsThresholds {
+  error_rate: { warn: number; critical: number };
+  client_error_rate: { warn: number; critical: number };
+  avg_duration_ms: { warn: number; critical: number };
+}
+
+export interface OpsRecentEvent {
+  ts: string;
+  route: string;
+  status_code: number;
+  duration_ms: number;
+  device_id: string | null;
+  lookup: string | null;
+}
+
 export interface ArchiveResponse {
   generated_at: string;
   offline: ArchiveOfflineEntry[];
@@ -270,3 +331,4 @@ export interface ArchiveHistoryEntry {
   day: string;
   samples: number;
 }
+

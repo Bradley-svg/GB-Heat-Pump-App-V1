@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { useApiClient } from "../../app/contexts";
+import { useApiClient, useCurrentUserState } from "../../app/contexts";
 import { Page } from "../../components";
 import { formatRelative } from "../../utils/format";
 import type { DeviceListItem, DeviceListResponse } from "../../types/api";
 
-interface ListState  {
+interface ListState {
   items: DeviceListItem[];
   cursor: string | null;
   loading: boolean;
   error: boolean;
-};
+}
 
 const INITIAL_STATE: ListState = {
   items: [],
@@ -21,18 +21,37 @@ const INITIAL_STATE: ListState = {
 
 export default function DevicesPage() {
   const api = useApiClient();
+  const currentUser = useCurrentUserState();
+  const user = currentUser.user;
+  const isAdmin = useMemo(
+    () => (user?.roles ?? []).some((role) => role.toLowerCase().includes("admin")),
+    [user?.roles],
+  );
+  const [mineOnly, setMineOnly] = useState<boolean>(() => !isAdmin);
   const [state, setState] = useState<ListState>(INITIAL_STATE);
 
+  const scopeMine = isAdmin ? mineOnly : true;
+
   const load = useCallback(
-    async (nextCursor: string | null) => {
-      setState((prev) => ({ ...prev, loading: true, error: false }));
+    async (nextCursor: string | null, reset = false) => {
+      setState((prev) => ({
+        items: reset ? [] : prev.items,
+        cursor: reset ? null : prev.cursor,
+        loading: true,
+        error: false,
+      }));
       try {
-        const query = nextCursor
-          ? `/api/devices?mine=1&limit=25&cursor=${encodeURIComponent(nextCursor)}`
-          : "/api/devices?mine=1&limit=25";
-        const payload = await api.get<DeviceListResponse>(query);
+        const params = new URLSearchParams({
+          limit: "25",
+          mine: scopeMine ? "1" : "0",
+        });
+        if (nextCursor) {
+          params.set("cursor", nextCursor);
+        }
+        const payload = await api.get<DeviceListResponse>(`/api/devices?${params.toString()}`);
+        const items = payload.items ?? [];
         setState((prev) => ({
-          items: nextCursor ? prev.items.concat(payload.items ?? []) : payload.items ?? [],
+          items: nextCursor && !reset ? prev.items.concat(items) : items,
           cursor: payload.next ?? null,
           loading: false,
           error: false,
@@ -41,17 +60,38 @@ export default function DevicesPage() {
         setState((prev) => ({ ...prev, loading: false, error: true }));
       }
     },
-    [api],
+    [api, scopeMine],
   );
 
   useEffect(() => {
-    void load(null);
+    void load(null, true);
   }, [load]);
 
   const { items, cursor, loading, error } = state;
 
+  const actions = isAdmin ? (
+    <div className="tabs" role="group" aria-label="Device scope filter">
+      <button
+        type="button"
+        className={`btn ghost${scopeMine ? " active" : ""}`}
+        aria-pressed={scopeMine}
+        onClick={() => setMineOnly(true)}
+      >
+        Assigned
+      </button>
+      <button
+        type="button"
+        className={`btn ghost${!scopeMine ? " active" : ""}`}
+        aria-pressed={!scopeMine}
+        onClick={() => setMineOnly(false)}
+      >
+        All devices
+      </button>
+    </div>
+  ) : null;
+
   return (
-    <Page title="Devices">
+    <Page title="Devices" actions={actions}>
       <div className="card">
         <div className="card-header">
           <div className="card-title">Devices in scope</div>
@@ -77,7 +117,7 @@ export default function DevicesPage() {
                         {device.device_id}
                       </a>
                     </td>
-                    <td>{device.site ?? "—"}</td>
+                    <td>{device.site ?? "-"}</td>
                     <td>
                       <span
                         className={`status-dot${device.online ? " ok" : ""}`}
@@ -85,7 +125,7 @@ export default function DevicesPage() {
                       />
                     </td>
                     <td>{formatRelative(device.last_seen_at)}</td>
-                    <td>{device.profile_id ?? "—"}</td>
+                    <td>{device.profile_id ?? "-"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -113,4 +153,3 @@ export default function DevicesPage() {
     </Page>
   );
 }
-

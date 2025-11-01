@@ -71,7 +71,7 @@ export async function handleListDevices(req: Request, env: Env) {
     return validationErrorResponse(paramsResult.error);
   }
   const { mine: mineParam, limit = 50, cursor } = paramsResult.data;
-  const mine = mineParam ?? !isAdmin;
+  const mine = isAdmin ? mineParam ?? false : true;
   const rawCursor = cursor ?? null;
   let cursorPhase: "ts" | "null" | null = null;
   let cursorTs: string | null = null;

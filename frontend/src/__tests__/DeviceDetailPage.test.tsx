@@ -1,33 +1,14 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+﻿import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { ReactElement } from "react";
 
-import { ApiClientContext } from "../app/contexts";
 import DeviceDetailPage from "../pages/device-detail/DeviceDetailPage";
 import type { ApiClient } from "../services/api-client";
-import { createApiClientMock, mockApiGet, mockApiPost } from "./testUtils";
+import { createApiClientMock, mockApiGet, mockApiPost, renderWithApi } from "./testUtils";
 import type {
   DeviceListResponse,
   TelemetryLatestBatchResponse,
   TelemetrySeriesResponse,
 } from "../types/api";
-
-function renderWithProviders(
-  ui: ReactElement,
-  apiClient: ApiClient,
-  initialPath: string,
-): ReturnType<typeof render> {
-  return render(
-    <MemoryRouter initialEntries={[initialPath]}>
-      <ApiClientContext.Provider value={apiClient}>
-        <Routes>
-          <Route path="/app/device" element={ui} />
-        </Routes>
-      </ApiClientContext.Provider>
-    </MemoryRouter>,
-  );
-}
 
 describe("DeviceDetailPage telemetry integration", () => {
   const deviceList: DeviceListResponse = {
@@ -124,7 +105,7 @@ describe("DeviceDetailPage telemetry integration", () => {
       post: mockApiPost(postMock),
     });
 
-    renderWithProviders(<DeviceDetailPage />, apiClient, "/app/device?device=token-1001");
+    renderWithApi(<DeviceDetailPage />, apiClient, "/app/device?device=token-1001");
 
     await screen.findByText("Cape Town Plant");
     await waitFor(() => expect(postMock).toHaveBeenCalled());
@@ -139,6 +120,11 @@ describe("DeviceDetailPage telemetry integration", () => {
       return typeof path === "string" && path.includes("device=token-1001");
     });
     expect(hasSeriesCall).toBe(true);
+    const devicesCall = getMock.mock.calls.find((call) => {
+      const [path] = call;
+      return typeof path === "string" && path.startsWith("/api/devices");
+    });
+    expect(devicesCall?.[0]).toContain("mine=0");
     expect(screen.getByText(/Latest 4\.4 kW/)).toBeInTheDocument();
 
     const table = screen.getByRole("table");
@@ -162,11 +148,19 @@ describe("DeviceDetailPage telemetry integration", () => {
       post: mockApiPost(postMock),
     });
 
-    renderWithProviders(<DeviceDetailPage />, apiClient, "/app/device?device=token-1001");
+    renderWithApi(<DeviceDetailPage />, apiClient, "/app/device?device=token-1001");
 
     await expect(screen.findByText("Unable to load device data")).resolves.toBeInTheDocument();
+    const devicesCall = getMock.mock.calls.find((call) => {
+      const [path] = call;
+      return typeof path === "string" && path.startsWith("/api/devices");
+    });
+    expect(devicesCall?.[0]).toContain("mine=0");
   });
 });
+
+
+
 
 
 

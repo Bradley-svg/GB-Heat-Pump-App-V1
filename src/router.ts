@@ -12,6 +12,7 @@ import { handleHeartbeat, handleIngest } from "./routes/ingest";
 import { handleMe } from "./routes/me";
 import { handleCommissioning } from "./routes/commissioning";
 import { handleAdminOverview } from "./routes/admin";
+import { handleOpsOverview } from "./routes/ops";
 import { handleHealth } from "./routes/health";
 import { handleMetrics } from "./routes/metrics";
 import {
@@ -63,6 +64,7 @@ router
   .post("/api/telemetry/latest-batch", (req, env) => handleTelemetryLatestBatch(req, env))
   .get("/api/telemetry/series", (req, env) => handleTelemetrySeries(req, env))
   .get("/api/admin/overview", (req, env) => handleAdminOverview(req, env))
+  .get("/api/ops/overview", (req, env) => handleOpsOverview(req, env))
   .get("/api/archive/offline", (req, env) => handleArchive(req, env))
   .get("/api/audit/logs", (req, env) => handleListAuditTrail(req, env))
   .post("/api/audit/logs", (req, env) => handleCreateAuditEntry(req, env))

@@ -37,13 +37,13 @@ function createMockEnv(overrides?: {
     DB: {
       prepare,
     } as any,
-    ACCESS_JWKS_URL: "",
-    ACCESS_AUD: "",
+    ACCESS_JWKS_URL: "https://access.test/.well-known/jwks.json",
+    ACCESS_AUD: "test-audience",
     APP_BASE_URL: "",
     RETURN_DEFAULT: "",
     HEARTBEAT_INTERVAL_SECS: "30",
     OFFLINE_MULTIPLIER: "6",
-    CURSOR_SECRET: "",
+    CURSOR_SECRET: "integration-secret-metrics",
   };
 
   return { env, prepare, deviceRow, opsRows };
