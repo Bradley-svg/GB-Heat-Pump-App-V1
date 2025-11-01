@@ -30,16 +30,41 @@ export class EnvValidationError extends Error {
   }
 }
 
+const HTTP_SCHEMES = new Set(["http:", "https:"]);
+const ABSOLUTE_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
+
+function isHttpUrl(candidate: string): boolean {
+  try {
+    const parsed = new URL(candidate);
+    return HTTP_SCHEMES.has(parsed.protocol);
+  } catch {
+    return false;
+  }
+}
+
+function isSafeRelativePath(candidate: string): boolean {
+  return candidate.startsWith("/") && !candidate.startsWith("//");
+}
+
 const EnvSchema = z
   .object({
     ACCESS_JWKS_URL: z
       .string()
-      .trim()
-      .url({ message: "ACCESS_JWKS_URL must be a valid URL" }),
+      .min(1, "ACCESS_JWKS_URL must be set")
+      .refine((value) => isHttpUrl(value.trim()), {
+        message: "ACCESS_JWKS_URL must be an http(s) URL",
+      }),
     ACCESS_AUD: z
       .string()
       .trim()
       .min(1, "ACCESS_AUD must be set"),
+    APP_BASE_URL: z
+      .string()
+      .min(1, "APP_BASE_URL must be set")
+      .refine((value) => isHttpUrl(value.trim()), {
+        message: "APP_BASE_URL must be an absolute http(s) URL",
+      }),
+    RETURN_DEFAULT: z.string().min(1, "RETURN_DEFAULT must be set"),
     CURSOR_SECRET: z
       .string()
       .trim()
@@ -58,6 +83,65 @@ const EnvSchema = z
         code: z.ZodIssueCode.custom,
         message: "DB binding must be configured with a D1 database",
       });
+    }
+
+    const appBase = typeof value.APP_BASE_URL === "string" ? value.APP_BASE_URL.trim() : "";
+    if (!appBase || !isHttpUrl(appBase)) {
+      ctx.addIssue({
+        path: ["APP_BASE_URL"],
+        code: z.ZodIssueCode.custom,
+        message: "APP_BASE_URL must be an absolute http(s) URL",
+      });
+    }
+
+    const returnDefault = typeof value.RETURN_DEFAULT === "string" ? value.RETURN_DEFAULT.trim() : "";
+    if (!returnDefault) {
+      ctx.addIssue({
+        path: ["RETURN_DEFAULT"],
+        code: z.ZodIssueCode.custom,
+        message: "RETURN_DEFAULT must be set",
+      });
+    } else if (!isSafeRelativePath(returnDefault) && !isHttpUrl(returnDefault)) {
+      ctx.addIssue({
+        path: ["RETURN_DEFAULT"],
+        code: z.ZodIssueCode.custom,
+        message: "RETURN_DEFAULT must be a safe relative path or an absolute http(s) URL",
+      });
+    }
+
+    const appApiBase = typeof value.APP_API_BASE === "string" ? value.APP_API_BASE.trim() : "";
+    if (appApiBase && ABSOLUTE_SCHEME_PATTERN.test(appApiBase) && !isHttpUrl(appApiBase)) {
+      ctx.addIssue({
+        path: ["APP_API_BASE"],
+        code: z.ZodIssueCode.custom,
+        message: "APP_API_BASE must use http(s) scheme when absolute",
+      });
+    }
+
+    const appAssetBase = typeof value.APP_ASSET_BASE === "string" ? value.APP_ASSET_BASE.trim() : "";
+    if (appAssetBase) {
+      if (appAssetBase.startsWith("//")) {
+        // protocol-relative URLs are acceptable
+        // ensure host portion exists by attempting to parse with https:// prefix
+        try {
+          const parsed = new URL(`https:${appAssetBase}`);
+          if (!parsed.host) {
+            throw new Error("missing host");
+          }
+        } catch {
+          ctx.addIssue({
+            path: ["APP_ASSET_BASE"],
+            code: z.ZodIssueCode.custom,
+            message: "APP_ASSET_BASE protocol-relative URLs must include a host",
+          });
+        }
+      } else if (ABSOLUTE_SCHEME_PATTERN.test(appAssetBase) && !isHttpUrl(appAssetBase)) {
+        ctx.addIssue({
+          path: ["APP_ASSET_BASE"],
+          code: z.ZodIssueCode.custom,
+          message: "APP_ASSET_BASE must use http(s) scheme when absolute",
+        });
+      }
     }
   });
 

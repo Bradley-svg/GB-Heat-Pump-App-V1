@@ -24,8 +24,13 @@ function createMockEnv(overrides?: {
     }
 
     if (sql.includes("FROM ops_metrics")) {
+      const all = vi.fn().mockResolvedValue({ results: opsRows });
+      const run = vi.fn().mockResolvedValue({});
+      const bind = vi.fn().mockReturnValue({ all, run });
       return {
-        all: vi.fn().mockResolvedValue({ results: opsRows }),
+        all,
+        bind,
+        run,
         first: vi.fn(),
       };
     }
@@ -87,6 +92,10 @@ describe("handleMetrics", () => {
     });
     expect(body.thresholds.devices.offline_ratio.warn).toBeGreaterThan(0);
     expect(typeof body.generated_at).toBe("string");
+    expect(body.ops_window).toMatchObject({
+      start: expect.any(String),
+      days: expect.any(Number),
+    });
   });
 
   it("returns Prometheus metrics text by default", async () => {

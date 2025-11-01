@@ -61,6 +61,10 @@ describe("OpsPage", () => {
         lookup: "token-1001",
       },
     ],
+    ops_window: {
+      start: "2024-09-10T10:00:00.000Z",
+      days: 30,
+    },
   };
 
   it("renders operations metrics when the API responds", async () => {
@@ -81,6 +85,7 @@ describe("OpsPage", () => {
     expect(screen.getByText(/Slow routes/i)).toBeInTheDocument();
     expect(screen.getByText(/Server errors/i)).toBeInTheDocument();
     expect(getMock).toHaveBeenCalledWith("/api/ops/overview", expect.anything());
+    expect(screen.getByText(/Window: last 30 days/i)).toBeInTheDocument();
   });
 
   it("shows an error message when the API call fails", async () => {
@@ -93,5 +98,28 @@ describe("OpsPage", () => {
     await waitFor(() => {
       expect(screen.getByText(/Unable to load operations metrics/i)).toBeInTheDocument();
     });
+  });
+
+  it("schedules periodic refreshes and reuses the API client", async () => {
+    const intervalSpy = vi.spyOn(global, "setInterval");
+    const getMock = vi.fn().mockResolvedValue(sampleResponse);
+    const api = createApiClientMock({ get: getMock });
+
+    try {
+      renderWithApi(<OpsPage />, api);
+
+      expect(await screen.findByText(/Requests observed/i)).toBeInTheDocument();
+      expect(intervalSpy).toHaveBeenCalled();
+      const [callback, delay] = intervalSpy.mock.calls[0] as [() => void, number];
+      expect(delay).toBe(60_000);
+
+      callback();
+
+      await waitFor(() => {
+        expect(getMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+      });
+    } finally {
+      intervalSpy.mockRestore();
+    }
   });
 });

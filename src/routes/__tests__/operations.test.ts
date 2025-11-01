@@ -7,12 +7,14 @@ import { D1Database, D1DatabaseAPI } from "@miniflare/d1";
 
 import type { Env, User } from "../../env";
 import * as accessModule from "../../lib/access";
+import * as deviceModule from "../../lib/device";
 import { sealCursorId } from "../../lib/cursor";
 import { handleListAlertRecords, handleCreateAlertRecord } from "../alerts";
 import { handleListCommissioningRuns, handleCreateCommissioningRun } from "../commissioning-runs";
 import { handleListAuditTrail, handleCreateAuditEntry } from "../audit";
 import { handleListMqttMappings, handleCreateMqttMapping } from "../mqtt";
 import { handleOpsOverview } from "../ops";
+import { OPS_METRICS_WINDOW_DAYS } from "../../lib/ops-metrics";
 
 const requireAccessUserMock = vi.spyOn(accessModule, "requireAccessUser");
 
@@ -114,7 +116,39 @@ describe("handleOpsOverview", () => {
       expect(Array.isArray(body.ops)).toBe(true);
       expect(Array.isArray(body.recent)).toBe(true);
       expect(body.recent.length).toBeLessThanOrEqual(5);
+      expect(body.ops_window).toMatchObject({
+        start: expect.any(String),
+        days: OPS_METRICS_WINDOW_DAYS,
+      });
     } finally {
+      sqlite.close();
+    }
+  });
+
+  it("logs and skips lookup failures for individual recent rows", async () => {
+    const { env, sqlite } = createTestEnv();
+    requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
+    const nowIso = new Date().toISOString();
+    await env.DB
+      .prepare(
+        `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id) VALUES (?1, ?2, ?3, ?4, ?5)`,
+      )
+      .bind(nowIso, "/api/failure-case", 500, 1200, "dev-1001")
+      .run();
+
+    const buildDeviceLookupSpy = vi
+      .spyOn(deviceModule, "buildDeviceLookup")
+      .mockRejectedValue(new Error("lookup failed"));
+
+    try {
+      const res = await handleOpsOverview(new Request("https://example.com/api/ops/overview?limit=5"), env);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as any;
+      expect(Array.isArray(body.recent)).toBe(true);
+      expect(body.recent.length).toBe(0);
+      expect(body.ops_summary?.total_requests).toBeGreaterThanOrEqual(1);
+    } finally {
+      buildDeviceLookupSpy.mockRestore();
       sqlite.close();
     }
   });

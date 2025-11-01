@@ -6,8 +6,14 @@ import { andWhere, nowISO } from "../utils";
 import { AdminOverviewQuerySchema } from "../schemas/admin";
 import { validationErrorResponse } from "../utils/validation";
 import { loggerForRequest } from "../utils/logging";
+import {
+  OPS_METRICS_WINDOW_DAYS,
+  opsMetricsWindowStart,
+  pruneOpsMetrics,
+} from "../lib/ops-metrics";
 
 export async function handleAdminOverview(req: Request, env: Env) {
+  const log = loggerForRequest(req, { route: "/api/admin/overview" });
   const user = await requireAccessUser(req, env);
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
 
@@ -20,6 +26,10 @@ export async function handleAdminOverview(req: Request, env: Env) {
     return validationErrorResponse(paramsResult.error);
   }
   const { limit } = paramsResult.data;
+
+  const now = Date.now();
+  const windowStart = opsMetricsWindowStart(now);
+  await pruneOpsMetrics(env, now);
 
   let tenants;
   if (scope.isAdmin) {
@@ -64,9 +74,11 @@ export async function handleAdminOverview(req: Request, env: Env) {
       .prepare(
         `SELECT ts, route, status_code, duration_ms, device_id
            FROM ops_metrics
+          WHERE ts >= ?
           ORDER BY ts DESC
-          LIMIT ${limit}`,
+          LIMIT ?`,
       )
+      .bind(windowStart, limit)
       .all<{
         ts: string;
         route: string;
@@ -77,7 +89,8 @@ export async function handleAdminOverview(req: Request, env: Env) {
   } else if (scope.empty) {
     opsRows = { results: [] as any[] };
   } else {
-    const where = andWhere("", scope.clause.replace(/\bd\./g, "devices."));
+    const tenantClause = scope.clause.replace(/\bd\./g, "devices.");
+    const where = andWhere("WHERE o.ts >= ?", tenantClause);
     opsRows = await env.DB
       .prepare(
         `SELECT o.ts, o.route, o.status_code, o.duration_ms, o.device_id
@@ -85,9 +98,9 @@ export async function handleAdminOverview(req: Request, env: Env) {
            JOIN devices ON devices.device_id = o.device_id
            ${where}
           ORDER BY o.ts DESC
-          LIMIT ${limit}`,
+          LIMIT ?`,
       )
-      .bind(...scope.bind)
+      .bind(windowStart, ...scope.bind, limit)
       .all<{
         ts: string;
         route: string;
@@ -103,15 +116,12 @@ export async function handleAdminOverview(req: Request, env: Env) {
     let lookupToken: string | null = null;
     let outwardId: string | null = null;
     if (deviceId) {
+      outwardId = presentDeviceId(deviceId, scope.isAdmin);
       try {
         lookupToken = await buildDeviceLookup(deviceId, env, scope.isAdmin);
-        outwardId = presentDeviceId(deviceId, scope.isAdmin);
       } catch (err) {
-        loggerForRequest(req, { route: "/api/admin/overview", device_id: deviceId }).error(
-          "admin.lookup_failed",
-          { error: err },
-        );
-        return json({ error: "Server error" }, { status: 500 });
+        log.error("admin.lookup_failed", { device_id: deviceId, error: err });
+        continue;
       }
     }
 
@@ -142,5 +152,9 @@ export async function handleAdminOverview(req: Request, env: Env) {
       })) ?? [],
     ops,
     ops_summary: statusCounts,
+    ops_window: {
+      start: windowStart,
+      days: OPS_METRICS_WINDOW_DAYS,
+    },
   });
 }

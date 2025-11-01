@@ -37,6 +37,10 @@ describe("AdminPage", () => {
         200: 3,
         500: 1,
       },
+      ops_window: {
+        start: "2024-12-03T10:00:00.000Z",
+        days: 30,
+      },
     };
 
     const getMock = vi.fn<ApiClient["get"]>().mockResolvedValue(response);
@@ -64,6 +68,7 @@ describe("AdminPage", () => {
     expect(within(opsRows[2]).getByText("/api/ingest/:profile")).toBeInTheDocument();
 
     expect(screen.getByText(/Status mix: 200: 3/)).toBeInTheDocument();
+    expect(screen.getByText(/Window: last 30 days/i)).toBeInTheDocument();
   });
 
   it("shows an error callout when the admin overview request fails", async () => {

@@ -231,6 +231,7 @@ export interface AdminOverviewResponse {
   tenants: AdminTenantRow[];
   ops: AdminOpsRow[];
   ops_summary: Record<string, number>;
+  ops_window: OpsWindowMeta;
 }
 
 export interface AdminTenantRow {
@@ -261,6 +262,7 @@ export interface OpsOverviewResponse {
   ops_summary: OpsSummary;
   thresholds: OpsThresholds | null;
   recent: OpsRecentEvent[];
+  ops_window: OpsWindowMeta;
 }
 
 export interface OpsMetricRow {
@@ -307,6 +309,11 @@ export interface OpsRecentEvent {
   duration_ms: number;
   device_id: string | null;
   lookup: string | null;
+}
+
+export interface OpsWindowMeta {
+  start: string;
+  days: number;
 }
 
 export interface ArchiveResponse {

@@ -45,6 +45,10 @@ export default function AdminPage() {
   }
 
   const statusMix = getStatusMix(data.ops_summary);
+  const windowDescriptor =
+    data.ops_window ?
+      `Window: last ${formatNumber(data.ops_window.days, 0)} days (since ${formatDate(data.ops_window.start)})` :
+      null;
 
   return (
     <Page title="Admin">
@@ -120,9 +124,8 @@ export default function AdminPage() {
         ) : (
           <div className="empty">No recent operations in scope</div>
         )}
-        <div className="subdued mt-06">
-          Status mix: {statusMix}
-        </div>
+        <div className="subdued mt-06">Status mix: {statusMix}</div>
+        {windowDescriptor ? <div className="subdued">{windowDescriptor}</div> : null}
       </div>
     </Page>
   );

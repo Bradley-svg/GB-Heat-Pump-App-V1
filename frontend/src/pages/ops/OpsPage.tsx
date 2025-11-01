@@ -13,20 +13,42 @@ export default function OpsPage() {
   const [data, setData] = useState<OpsOverviewResponse | null>(null);
 
   useEffect(() => {
-    const controller = new AbortController();
-    setState("loading");
-    api
-      .get<OpsOverviewResponse>("/api/ops/overview", { signal: controller.signal })
-      .then((payload) => {
-        setData(payload);
-        setState("ready");
-      })
-      .catch((error) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        setState("error");
-      });
+    let disposed = false;
+    let controller: AbortController | null = null;
+    let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
-    return () => controller.abort();
+    const load = (options?: { silent?: boolean }) => {
+      controller?.abort();
+      controller = new AbortController();
+      if (!options?.silent) {
+        setState("loading");
+      }
+      api
+        .get<OpsOverviewResponse>("/api/ops/overview", { signal: controller.signal })
+        .then((payload) => {
+          if (disposed) return;
+          setData(payload);
+          setState("ready");
+        })
+        .catch((error) => {
+          if (disposed) return;
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          if (!options?.silent) {
+            setState("error");
+          }
+        });
+    };
+
+    load();
+    refreshTimer = setInterval(() => load({ silent: true }), 60_000);
+
+    return () => {
+      disposed = true;
+      controller?.abort();
+      if (refreshTimer) {
+        clearInterval(refreshTimer);
+      }
+    };
   }, [api]);
 
   if (state === "loading") {
@@ -45,10 +67,14 @@ export default function OpsPage() {
     );
   }
 
-  const { ops_summary: summary, devices, thresholds, ops, recent } = data;
+  const { ops_summary: summary, devices, thresholds, ops, recent, ops_window: windowMeta } = data;
   const warnThreshold = thresholds?.error_rate?.warn ?? null;
   const clientWarnThreshold = thresholds?.client_error_rate?.warn ?? null;
   const slowWarnThreshold = thresholds?.avg_duration_ms?.warn ?? null;
+  const windowDescriptor =
+    windowMeta ?
+      `Window: last ${formatNumber(windowMeta.days, 0)} days (since ${formatDate(windowMeta.start)})` :
+      null;
 
   return (
     <Page title="Operations">
@@ -56,7 +82,10 @@ export default function OpsPage() {
         <div className="card tight">
           <div className="muted">Requests observed</div>
           <div className="large-number">{formatNumber(summary.total_requests, 0)}</div>
-          <div className="subdued">Generated {formatDate(data.generated_at)}</div>
+          <div className="subdued">
+            Generated {formatDate(data.generated_at)}
+            {windowDescriptor ? ` \u2022 ${windowDescriptor}` : null}
+          </div>
         </div>
         <div className="card tight">
           <div className="muted">Server error rate</div>
