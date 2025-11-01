@@ -3,6 +3,7 @@ import type { SecurityHeaderOptions } from "./responses";
 import { resolveAppConfig } from "../app-config";
 
 const SECURITY_OPTION_KEYS: Array<keyof SecurityHeaderOptions> = [
+  "scriptSrc",
   "scriptHashes",
   "scriptNonces",
   "styleHashes",
@@ -69,6 +70,7 @@ export function baseSecurityHeaderOptions(env: Env): SecurityHeaderOptions {
   }
 
   if (assetOrigin) {
+    base.scriptSrc = [assetOrigin];
     base.imgSrc = [assetOrigin];
     base.styleSrc = [assetOrigin];
     base.fontSrc = [assetOrigin];

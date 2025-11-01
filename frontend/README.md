@@ -58,6 +58,7 @@ Behaviour:
 
 - HTML is uploaded with `cache-control: no-store`.
 - Every asset under `dist/client/assets/` (JS, CSS, fonts, images, and maps) is uploaded with `cache-control: public, max-age=31536000, immutable`.
+- Objects are written to the `app/assets/` prefix in R2, matching the Worker routes and expected CDN `APP_ASSET_BASE` path.
 - Uses the `APP_STATIC` binding and assumes `dist/client/` has been built.
 
 Set `WRANGLER_BIN` if Wrangler is not on your `PATH`.

@@ -11,10 +11,6 @@ const clientDist = path.join(repoRoot, "dist", "client");
 const assetDir = path.join(clientDist, "assets");
 const wranglerConfig = path.join(repoRoot, "wrangler.toml");
 
-const manifestPath = path.join(repoRoot, "src", "assets-manifest.json");
-const assetManifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-const workerAssetNames = new Set(Object.keys(assetManifest ?? {}));
-
 const LONG_CACHE = "public,max-age=31536000,immutable";
 const CONTENT_TYPES = new Map([
   [".js", "application/javascript"],
@@ -72,14 +68,6 @@ function collectUploads() {
       contentType,
       cacheControl: LONG_CACHE,
     });
-    if (workerAssetNames.has(assetName)) {
-      uploads.push({
-        key: `assets/${assetName}`,
-        file: filePath,
-        contentType,
-        cacheControl: LONG_CACHE,
-      });
-    }
   }
 
   uploads.sort((a, b) => a.key.localeCompare(b.key));

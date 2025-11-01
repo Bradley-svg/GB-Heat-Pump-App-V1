@@ -8,7 +8,7 @@ export interface ResolvedAppConfig {
 
 export const DEFAULT_APP_CONFIG: Pick<ResolvedAppConfig, "apiBase" | "assetBase"> = {
   apiBase: "",
-  assetBase: "/assets/",
+  assetBase: "/app/assets/",
 };
 
 const JSON_HTML_SAFE_CHARS = /[<>&\u2028\u2029]/g;

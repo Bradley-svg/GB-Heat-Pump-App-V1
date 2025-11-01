@@ -25,7 +25,7 @@ describe("App config serialization safeguards", () => {
   it("falls back to default bases when overrides are absent", () => {
     const config = resolveAppConfig(baseEnv);
     expect(config.apiBase).toBe("");
-    expect(config.assetBase).toBe("/assets/");
+    expect(config.assetBase).toBe("/app/assets/");
     expect(config.returnDefault).toBe("https://return.test/");
   });
 

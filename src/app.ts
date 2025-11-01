@@ -45,7 +45,7 @@ function ensureTrailingSlash(value: string) {
 function rewriteStaticAssetBase(html: string, assetBase: string) {
   if (!assetBase) return html;
   const normalized = ensureTrailingSlash(assetBase);
-  return html.replace(/(href|src)=(["'])\/assets\/([^"']+)/g, (_match, attr, quote, suffix) => {
+  return html.replace(/(href|src)=(["'])\/(?:app\/)?assets\/([^"']+)/g, (_match, attr, quote, suffix) => {
     return `${attr}=${quote}${normalized}${suffix}`;
   });
 }

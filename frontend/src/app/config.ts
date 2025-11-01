@@ -6,7 +6,7 @@ export interface AppConfig {
 
 const DEFAULT_APP_CONFIG: AppConfig = {
   apiBase: "",
-  assetBase: "/assets/",
+  assetBase: "/app/assets/",
   returnDefault: "/",
 };
 

@@ -3,6 +3,7 @@ export const HTML_CT = "text/html;charset=utf-8";
 export const SVG_CT = "image/svg+xml;charset=utf-8";
 
 export interface SecurityHeaderOptions {
+  scriptSrc?: string[];
   scriptHashes?: string[];
   scriptNonces?: string[];
   styleHashes?: string[];
@@ -24,6 +25,7 @@ function appendUnique(target: string[], values?: string[]) {
 
 export function withSecurityHeaders(res: Response, options: SecurityHeaderOptions = {}) {
   const scriptSrc = ["'self'"];
+  appendUnique(scriptSrc, options.scriptSrc);
   appendUnique(scriptSrc, options.scriptHashes);
   appendUnique(scriptSrc, options.scriptNonces);
 
