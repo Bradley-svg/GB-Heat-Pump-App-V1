@@ -49,3 +49,8 @@ binding = "APP_STATIC"
 bucket_name = "greenbro-app-static"
 # optional for local dev:
 # preview_bucket_name = "greenbro-app-static-dev"
+
+[env.local]
+  [env.local.vars]
+  # Enable the Access shim for local Miniflare sessions (adjust as needed).
+  DEV_ALLOW_USER = '{"email":"local-admin@example.com","roles":["admin"],"clientIds":["profile-west"]}'
