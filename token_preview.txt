@@ -1,0 +1,1 @@
+Installed cloudflared to C:\Users\bradl.CRABNEBULA\AppData\Roaming\npm\node_modules\cloudflared\bin\cloudflared.exe
