@@ -10,3 +10,4 @@ export * from "./metrics";
 export * from "./commissioning";
 export * from "./audit";
 export * from "./mqtt";
+export * from "./mqtt-webhook";

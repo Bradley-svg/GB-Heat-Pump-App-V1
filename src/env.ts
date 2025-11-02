@@ -1,3 +1,4 @@
+import type { Queue } from "@cloudflare/workers-types";
 import { z } from "zod";
 
 export interface Env {
@@ -20,6 +21,7 @@ export interface Env {
   INGEST_ALLOWED_ORIGINS?: string;
   INGEST_RATE_LIMIT_PER_MIN?: string;
   INGEST_SIGNATURE_TOLERANCE_SECS?: string;
+  MQTT_WEBHOOK_QUEUE?: Queue;
 }
 
 export type User = {

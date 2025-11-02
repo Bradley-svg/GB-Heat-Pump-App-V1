@@ -15,6 +15,33 @@ export interface MqttMappingRecord {
   updated_at: string;
 }
 
+export interface MqttWebhookMessageRecord {
+  message_id: string;
+  topic: string;
+  payload: unknown;
+  qos: number;
+  retain: boolean;
+  properties: Record<string, unknown> | null;
+  mapping_id: string | null;
+  profile_id: string | null;
+  actor_email: string | null;
+  received_at: string;
+  inserted_at: string;
+}
+
+export interface StoreMqttWebhookMessageInput {
+  topic: string;
+  payload: unknown;
+  qos?: number;
+  retain?: boolean;
+  properties?: Record<string, unknown> | null;
+  mappingId?: string | null;
+  profileId?: string | null;
+  actorEmail?: string | null;
+  receivedAt?: string;
+  messageId?: string;
+}
+
 export interface CreateMqttMappingParams {
   mapping_id?: string;
   device_id?: string | null;
@@ -87,6 +114,20 @@ interface MqttRow {
   updated_at: string;
 }
 
+interface MqttWebhookRow {
+  message_id: string;
+  topic: string;
+  payload_json: string;
+  qos: number;
+  retain: number;
+  properties_json: string | null;
+  mapping_id: string | null;
+  profile_id: string | null;
+  actor_email: string | null;
+  received_at: string;
+  inserted_at: string;
+}
+
 function mapMqttRow(row: MqttRow): MqttMappingRecord {
   let transform: Record<string, unknown> | null = null;
   if (row.transform_json) {
@@ -112,6 +153,119 @@ function mapMqttRow(row: MqttRow): MqttMappingRecord {
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
+}
+
+function mapWebhookRow(row: MqttWebhookRow): MqttWebhookMessageRecord {
+  let payload: unknown = null;
+  if (row.payload_json) {
+    try {
+      payload = JSON.parse(row.payload_json);
+    } catch {
+      payload = row.payload_json;
+    }
+  }
+
+  let properties: Record<string, unknown> | null = null;
+  if (row.properties_json) {
+    try {
+      const parsed = JSON.parse(row.properties_json);
+      if (parsed && typeof parsed === "object") {
+        properties = parsed as Record<string, unknown>;
+      }
+    } catch {
+      properties = null;
+    }
+  }
+
+  return {
+    message_id: row.message_id,
+    topic: row.topic,
+    payload,
+    qos: Number.isFinite(row.qos) ? Number(row.qos) : 0,
+    retain: row.retain === 1,
+    properties,
+    mapping_id: row.mapping_id,
+    profile_id: row.profile_id,
+    actor_email: row.actor_email ?? null,
+    received_at: row.received_at,
+    inserted_at: row.inserted_at,
+  };
+}
+
+export async function storeMqttWebhookMessage(
+  env: Env,
+  input: StoreMqttWebhookMessageInput,
+): Promise<MqttWebhookMessageRecord> {
+  const messageId =
+    input.messageId ??
+    (typeof crypto?.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `mqtt-msg-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+
+  const qos = Number.isFinite(input.qos) ? Math.max(0, Math.min(2, Math.trunc(input.qos!))) : 0;
+  const retain = input.retain ? 1 : 0;
+  const insertedAt = nowISO();
+  const receivedAt = input.receivedAt ?? insertedAt;
+
+  let payloadJson = "null";
+  try {
+    payloadJson = JSON.stringify(input.payload ?? null);
+  } catch {
+    payloadJson = JSON.stringify(String(input.payload));
+  }
+
+  let propertiesJson: string | null = null;
+  if (input.properties) {
+    try {
+      propertiesJson = JSON.stringify(input.properties);
+    } catch {
+      propertiesJson = null;
+    }
+  }
+
+  await env.DB.prepare(
+    `INSERT INTO mqtt_webhook_messages (
+        message_id,
+        topic,
+        payload_json,
+        qos,
+        retain,
+        properties_json,
+        mapping_id,
+        profile_id,
+        actor_email,
+        received_at,
+        inserted_at
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
+  )
+    .bind(
+      messageId,
+      input.topic,
+      payloadJson,
+      qos,
+      retain,
+      propertiesJson,
+      input.mappingId ?? null,
+      input.profileId ?? null,
+      input.actorEmail ?? null,
+      receivedAt,
+      insertedAt,
+    )
+    .run();
+
+  return mapWebhookRow({
+    message_id: messageId,
+    topic: input.topic,
+    payload_json: payloadJson,
+    qos,
+    retain,
+    properties_json: propertiesJson,
+    mapping_id: input.mappingId ?? null,
+    profile_id: input.profileId ?? null,
+    actor_email: input.actorEmail ?? null,
+    received_at: receivedAt,
+    inserted_at: insertedAt,
+  });
 }
 
 export async function getMqttMappingById(env: Env, mappingId: string): Promise<MqttMappingRecord | null> {

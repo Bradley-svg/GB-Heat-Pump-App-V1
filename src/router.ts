@@ -26,6 +26,7 @@ import {
   handleListMqttMappings,
   handleUpdateMqttMapping,
 } from "./routes/mqtt";
+import { handleMqttWebhook } from "./routes/mqtt-webhook";
 import { bindRequestLogger, loggerForRequest, releaseRequestLogger } from "./utils/logging";
 import { handleTelemetryLatestBatch, handleTelemetrySeries } from "./routes/telemetry";
 
@@ -75,6 +76,7 @@ router
   .post("/api/audit/logs", (req, env) => handleCreateAuditEntry(req, env))
   .get("/api/mqtt/mappings", (req, env) => handleListMqttMappings(req, env))
   .post("/api/mqtt/mappings", (req, env) => handleCreateMqttMapping(req, env))
+  .post("/api/mqtt-webhook", (req, env) => handleMqttWebhook(req, env))
   .put(
     "/api/mqtt/mappings/:id",
     withParam("id", (req, env, mappingId) => handleUpdateMqttMapping(req, env, mappingId)),
