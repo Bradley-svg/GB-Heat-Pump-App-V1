@@ -16,6 +16,8 @@ const MIGRATION_FILES = [
   "001_init.sql",
   "0002_indexes.sql",
   "0003_operational_entities.sql",
+  "0004_ops_metrics_window.sql",
+  "0005_ops_metrics_rate_limit_index.sql",
   "schema-indexes.sql",
 ];
 
