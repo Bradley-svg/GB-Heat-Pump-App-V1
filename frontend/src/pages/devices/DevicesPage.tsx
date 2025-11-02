@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { useApiClient, useCurrentUserState } from "../../app/contexts";
 import { Page } from "../../components";
@@ -113,9 +114,9 @@ export default function DevicesPage() {
                 {items.map((device) => (
                   <tr key={device.lookup}>
                     <td>
-                      <a className="link" href={`/app/device?device=${encodeURIComponent(device.lookup)}`}>
+                      <Link className="link" to={`/app/device?device=${encodeURIComponent(device.lookup)}`}>
                         {device.device_id}
-                      </a>
+                      </Link>
                     </td>
                     <td>{device.site ?? "-"}</td>
                     <td>

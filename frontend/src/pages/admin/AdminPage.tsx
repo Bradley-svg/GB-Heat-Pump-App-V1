@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { useApiClient } from "../../app/contexts";
 import { Page } from "../../components";
@@ -109,9 +110,9 @@ export default function AdminPage() {
                     <td>{row.duration_ms}</td>
                     <td>
                       {row.device_id ? (
-                        <a className="link" href={`/app/device?device=${encodeURIComponent(row.lookup ?? "")}`}>
+                        <Link className="link" to={`/app/device?device=${encodeURIComponent(row.lookup ?? "")}`}>
                           {row.device_id}
-                        </a>
+                        </Link>
                       ) : (
                         "-"
                       )}

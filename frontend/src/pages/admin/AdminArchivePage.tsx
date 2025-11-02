@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { useApiClient } from "../../app/contexts";
 import { Page } from "../../components";
@@ -62,9 +63,9 @@ export default function AdminArchivePage() {
                 </div>
                 <div className="text-right">
                   <div className="meta">Alerts {row.alerts}</div>
-                  <a href={`/app/device?device=${encodeURIComponent(row.lookup)}`} className="link">
+                  <Link to={`/app/device?device=${encodeURIComponent(row.lookup)}`} className="link">
                     Open
-                  </a>
+                  </Link>
                 </div>
               </div>
             ))}

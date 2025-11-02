@@ -66,6 +66,8 @@ describe("AdminPage", () => {
     expect(opsRows).toHaveLength(3);
     expect(within(opsRows[1]).getByText("/api/telemetry/latest-batch")).toBeInTheDocument();
     expect(within(opsRows[2]).getByText("/api/ingest/:profile")).toBeInTheDocument();
+    const deviceLink = within(opsRows[1]).getByRole("link", { name: "dev-1001" });
+    expect(deviceLink).toHaveAttribute("href", "/app/device?device=token-1001");
 
     expect(screen.getByText(/Status mix: 200: 3/)).toBeInTheDocument();
     expect(screen.getByText(/Window: last 30 days/i)).toBeInTheDocument();
