@@ -3,8 +3,12 @@ import { deriveUserFromClaims, landingFor } from "../rbac";
 import type { Env, User } from "../env";
 
 const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
-const devUserCache = new WeakMap<Env, { raw: string | null; user: User | null }>();
+const devUserCache = new WeakMap<
+  Env,
+  { rawUser: string | null; rawFlag: string | null; user: User | null }
+>();
 const DISABLED_TOKENS = new Set(["0", "false", "off", "no"]);
+const ENABLED_TOKENS = new Set(["1", "true", "on", "yes"]);
 const ALLOWED_ROLES: ReadonlyArray<User["roles"][number]> = ["admin", "client", "contractor"];
 
 export function getJwks(env: Env) {
@@ -17,19 +21,26 @@ export function getJwks(env: Env) {
 
 function resolveDevUser(env: Env): User | null {
   const rawValue = typeof env.DEV_ALLOW_USER === "string" ? env.DEV_ALLOW_USER : null;
+  const rawFlag = typeof env.ALLOW_DEV_ACCESS_SHIM === "string" ? env.ALLOW_DEV_ACCESS_SHIM : null;
   const cached = devUserCache.get(env);
-  if (cached && cached.raw === rawValue) {
+  if (cached && cached.rawUser === rawValue && cached.rawFlag === rawFlag) {
     return cached.user;
   }
 
+  const normalizedFlag = rawFlag?.trim().toLowerCase() ?? "";
+  if (!normalizedFlag || DISABLED_TOKENS.has(normalizedFlag) || !ENABLED_TOKENS.has(normalizedFlag)) {
+    devUserCache.set(env, { rawUser: rawValue, rawFlag, user: null });
+    return null;
+  }
+
   if (!rawValue) {
-    devUserCache.set(env, { raw: null, user: null });
+    devUserCache.set(env, { rawUser: null, rawFlag, user: null });
     return null;
   }
 
   const trimmed = rawValue.trim();
   if (!trimmed || DISABLED_TOKENS.has(trimmed.toLowerCase())) {
-    devUserCache.set(env, { raw: rawValue, user: null });
+    devUserCache.set(env, { rawUser: rawValue, rawFlag, user: null });
     return null;
   }
 
@@ -85,7 +96,7 @@ function resolveDevUser(env: Env): User | null {
   }
 
   const user: User = { email, roles, clientIds };
-  devUserCache.set(env, { raw: rawValue, user });
+  devUserCache.set(env, { rawUser: rawValue, rawFlag, user });
   return user;
 }
 

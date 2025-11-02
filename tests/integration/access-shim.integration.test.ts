@@ -19,6 +19,7 @@ describe("Access dev shim", () => {
   it("returns the mock user when DEV_ALLOW_USER is configured", async () => {
     const { env, dispose } = await createWorkerEnv({
       DEV_ALLOW_USER: '{"email":"shim@example.com","roles":["admin"],"clientIds":["profile-west"]}',
+      ALLOW_DEV_ACCESS_SHIM: "true",
     });
     try {
       const response = await handleMe(new Request("https://example.com/api/me"), env);
@@ -39,6 +40,7 @@ describe("Access dev shim", () => {
   it("still rejects invalid JWTs even when the shim is enabled", async () => {
     const { env, dispose } = await createWorkerEnv({
       DEV_ALLOW_USER: '{"email":"shim@example.com","roles":["admin"]}',
+      ALLOW_DEV_ACCESS_SHIM: "true",
     });
     try {
       const response = await handleMe(

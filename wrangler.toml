@@ -78,4 +78,5 @@ bucket_name = "greenbro-app-static"
 [env.local]
   [env.local.vars]
   # Enable the Access shim for local Miniflare sessions (adjust as needed).
+  ALLOW_DEV_ACCESS_SHIM = "true"
   DEV_ALLOW_USER = '{"email":"local-admin@example.com","roles":["admin"],"clientIds":["profile-west"]}'

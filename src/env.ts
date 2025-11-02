@@ -8,6 +8,7 @@ export interface Env {
   APP_BASE_URL: string;
   RETURN_DEFAULT: string;
   DEV_ALLOW_USER?: string;
+  ALLOW_DEV_ACCESS_SHIM?: string;
   APP_API_BASE?: string;
   APP_ASSET_BASE?: string;
   HEARTBEAT_INTERVAL_SECS?: string;

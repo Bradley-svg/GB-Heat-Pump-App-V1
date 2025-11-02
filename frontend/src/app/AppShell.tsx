@@ -33,6 +33,10 @@ export function AppShell() {
   const user = currentUser.user;
   const normalizedRoles = user.roles.map((role) => role.toLowerCase());
   const isAdmin = normalizedRoles.includes("admin");
+  const landingPath = landingPathFor(user);
+  const unauthorizedRedirect = (
+    <Navigate to={landingPath} replace state={{ unauthorized: true }} />
+  );
 
   return (
     <BrowserRouter
@@ -42,7 +46,7 @@ export function AppShell() {
       <AppLayout user={user}>
         <Suspense fallback={<LoadingScreen message="Loading page..." />}>
           <Routes>
-            <Route index element={<Navigate to={landingPathFor(user)} replace />} />
+            <Route index element={<Navigate to={landingPath} replace />} />
             <Route path="overview" element={<OverviewPage />} />
             <Route path="compact" element={<CompactDashboardPage />} />
             <Route path="devices" element={<DevicesPage />} />
@@ -54,7 +58,7 @@ export function AppShell() {
                 isAdmin ? (
                   <OpsPage />
                 ) : (
-                  <UnauthorizedScreen returnUrl={config.returnDefault} />
+                  unauthorizedRedirect
                 )
               }
             />
@@ -65,7 +69,7 @@ export function AppShell() {
                 isAdmin ? (
                   <AdminPage />
                 ) : (
-                  <UnauthorizedScreen returnUrl={config.returnDefault} />
+                  unauthorizedRedirect
                 )
               }
             />
@@ -75,7 +79,7 @@ export function AppShell() {
                 isAdmin ? (
                   <AdminArchivePage />
                 ) : (
-                  <UnauthorizedScreen returnUrl={config.returnDefault} />
+                  unauthorizedRedirect
                 )
               }
             />
@@ -85,7 +89,7 @@ export function AppShell() {
                 isAdmin ? (
                   <AdminMqttMappingsPage />
                 ) : (
-                  <UnauthorizedScreen returnUrl={config.returnDefault} />
+                  unauthorizedRedirect
                 )
               }
             />

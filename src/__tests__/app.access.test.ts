@@ -35,6 +35,7 @@ describe("app.fetch access enforcement", () => {
   it("serves the SPA when a development user is allowed", async () => {
     const env = createEnv({
       DEV_ALLOW_USER: JSON.stringify({ email: "dev@example.com", roles: ["admin"] }),
+      ALLOW_DEV_ACCESS_SHIM: "true",
     });
     const res = await app.fetch(new Request("https://example.com/app/overview"), env);
 

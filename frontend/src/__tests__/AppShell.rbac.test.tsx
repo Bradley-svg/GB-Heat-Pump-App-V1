@@ -89,7 +89,10 @@ describe("AppShell role gating", () => {
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
 
-    expect(await screen.findByText("Unauthorized")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/app/compact");
+    });
+    expect(screen.queryByText("Unauthorized")).not.toBeInTheDocument();
     expect(opsPageRender).not.toHaveBeenCalled();
   });
 
@@ -100,7 +103,10 @@ describe("AppShell role gating", () => {
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
 
-    expect(await screen.findByText("Unauthorized")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/app/compact");
+    });
+    expect(screen.queryByText("Unauthorized")).not.toBeInTheDocument();
     expect(adminPageRender).not.toHaveBeenCalled();
   });
 
@@ -111,7 +117,10 @@ describe("AppShell role gating", () => {
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
 
-    expect(await screen.findByText("Unauthorized")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/app/compact");
+    });
+    expect(screen.queryByText("Unauthorized")).not.toBeInTheDocument();
     expect(adminArchivePageRender).not.toHaveBeenCalled();
   });
 
@@ -122,7 +131,10 @@ describe("AppShell role gating", () => {
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
 
-    expect(await screen.findByText("Unauthorized")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/app/compact");
+    });
+    expect(screen.queryByText("Unauthorized")).not.toBeInTheDocument();
     expect(adminMqttPageRender).not.toHaveBeenCalled();
   });
 
@@ -133,7 +145,10 @@ describe("AppShell role gating", () => {
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
 
-    expect(await screen.findByText("Unauthorized")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/app/compact");
+    });
+    expect(screen.queryByText("Unauthorized")).not.toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByText("Ops")).not.toBeInTheDocument();
     });
