@@ -10,6 +10,9 @@ This document captures where the system's sensitive values live, how to provisio
 | `ACCESS_AUD` | Cloudflare Access audience tag that the Worker verifies on incoming requests. | Treat as sensitive to avoid leaking internal Access configuration. Rotation requires updating Access policies in Cloudflare. |
 | `ACCESS_JWKS_URL` | JWKS endpoint published by Cloudflare Access that contains signing keys for issued JWTs. | Not strictly secret, but keep private to avoid exposing Access topology. Rotate if Access domain or certificate bundle changes. |
 | `ASSET_SIGNING_SECRET` | HMAC secret for generating signed URLs to the R2-backed asset worker. | Optional: only required when issuing signed `GET`/`HEAD` URLs. Rotation requires updating any producer of signed URLs. |
+| `INGEST_ALLOWED_ORIGINS` | Comma or newline-separated list of browser origins that may call `/api/ingest` and `/api/heartbeat`. | Production firmware expects `https://devices.greenbro.io,https://app.greenbro.co.za`. Update immediately if firmware allowlist changes. |
+| `INGEST_RATE_LIMIT_PER_MIN` | Per-device throttle for ingest + heartbeat endpoints. | Current firmware transmits at up to 120 requests/minute. Set to `120` unless hardware cadence changes. |
+| `INGEST_SIGNATURE_TOLERANCE_SECS` | Acceptable clock skew for signed ingest requests. | Default `300` seconds (5 minutes). Tighten or relax in lockstep with firmware timestamp tolerance. |
 
 The Worker code reads each secret from the runtime `env` object. No secret values should live in `wrangler.toml`, GitHub, or checked-in source files.
 
@@ -22,6 +25,9 @@ wrangler secret put CURSOR_SECRET
 wrangler secret put ACCESS_AUD
 wrangler secret put ACCESS_JWKS_URL
 wrangler secret put ASSET_SIGNING_SECRET    # only if signed R2 URLs are required
+wrangler secret put INGEST_ALLOWED_ORIGINS      # match firmware allowlist
+wrangler secret put INGEST_RATE_LIMIT_PER_MIN   # align with firmware cadence (e.g. 120)
+wrangler secret put INGEST_SIGNATURE_TOLERANCE_SECS   # default 300 seconds
 ```
 
 Recommendations:
@@ -43,6 +49,11 @@ Recommendations:
 
 - Avoid sharing `.dev.vars` files; each developer should source secrets from the password manager or rotate locally as needed.
 
+### Device Key Hygiene
+
+- Persist only the SHA-256 hash of each device's shared secret in `devices.device_key_hash` (see `seeds/dev/seed.sql` for a reference insert statement). The `0008_device_key_hash_constraint.sql` migration enforces 64-character lowercase hex.
+- During firmware pilots we sometimes load placeholder secrets for bench hardware; rotate those with production values before cut-over so rate limiting and signature validation remain reliable.
+- When rotating, stage the new hash via `wrangler d1 execute ... UPDATE devices SET device_key_hash=LOWER(HEX(DIGEST('raw-secret','sha256'))) WHERE device_id='<id>';` and update the downstream firmware bundle concurrently.
 ## Rotation Procedures
 
 Follow the standard five-step rotation checklist for every secret:

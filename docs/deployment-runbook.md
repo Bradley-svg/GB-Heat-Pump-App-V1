@@ -9,7 +9,7 @@ This runbook captures the happy path for rolling out Worker changes, database mi
 | Env (Wrangler `--env`) | Worker script | Primary URL | D1 database (name -> id) | R2 buckets (binding -> name) | Secrets to provision |
 |------------------------|---------------|-------------|--------------------------|-----------------------------|----------------------|
 | default (remote/dev)   | `gb-heat-pump-app-v1` | `https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev` | `GREENBRO_DB` -> `ee7ad98b-3629-4985-bd7d-a60c401953a7` | `GB_BUCKET`->`greenbro-brand`; `APP_STATIC`->`greenbro-app-static` | `ACCESS_AUD`, `ACCESS_JWKS_URL` (`https://bradleyayliffl.cloudflareaccess.com/cdn-cgi/access/certs`), `CURSOR_SECRET`, `ASSET_SIGNING_SECRET` |
-| production             | `gb-heat-pump-app-v1-production` | `https://app.greenbro.co.za` (route; confirm DNS before first deploy) | `GREENBRO_DB` -> `ee7ad98b-3629-4985-bd7d-a60c401953a7` | `GB_BUCKET`->`greenbro-brand`; `APP_STATIC`->`greenbro-app-static` | `ACCESS_AUD`, `ACCESS_JWKS_URL`, `CURSOR_SECRET`, `ASSET_SIGNING_SECRET`, optional `ALLOWED_PREFIXES`, ingestion limits |
+| production             | `gb-heat-pump-app-v1-production` | `https://app.greenbro.co.za` (route; confirm DNS before first deploy) | `GREENBRO_DB` -> `ee7ad98b-3629-4985-bd7d-a60c401953a7` | `GB_BUCKET`->`greenbro-brand`; `APP_STATIC`->`greenbro-app-static` | `ACCESS_AUD`, `ACCESS_JWKS_URL`, `CURSOR_SECRET`, `ASSET_SIGNING_SECRET`, optional `ALLOWED_PREFIXES`, ingestion limits (`INGEST_ALLOWED_ORIGINS`, `INGEST_RATE_LIMIT_PER_MIN=120`, `INGEST_SIGNATURE_TOLERANCE_SECS=300`) |
 
 > `ACCESS_AUD` values are managed in Cloudflare Access and stored only via `wrangler secret put`. Rotate/update them alongside the Access application policies described in `docs/platform-setup-guide.md`.
 
@@ -20,7 +20,7 @@ This runbook captures the happy path for rolling out Worker changes, database mi
 - Confirm the branch is green in **Frontend CI** and **Worker CI**.
 - Review pending migrations: `npm run migrate:list`.
 - Ensure required secrets are set for the target environment (`wrangler secret put ... --env <env>`).
-- Replace any placeholder secrets (e.g. `CURSOR_SECRET`, `ACCESS_AUD`, `ASSET_SIGNING_SECRET`) with strong values stored in the password manager before the first production deploy.
+- Replace any placeholder secrets (e.g. `CURSOR_SECRET`, `ACCESS_AUD`, `ASSET_SIGNING_SECRET`, `INGEST_ALLOWED_ORIGINS`, `INGEST_RATE_LIMIT_PER_MIN`, `INGEST_SIGNATURE_TOLERANCE_SECS`) with strong values stored in the password manager before the first production deploy.
 - Verify Cloudflare credentials (`npx wrangler whoami`) and select the right account.
 
 ---

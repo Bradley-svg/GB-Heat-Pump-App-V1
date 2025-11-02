@@ -151,7 +151,7 @@ These fields are designed to feed dashboards or alerting pipelines without addit
   1. Confirm firmware version or orchestrator change that altered heartbeat frequency.
   2. Validate `INGEST_RATE_LIMIT_PER_MIN` (default `120`). Adjust via Wrangler variable if valid traffic increased.
 - **Response**:
-  - Temporarily bump the limit (eg. to `180`) via `wrangler secrets put`.
+  - Temporarily bump the limit (eg. to `180`) via `wrangler secret put`.
   - Communicate with device team to fix the flood and restore standard limit.
 - **Recovery validation**: no new `429` records for heartbeat route and rate limit logs quiet.
 

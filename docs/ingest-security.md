@@ -28,6 +28,9 @@ INGEST_ALLOWED_ORIGINS = "https://devices.greenbro.io,https://app.greenbro.io"
 
 Guidance:
 
+- Provision the value with Wrangler secrets: `printf 'https://devices.greenbro.io,https://app.greenbro.co.za' | wrangler secret put INGEST_ALLOWED_ORIGINS --env production`. Repeat for the default environment if you deploy to both.
+- Keep the allowlist aligned with firmware images shipped to the field; update both sides before rolling out new hardware URLs.
+
 - `*` (default) keeps previous permissive behaviour. Remove it to lock down access.
 - Wildcards are supported with the `*.example.com` syntax.
 - Requests lacking an `Origin` header (direct device-to-worker calls) are still accepted;
@@ -80,12 +83,16 @@ Configure device-level throttling with `INGEST_RATE_LIMIT_PER_MIN` (default `120
 - Values are whole numbers representing max accepted requests per device per minute.
 - When the limit is exceeded, the worker returns `429 Rate limit exceeded` and records
   the event in `ops_metrics` for visibility.
+- Update the Wrangler secret when firmware cadence changes: `wrangler secret put INGEST_RATE_LIMIT_PER_MIN --env production`.
 
 ## Adjusting Signature Tolerance
 
 `INGEST_SIGNATURE_TOLERANCE_SECS` controls the acceptable clock skew (default five
 minutes). Increase this for sites with intermittent connectivity or inaccurate device
 clocks; decrease it to tighten replay protection.
+
+Rotate the tolerance alongside firmware timestamp tolerance changes via
+`wrangler secret put INGEST_SIGNATURE_TOLERANCE_SECS --env production`.
 
 ## Testing & Monitoring
 

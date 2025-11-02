@@ -86,6 +86,8 @@ Write SQL -> npm run migrate:list (CI or local sanity)
 
 Seed fixtures live in `seeds/dev/seed.sql` and assume the schema from `migrations/`.
 
+> Device rows must store the SHA-256 hash of each shared secret (`devices.device_key_hash`). The `0008_device_key_hash_constraint.sql` migration enforces 64-character lowercase hex values—mirror the pattern in `seeds/dev/seed.sql` when onboarding or rotating hardware credentials.
+
 ### 3.1 Run the seed locally
 ```bash
 npm run seed:dev         # executes against the local D1 or Miniflare alias
@@ -174,9 +176,9 @@ Override these with `[env.<name>.vars]` when staging or production diverge.
 | `CURSOR_SECRET`            | AES key for pagination cursors. |
 | `ASSET_SIGNING_SECRET`     | Enables signed R2 reads (only if using signed URLs). |
 | `ALLOWED_PREFIXES`         | Optional allow list for R2 keys (for example `brand/,reports/`). |
-| `INGEST_ALLOWED_ORIGINS`   | **Required** allowlist of device origins; Worker returns 403 if unset (comma or newline separated). |
-| `INGEST_RATE_LIMIT_PER_MIN`| Rate limiting for ingestion endpoints. |
-| `INGEST_SIGNATURE_TOLERANCE_SECS` | Replay protection window for device signatures. |
+| `INGEST_ALLOWED_ORIGINS`   | **Required** allowlist of device origins; Worker returns 403 if unset (comma or newline separated). Production firmware expects `https://devices.greenbro.io,https://app.greenbro.co.za`. |
+| `INGEST_RATE_LIMIT_PER_MIN`| Rate limiting for ingestion endpoints. Production cadence requires `120` to avoid false positives. |
+| `INGEST_SIGNATURE_TOLERANCE_SECS` | Replay protection window for device signatures. Set to `300` seconds unless firmware clock drift changes. |
 
 > Non-local development (remote dev, staging, production) must set `INGEST_ALLOWED_ORIGINS`. For purely local `wrangler dev --local` sessions you can omit it, but ingest requests from browsers will be refused until the allowlist is populated.
 
@@ -185,6 +187,9 @@ Set secrets in each environment:
 wrangler secret put ACCESS_AUD
 wrangler secret put CURSOR_SECRET
 wrangler secret put ASSET_SIGNING_SECRET --env staging
+wrangler secret put INGEST_ALLOWED_ORIGINS
+wrangler secret put INGEST_RATE_LIMIT_PER_MIN
+wrangler secret put INGEST_SIGNATURE_TOLERANCE_SECS
 ```
 
 ### 5.3 Running locally
