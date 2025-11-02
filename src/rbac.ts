@@ -1,14 +1,14 @@
 // src/rbac.ts
 import type { JWTPayload } from "jose";
-import type { AccessUser } from "./types";
+import type { User } from "./env";
 
-const ROLE_MAP: Record<string, AccessUser["roles"][number]> = {
+const ROLE_MAP: Record<string, User["roles"][number]> = {
   admin: "admin",
   contractor: "contractor",
   client: "client",
 };
 
-export function canonicalRole(candidate: string): AccessUser["roles"][number] | null {
+export function canonicalRole(candidate: string): User["roles"][number] | null {
   const normalized = candidate.trim().toLowerCase();
   if (!normalized) return null;
   return ROLE_MAP[normalized] ?? null;
@@ -20,7 +20,7 @@ export function canonicalRole(candidate: string): AccessUser["roles"][number] | 
  * - clientIds from explicit clientIds[] OR groups like "client:<id>"
  * SECURITY: Fail-closed. If no supported role is present, user gets no roles.
  */
-export function deriveUserFromClaims(claims: JWTPayload): AccessUser {
+export function deriveUserFromClaims(claims: JWTPayload): User {
   const email = (claims as any).email || claims.sub || "unknown@unknown";
 
   // Normalize potential role/group arrays to string[]
@@ -31,7 +31,7 @@ export function deriveUserFromClaims(claims: JWTPayload): AccessUser {
     : [];
   const rawRoles: string[] = rawRolesArr.map((r) => String(r));
 
-  const roles = new Set<AccessUser["roles"][number]>();
+  const roles = new Set<User["roles"][number]>();
   for (const r of rawRoles) {
     const canonical = canonicalRole(r);
     if (canonical) {
@@ -60,7 +60,7 @@ export function deriveUserFromClaims(claims: JWTPayload): AccessUser {
   return { email, roles: Array.from(roles), clientIds };
 }
 
-export function landingFor(user: AccessUser): string {
+export function landingFor(user: User): string {
   if (user.roles.includes("admin")) return "/app/overview";
   if (user.roles.includes("client")) return "/app/compact";
   if (user.roles.includes("contractor")) return "/app/devices";

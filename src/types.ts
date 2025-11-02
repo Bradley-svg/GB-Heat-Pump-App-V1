@@ -1,14 +1,4 @@
-export type Env = {
-  DB: D1Database;
-  APP_BASE_URL: string;
-  RETURN_DEFAULT: string;
-  TIMEZONE: string;
-  CURSOR_SECRET: string;
-
-  // Access secrets (set via `wrangler secret put`)
-  ACCESS_AUD: string;
-  ACCESS_JWKS_URL: string;
-};
+export type { Env, User, User as AccessUser } from "./env";
 
 export type TelemetryBody = {
   ts: string;               // ISO
@@ -33,10 +23,4 @@ export type HeartbeatBody = {
   ts: string;               // ISO
   device_id: string;
   rssi?: number;
-};
-
-export type AccessUser = {
-  email: string;
-  roles: Array<"admin" | "client" | "contractor">;
-  clientIds: string[]; // optional scoping
 };

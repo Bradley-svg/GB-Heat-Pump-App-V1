@@ -1,5 +1,4 @@
 import { z } from "zod";
-import type { AccessUser as User } from "./types";
 
 export interface Env {
   DB: D1Database;
@@ -23,7 +22,11 @@ export interface Env {
   INGEST_SIGNATURE_TOLERANCE_SECS?: string;
 }
 
-export type { User };
+export type User = {
+  email: string;
+  roles: Array<"admin" | "client" | "contractor">;
+  clientIds: string[];
+};
 
 export class EnvValidationError extends Error {
   readonly issues: string[];
