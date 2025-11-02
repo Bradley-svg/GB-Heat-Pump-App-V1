@@ -172,101 +172,103 @@ export default function MqttMappingsPage() {
   }, []);
 
   const handleSubmit = useCallback(
-    async (event: FormEvent<HTMLFormElement>) => {
+    (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      const { mode, values, original } = formState;
-      const trimmedTopic = values.topic.trim();
-      if (!trimmedTopic) {
-        setFormState((prev) => ({ ...prev, error: "Topic is required." }));
-        return;
-      }
+      void (async () => {
+        const { mode, values, original } = formState;
+        const trimmedTopic = values.topic.trim();
+        if (!trimmedTopic) {
+          setFormState((prev) => ({ ...prev, error: "Topic is required." }));
+          return;
+        }
 
-      const qosValue = clampQos(Number(values.qos));
-      const profileId = normalizeString(values.profile_id);
-      const deviceId = normalizeString(values.device_id);
-      const description = normalizeString(values.description);
-      let transform: Record<string, unknown> | null;
-
-      try {
-        transform = parseTransform(values.transform);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Invalid transform JSON.";
-        setFormState((prev) => ({ ...prev, error: message }));
-        return;
-      }
-
-      setFormState((prev) => ({ ...prev, saving: true, error: null }));
-      setBanner(null);
-
-      if (mode === "create") {
-        const payload: Record<string, unknown> = {
-          topic: trimmedTopic,
-          direction: values.direction,
-          qos: qosValue,
-          enabled: values.enabled,
-        };
-        if (values.mapping_id.trim()) payload.mapping_id = values.mapping_id.trim();
-        if (profileId) payload.profile_id = profileId;
-        if (deviceId) payload.device_id = deviceId;
-        if (description) payload.description = description;
-        if (transform) payload.transform = transform;
+        const qosValue = clampQos(Number(values.qos));
+        const profileId = normalizeString(values.profile_id);
+        const deviceId = normalizeString(values.device_id);
+        const description = normalizeString(values.description);
+        let transform: Record<string, unknown> | null;
 
         try {
-          const response = await api.post<CreateMqttMappingResponse>("/api/mqtt/mappings", payload);
+          transform = parseTransform(values.transform);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Invalid transform JSON.";
+          setFormState((prev) => ({ ...prev, error: message }));
+          return;
+        }
+
+        setFormState((prev) => ({ ...prev, saving: true, error: null }));
+        setBanner(null);
+
+        if (mode === "create") {
+          const payload: Record<string, unknown> = {
+            topic: trimmedTopic,
+            direction: values.direction,
+            qos: qosValue,
+            enabled: values.enabled,
+          };
+          if (values.mapping_id.trim()) payload.mapping_id = values.mapping_id.trim();
+          if (profileId) payload.profile_id = profileId;
+          if (deviceId) payload.device_id = deviceId;
+          if (description) payload.description = description;
+          if (transform) payload.transform = transform;
+
+          try {
+            const response = await api.post<CreateMqttMappingResponse>("/api/mqtt/mappings", payload);
+            setMappings((prev) => upsertMapping(prev, response.mapping));
+            setBanner({ type: "success", message: "Mapping created." });
+            setFormState({
+              mode: "create",
+              values: DEFAULT_FORM_VALUES,
+              saving: false,
+              error: null,
+            });
+          } catch (err) {
+            const message = extractApiMessage(err, "Unable to create mapping.");
+            setFormState((prev) => ({ ...prev, error: message }));
+          }
+          return;
+        }
+
+        if (!original) {
+          setFormState((prev) => ({ ...prev, saving: false, error: "No mapping selected." }));
+          return;
+        }
+
+        const diff = buildUpdatePayload(original, {
+          topic: trimmedTopic,
+          profile_id: profileId,
+          device_id: deviceId,
+          description,
+          direction: values.direction,
+          qos: qosValue,
+          transform,
+          enabled: values.enabled,
+        });
+
+        if (!diff) {
+          setFormState((prev) => ({ ...prev, saving: false, error: "No changes detected." }));
+          return;
+        }
+
+        try {
+          const response = await api.put<UpdateMqttMappingResponse>(
+            `/api/mqtt/mappings/${original.mapping_id}`,
+            diff,
+          );
           setMappings((prev) => upsertMapping(prev, response.mapping));
-          setBanner({ type: "success", message: "Mapping created." });
+          setBanner({ type: "success", message: "Mapping updated." });
           setFormState({
-            mode: "create",
-            values: DEFAULT_FORM_VALUES,
+            mode: "edit",
+            original: response.mapping,
+            values: toFormValues(response.mapping),
             saving: false,
             error: null,
           });
         } catch (err) {
-          const message = extractApiMessage(err, "Unable to create mapping.");
+          const message = extractApiMessage(err, "Unable to update mapping.");
           setFormState((prev) => ({ ...prev, error: message }));
         }
-        return;
-      }
-
-      if (!original) {
-        setFormState((prev) => ({ ...prev, saving: false, error: "No mapping selected." }));
-        return;
-      }
-
-      const diff = buildUpdatePayload(values, original, {
-        topic: trimmedTopic,
-        profile_id: profileId,
-        device_id: deviceId,
-        description,
-        direction: values.direction,
-        qos: qosValue,
-        transform,
-        enabled: values.enabled,
-      });
-
-      if (!diff) {
-        setFormState((prev) => ({ ...prev, saving: false, error: "No changes detected." }));
-        return;
-      }
-
-      try {
-        const response = await api.put<UpdateMqttMappingResponse>(
-          `/api/mqtt/mappings/${original.mapping_id}`,
-          diff,
-        );
-        setMappings((prev) => upsertMapping(prev, response.mapping));
-        setBanner({ type: "success", message: "Mapping updated." });
-        setFormState({
-          mode: "edit",
-          original: response.mapping,
-          values: toFormValues(response.mapping),
-          saving: false,
-          error: null,
-        });
-      } catch (err) {
-        const message = extractApiMessage(err, "Unable to update mapping.");
-        setFormState((prev) => ({ ...prev, error: message }));
-      }
+      })();
     },
     [api, formState],
   );
@@ -397,17 +399,15 @@ export default function MqttMappingsPage() {
                     <td>{mapping.enabled ? "Yes" : "No"}</td>
                     <td>{formatDate(mapping.updated_at)}</td>
                     <td className="actions">
-                      <button
-                        type="button"
-                        className="btn link"
-                        onClick={() => startEdit(mapping)}
-                      >
+                      <button type="button" className="btn link" onClick={() => startEdit(mapping)}>
                         Edit
                       </button>
                       <button
                         type="button"
                         className="btn link danger"
-                        onClick={() => handleDelete(mapping)}
+                        onClick={() => {
+                          void handleDelete(mapping);
+                        }}
                         disabled={deletingId === mapping.mapping_id}
                       >
                         {deletingId === mapping.mapping_id ? "Deleting..." : "Delete"}
@@ -563,7 +563,7 @@ function normalizeString(value: string): string | null {
 function parseTransform(value: string): Record<string, unknown> | null {
   if (!value.trim()) return null;
   try {
-    const parsed = JSON.parse(value);
+    const parsed: unknown = JSON.parse(value);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       throw new Error("Transform must be a JSON object.");
     }
@@ -616,7 +616,6 @@ function clampQos(input: number) {
 }
 
 function buildUpdatePayload(
-  values: MappingFormValues,
   original: MqttMapping,
   prepared: {
     topic: string;

@@ -27,8 +27,7 @@ export default function OpsPage() {
     autoRefreshMs: 60_000,
   });
 
-  const hasData = Boolean(data);
-  const errorTitle = hasData ? "Issues loading latest operations data" : "Unable to load operations metrics";
+  const errorTitle = data ? "Issues loading latest operations data" : "Unable to load operations metrics";
   const errorCallout = error ? (
     <RequestErrorCallout
       title={errorTitle}
@@ -41,7 +40,7 @@ export default function OpsPage() {
     />
   ) : null;
 
-  if (!hasData && phase === "loading") {
+  if (!data && phase === "loading") {
     return (
       <Page title="Operations">
         <div className="card">Loading...</div>
@@ -49,7 +48,7 @@ export default function OpsPage() {
     );
   }
 
-  if (!hasData) {
+  if (!data) {
     return (
       <Page title="Operations">
         {errorCallout ?? (

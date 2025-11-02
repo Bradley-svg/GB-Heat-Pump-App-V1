@@ -25,8 +25,7 @@ export default function OverviewPage() {
     isFetching,
   } = useApiRequest(fetchSummary);
 
-  const hasData = Boolean(data);
-  const errorTitle = hasData ? "Issues loading latest fleet metrics" : "Failed to load fleet metrics";
+  const errorTitle = data ? "Issues loading latest fleet metrics" : "Failed to load fleet metrics";
   const errorCallout = error ? (
     <RequestErrorCallout
       title={errorTitle}
@@ -39,7 +38,7 @@ export default function OverviewPage() {
     />
   ) : null;
 
-  if (!hasData && phase === "loading") {
+  if (!data && phase === "loading") {
     return (
       <Page title="Overview (Fleet)">
         <div className="card">Loading...</div>
@@ -47,7 +46,7 @@ export default function OverviewPage() {
     );
   }
 
-  if (!hasData) {
+  if (!data) {
     return (
       <Page title="Overview (Fleet)">
         {errorCallout ?? <div className="card callout error">Failed to load fleet metrics</div>}

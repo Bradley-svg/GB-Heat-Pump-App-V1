@@ -21,6 +21,8 @@ describe("useCurrentUser", () => {
     const apiClient: ApiClient = {
       get: getMock,
       post: vi.fn(),
+      put: vi.fn(),
+      delete: vi.fn(),
     };
 
     const { result } = renderUseCurrentUser(apiClient);
@@ -47,6 +49,8 @@ describe("useCurrentUser", () => {
     const apiClient: ApiClient = {
       get: getMock,
       post: vi.fn(),
+      put: vi.fn(),
+      delete: vi.fn(),
     };
 
     const { result } = renderUseCurrentUser(apiClient);
