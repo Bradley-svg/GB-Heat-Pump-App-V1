@@ -9,7 +9,6 @@ This runbook captures the happy path for rolling out Worker changes, database mi
 | Env (Wrangler `--env`) | Worker script | Primary URL | D1 database (name -> id) | R2 buckets (binding -> name) | Secrets to provision |
 |------------------------|---------------|-------------|--------------------------|-----------------------------|----------------------|
 | default (remote/dev)   | `gb-heat-pump-app-v1` | `https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev` | `GREENBRO_DB` -> `ee7ad98b-3629-4985-bd7d-a60c401953a7` | `GB_BUCKET`->`greenbro-brand`; `APP_STATIC`->`greenbro-app-static` | `ACCESS_AUD`, `ACCESS_JWKS_URL` (`https://bradleyayliffl.cloudflareaccess.com/cdn-cgi/access/certs`), `CURSOR_SECRET`, `ASSET_SIGNING_SECRET` |
-| preview                | `gb-heat-pump-app-v1-preview` | `https://gb-heat-pump-app-v1-preview.bradleyayliffl.workers.dev` (workers.dev) | `GREENBRO_DB` -> `ee7ad98b-3629-4985-bd7d-a60c401953a7` | `GB_BUCKET`->`greenbro-brand`; `APP_STATIC`->`greenbro-app-static` | `ACCESS_AUD`, `ACCESS_JWKS_URL`, `CURSOR_SECRET`, `ASSET_SIGNING_SECRET` (set after first deploy) |
 | production             | `gb-heat-pump-app-v1-production` | `https://app.greenbro.co.za` (route; confirm DNS before first deploy) | `GREENBRO_DB` -> `ee7ad98b-3629-4985-bd7d-a60c401953a7` | `GB_BUCKET`->`greenbro-brand`; `APP_STATIC`->`greenbro-app-static` | `ACCESS_AUD`, `ACCESS_JWKS_URL`, `CURSOR_SECRET`, `ASSET_SIGNING_SECRET`, optional `ALLOWED_PREFIXES`, ingestion limits |
 
 > `ACCESS_AUD` values are managed in Cloudflare Access and stored only via `wrangler secret put`. Rotate/update them alongside the Access application policies described in `docs/platform-setup-guide.md`.
@@ -30,7 +29,6 @@ This runbook captures the happy path for rolling out Worker changes, database mi
 | Target | Command | Notes |
 |--------|---------|-------|
 | Local developer SQLite | `npm run migrate:apply:local` | Keeps Miniflare/SQLite copy in sync. |
-| Preview / staging | `npm run migrate:apply:preview` | Requires `[env.preview]` configured in `wrangler.toml`. |
 | Production | `npm run migrate:apply:production` | Run immediately before the production deploy. |
 
 **Verification**
@@ -48,10 +46,9 @@ This runbook captures the happy path for rolling out Worker changes, database mi
 1. Build frontend assets if needed: `npm run frontend:build`.
 2. Dry-run the Worker deploy: `npm run build` (writes preview bundle to `dist/`).
 3. Deploy:
-   - Preview: `npm run deploy:preview`
    - Production: `npm run deploy:production`
 
-> **GitHub Actions**: Trigger the `Worker Deploy` workflow (`.github/workflows/worker-deploy.yml`) for repeatable rollouts. Provide `preview` or `production` as the environment, and let it run migrations plus cron synchronization automatically. Store `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as repository secrets before the first run.
+> **GitHub Actions**: Trigger the `Worker Deploy` workflow (`.github/workflows/worker-deploy.yml`) for repeatable rollouts. Provide `production` as the environment and let it run migrations plus cron synchronization automatically. Store `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as repository secrets before the first run.
 
 **Verification**
 - Inspect the deployment list: `npx wrangler deployments list --env <env>` and note the new `deployment_id`.
@@ -72,7 +69,6 @@ Cron schedules in `wrangler.toml` (under `[triggers]`) deploy automatically with
 
 | Target | Command |
 |--------|---------|
-| Preview / staging | `npm run cron:deploy:preview` |
 | Production | `npm run cron:deploy:production` |
 | Current environment | `npm run cron:deploy` |
 

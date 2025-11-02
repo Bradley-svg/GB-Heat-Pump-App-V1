@@ -29,7 +29,7 @@ If you need non-interactive automation (for example CI seeding R2), mint a **Ser
   - PowerShell: `$env:DEV_ALLOW_USER='{"email":"admin@example.com","roles":["admin"]}' ; wrangler dev --local`
   The shim only activates when `Cf-Access-Jwt-Assertion` is missing; any supplied JWT is still fully verified.
 - If you prefer to exercise the real flow, inject a JWT into `Cf-Access-Jwt-Assertion` manually (generate via `cloudflared access login`), or temporarily stub `requireAccessUser` in tests.
-- Ensure secrets exist in the preview environment: `wrangler secret put ACCESS_AUD --env preview`.
+- Ensure secrets exist in each active environment (for example production): `wrangler secret put ACCESS_AUD --env production`.
 
 ### 1.4 Access workflow diagram
 ```

@@ -27,7 +27,7 @@ The dashboard expects API routes to be reachable on the same origin. When runnin
 
    ```bash
    npm run publish:r2            # uploads index.html and every file in dist/client/assets/
-   npm run publish:r2 -- --env preview
+   npm run publish:r2 -- --env production
    ```
 
    Manual example:

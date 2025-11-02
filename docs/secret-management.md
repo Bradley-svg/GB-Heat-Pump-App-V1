@@ -15,7 +15,7 @@ The Worker code reads each secret from the runtime `env` object. No secret value
 
 ## Provisioning With Wrangler
 
-All environments (production, staging, preview) must receive secrets via Wrangler. The default environment uses the commands below; append `--env <name>` for additional environments.
+All active environments (default and production) must receive secrets via Wrangler. The default environment uses the commands below; append `--env <name>` for additional environments.
 
 ```bash
 wrangler secret put CURSOR_SECRET
@@ -27,7 +27,7 @@ wrangler secret put ASSET_SIGNING_SECRET    # only if signed R2 URLs are require
 Recommendations:
 
 1. Store canonical secret values in the team password manager (1Password vault: Platform / Infra) before running `wrangler secret put`.
-2. Use the `--env production` flag when targeting the production Worker. For ad-hoc previews, set secrets on the default environment unless your workflow dictates otherwise.
+2. Use the `--env production` flag when targeting the production Worker. For temporary testing, set secrets on the default environment unless your workflow dictates otherwise.
 3. Run `wrangler secret list [--env <name>]` after provisioning to confirm bindings exist and remove superseded entries.
 
 ### Local Development
@@ -87,4 +87,3 @@ If you suspect leakage:
 4. File an incident report outlining exposure scope, remediation, and preventative actions.
 
 Keep this playbook up to date as environments or dependencies evolve.
-

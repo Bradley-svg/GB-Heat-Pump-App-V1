@@ -6,10 +6,10 @@ on:
       environment:
         description: "Deployment target"
         required: true
-        default: "preview"
+        default: "default"
         type: choice
         options:
-          - preview
+          - default
           - production
       apply_migrations:
         description: "Apply D1 migrations before deploying?"
@@ -47,25 +47,25 @@ jobs:
       - name: Run worker test suites
         run: npm run test:ci
 
-      - name: Apply D1 migrations (preview)
-        if: ${{ fromJSON(github.event.inputs.apply_migrations) && github.event.inputs.environment == 'preview' }}
-        run: npm run migrate:apply:preview
-
+      - name: Apply D1 migrations (default)
+        if: ${{ fromJSON(github.event.inputs.apply_migrations) && github.event.inputs.environment == 'default' }}
+        run: npm run migrate:apply
+ 
       - name: Apply D1 migrations (production)
         if: ${{ fromJSON(github.event.inputs.apply_migrations) && github.event.inputs.environment == 'production' }}
         run: npm run migrate:apply:production
 
-      - name: Deploy Worker (preview)
-        if: ${{ github.event.inputs.environment == 'preview' }}
-        run: npm run deploy:preview
+      - name: Deploy Worker (default)
+        if: ${{ github.event.inputs.environment == 'default' }}
+        run: npm run deploy
 
       - name: Deploy Worker (production)
         if: ${{ github.event.inputs.environment == 'production' }}
         run: npm run deploy:production
 
-      - name: Sync cron triggers (preview)
-        if: ${{ fromJSON(github.event.inputs.sync_cron) && github.event.inputs.environment == 'preview' }}
-        run: npm run cron:deploy:preview
+      - name: Sync cron triggers (default)
+        if: ${{ fromJSON(github.event.inputs.sync_cron) && github.event.inputs.environment == 'default' }}
+        run: npm run cron:deploy
 
       - name: Sync cron triggers (production)
         if: ${{ fromJSON(github.event.inputs.sync_cron) && github.event.inputs.environment == 'production' }}
