@@ -88,77 +88,174 @@ function parseArgs(argv) {
   return args;
 }
 
-function resolveBucketName() {
-  if (process.env.R2_BUCKET_NAME) return process.env.R2_BUCKET_NAME;
-  if (process.env.APP_STATIC_BUCKET) return process.env.APP_STATIC_BUCKET;
-  if (existsSync(wranglerConfig)) {
-    const source = readFileSync(wranglerConfig, "utf8");
-    const match = source.match(/\[\[r2_buckets\]\][^\[]*?binding\s*=\s*"APP_STATIC"[^\[]*?bucket_name\s*=\s*"([^"]+)"/);
-    if (match) return match[1];
+function stripInlineComment(line) {
+  let inQuotes = false;
+  let result = "";
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    if (char === '"' && line[i - 1] !== "\\") {
+      inQuotes = !inQuotes;
+    } else if (char === "#" && !inQuotes) {
+      break;
+    }
+    result += char;
   }
+  return result;
+}
+
+function parseR2BucketEntries(source) {
+  const entries = [];
+  let currentBlock = null;
+  let currentBinding = null;
+  let currentBucket = null;
+
+  const flush = () => {
+    if (!currentBlock) return;
+    if (!currentBinding || !currentBucket) return;
+    entries.push({
+      block: currentBlock,
+      binding: currentBinding,
+      bucket: currentBucket,
+    });
+  };
+
+  const lines = source.split(/\r?\n/);
+  for (const rawLine of lines) {
+    const line = stripInlineComment(rawLine).trim();
+    if (!line) continue;
+
+    const blockMatch = line.match(/^\[\[(.+)\]\]$/);
+    if (blockMatch) {
+      flush();
+      currentBlock = blockMatch[1].trim();
+      currentBinding = null;
+      currentBucket = null;
+      continue;
+    }
+
+    if (!currentBlock) continue;
+
+    const assignmentMatch = line.match(/^([A-Za-z0-9_.-]+)\s*=\s*(.+)$/);
+    if (!assignmentMatch) continue;
+
+    const [, key, rawValue] = assignmentMatch;
+    let value = rawValue.trim();
+    if (value.startsWith('"') && value.endsWith('"')) {
+      value = value.slice(1, -1);
+    }
+
+    if (key === "binding") {
+      currentBinding = value;
+    } else if (key === "bucket_name") {
+      currentBucket = value;
+    }
+  }
+
+  flush();
+  return entries;
+}
+
+function findBucket(entries, blockName, bindingName) {
+  const entry = entries.find((candidate) => candidate.block === blockName && candidate.binding === bindingName);
+  return entry ? entry.bucket : null;
+}
+
+function resolveBucketName({ env, configPath = wranglerConfig, envVars = process.env, configSource } = {}) {
+  if (envVars.R2_BUCKET_NAME) return envVars.R2_BUCKET_NAME;
+  if (envVars.APP_STATIC_BUCKET) return envVars.APP_STATIC_BUCKET;
+
+  let source = configSource;
+  if (source === undefined && existsSync(configPath)) {
+    source = readFileSync(configPath, "utf8");
+  }
+
+  if (typeof source === "string") {
+    const entries = parseR2BucketEntries(source);
+    if (env) {
+      const envBucket = findBucket(entries, `env.${env}.r2_buckets`, "APP_STATIC");
+      if (envBucket) return envBucket;
+    }
+
+    const defaultBucket = findBucket(entries, "r2_buckets", "APP_STATIC");
+    if (defaultBucket) return defaultBucket;
+  }
+
   console.warn("[publish-r2-assets] Warning: falling back to bucket name APP_STATIC. Set R2_BUCKET_NAME env var to override.");
   return "APP_STATIC";
 }
 
-if (!existsSync(clientDist)) {
-  console.error("[publish-r2-assets] Error: missing frontend build output at %s", clientDist);
-  console.error("Run `npm run frontend:build` before publishing assets.");
-  process.exit(1);
-}
-
-const uploads = collectUploads();
-const { env, dryRun } = parseArgs(process.argv);
-const defaultWrangler = process.platform === "win32" ? "npx.cmd" : "npx";
-const wranglerBin = process.env.WRANGLER_BIN ?? defaultWrangler;
-const bucketName = resolveBucketName();
-const target = (process.env.R2_TARGET ?? "remote").toLowerCase();
-const locationArgs = target === "local" ? ["--local"] : ["--remote"];
-
-for (const asset of uploads) {
-  if (!existsSync(asset.file)) {
-    console.error("[publish-r2-assets] Error: missing asset %s (expected at %s)", asset.key, asset.file);
+function main() {
+  if (!existsSync(clientDist)) {
+    console.error("[publish-r2-assets] Error: missing frontend build output at %s", clientDist);
+    console.error("Run `npm run frontend:build` before publishing assets.");
     process.exit(1);
   }
-}
 
-for (const asset of uploads) {
-  const args = [
-    "r2",
-    "object",
-    "put",
-    formatArg(`${bucketName}/${asset.key}`),
-    "--file",
-    formatArg(asset.file),
-    "--content-type",
-    asset.contentType,
-    "--cache-control",
-    asset.cacheControl,
-    ...locationArgs,
-  ];
+  const uploads = collectUploads();
+  const { env, dryRun } = parseArgs(process.argv);
+  const defaultWrangler = process.platform === "win32" ? "npx.cmd" : "npx";
+  const wranglerBin = process.env.WRANGLER_BIN ?? defaultWrangler;
+  const bucketName = resolveBucketName({ env });
+  const target = (process.env.R2_TARGET ?? "remote").toLowerCase();
+  const locationArgs = target === "local" ? ["--local"] : ["--remote"];
 
-  if (env) {
-    args.push("--env", env);
+  for (const asset of uploads) {
+    if (!existsSync(asset.file)) {
+      console.error("[publish-r2-assets] Error: missing asset %s (expected at %s)", asset.key, asset.file);
+      process.exit(1);
+    }
   }
 
-  console.log(`[publish-r2-assets] Uploading ${asset.key}`);
-  if (dryRun) {
-    console.log(`  ${wranglerBin} ${args.join(" ")}`);
-    continue;
-  }
+  for (const asset of uploads) {
+    const args = [
+      "r2",
+      "object",
+      "put",
+      formatArg(`${bucketName}/${asset.key}`),
+      "--file",
+      formatArg(asset.file),
+      "--content-type",
+      asset.contentType,
+      "--cache-control",
+      asset.cacheControl,
+      ...locationArgs,
+    ];
+
+    if (env) {
+      args.push("--env", env);
+    }
+
+    console.log(`[publish-r2-assets] Uploading ${asset.key}`);
+    if (dryRun) {
+      console.log(`  ${wranglerBin} ${args.join(" ")}`);
+      continue;
+    }
 
     const fullArgs = /(npx(?:\.cmd)?|pnpx(?:\.cmd)?|yarn)$/i.test(wranglerBin) ? ["wrangler", ...args] : args;
-  const result = spawnSync(wranglerBin, fullArgs, { stdio: "inherit", shell: process.platform === "win32" });
-  if (result.error) {
-    console.error("[publish-r2-assets] Spawn failed:", result.error);
+    const result = spawnSync(wranglerBin, fullArgs, { stdio: "inherit", shell: process.platform === "win32" });
+    if (result.error) {
+      console.error("[publish-r2-assets] Spawn failed:", result.error);
+    }
+    if (result.status !== 0) {
+      console.error("[publish-r2-assets] Error: upload failed for %s", asset.key);
+      process.exit(result.status ?? 1);
+    }
   }
-  if (result.status !== 0) {
-    console.error("[publish-r2-assets] Error: upload failed for %s", asset.key);
-    process.exit(result.status ?? 1);
-  }
+
+  console.log(`[publish-r2-assets] Uploaded ${uploads.length} assets.`);
 }
 
-console.log(`[publish-r2-assets] Uploaded ${uploads.length} assets.`);
+function isMainModule() {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  return path.resolve(entry) === __filename;
+}
 
+if (isMainModule()) {
+  main();
+}
+
+export { resolveBucketName };
 
 
 
