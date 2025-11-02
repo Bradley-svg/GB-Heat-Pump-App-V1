@@ -25,6 +25,8 @@ const STATIC_CONTENT_TYPES: Record<string, string> = {
   ".css": "text/css;charset=utf-8",
 };
 const APP_R2_PREFIX = "app/";
+const DEFAULT_HEARTBEAT_INTERVAL_SECS = 30;
+const DEFAULT_OFFLINE_MULTIPLIER = 6;
 
 function extname(path: string): string {
   const idx = path.lastIndexOf(".");
@@ -33,6 +35,12 @@ function extname(path: string): string {
 
 function contentTypeFor(path: string): string {
   return STATIC_CONTENT_TYPES[extname(path)] || "application/octet-stream";
+}
+
+function coerceFiniteNumber(value: string | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 type StaticAssetResponse = {
@@ -236,8 +244,11 @@ export default {
 
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
     const log = systemLogger({ task: "offline-cron" });
-    const hbInterval = Number(env.HEARTBEAT_INTERVAL_SECS ?? "30");
-    const multiplier = Number(env.OFFLINE_MULTIPLIER ?? "6");
+    const hbInterval = coerceFiniteNumber(
+      env.HEARTBEAT_INTERVAL_SECS,
+      DEFAULT_HEARTBEAT_INTERVAL_SECS,
+    );
+    const multiplier = coerceFiniteNumber(env.OFFLINE_MULTIPLIER, DEFAULT_OFFLINE_MULTIPLIER);
     const thresholdSecs = Math.max(60, hbInterval * multiplier);
     const days = thresholdSecs / 86400;
 
