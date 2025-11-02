@@ -52,6 +52,10 @@ function renderAppShell(userRoles: string[], initialPath = "/app/") {
     },
   };
 
+  return renderAppShellWithState(userState, initialPath);
+}
+
+function renderAppShellWithState(userState: CurrentUserState, initialPath = "/app/") {
   window.history.replaceState({}, "", initialPath);
 
   const apiClientStub: ApiClient = {
@@ -73,6 +77,45 @@ function renderAppShell(userRoles: string[], initialPath = "/app/") {
 }
 
 describe("AppShell role gating", () => {
+  it("shows a dashboard loading indicator until the current user resolves", () => {
+    renderAppShellWithState({
+      status: "loading",
+      user: null,
+      error: null,
+      refresh: () => {
+        /* noop */
+      },
+    });
+
+    expect(screen.getByText("Loading dashboard...")).toBeInTheDocument();
+  });
+
+  it("treats idle current user state as loading", () => {
+    renderAppShellWithState({
+      status: "idle",
+      user: null,
+      error: null,
+      refresh: () => {
+        /* noop */
+      },
+    });
+
+    expect(screen.getByText("Loading dashboard...")).toBeInTheDocument();
+  });
+
+  it("shows unauthorized indicator when the current user fails to load", () => {
+    renderAppShellWithState({
+      status: "error",
+      user: null,
+      error: new Error("whoops"),
+      refresh: () => {
+        /* noop */
+      },
+    });
+
+    expect(screen.getByRole("heading", { name: "Unauthorized" })).toBeInTheDocument();
+  });
+
   it("hides Ops navigation for non-admins", async () => {
     renderAppShell(["client"]);
 

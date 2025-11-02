@@ -1,38 +1,32 @@
-import type { PropsWithChildren, ReactNode } from "react";
-import { Suspense, useMemo } from "react";
+import type { PropsWithChildren } from "react";
+import { useMemo } from "react";
 
 import { createApiClient } from "../services/api-client";
 import { ApiClientContext, AppConfigContext, CurrentUserContext } from "./contexts";
 import { readAppConfig } from "./config";
 import { useCurrentUser } from "./hooks/use-current-user";
 
-interface ProvidersProps extends PropsWithChildren {
-  suspenseFallback?: ReactNode;
-}
+interface ProvidersProps extends PropsWithChildren {}
 
-export function AppProviders({ children, suspenseFallback = null }: ProvidersProps) {
+export function AppProviders({ children }: ProvidersProps) {
   const config = useMemo(() => readAppConfig(), []);
   const apiClient = useMemo(() => createApiClient(config), [config]);
 
   return (
     <AppConfigContext.Provider value={config}>
       <ApiClientContext.Provider value={apiClient}>
-        <CurrentUserBoundary fallback={suspenseFallback}>{children}</CurrentUserBoundary>
+        <CurrentUserBoundary>{children}</CurrentUserBoundary>
       </ApiClientContext.Provider>
     </AppConfigContext.Provider>
   );
 }
 
-interface CurrentUserBoundaryProps extends PropsWithChildren {
-  fallback?: ReactNode;
-}
-
-function CurrentUserBoundary({ children, fallback = null }: CurrentUserBoundaryProps) {
+function CurrentUserBoundary({ children }: PropsWithChildren) {
   const currentUser = useCurrentUser();
 
   return (
     <CurrentUserContext.Provider value={currentUser}>
-      <Suspense fallback={fallback}>{children}</Suspense>
+      {children}
     </CurrentUserContext.Provider>
   );
 }
