@@ -275,6 +275,28 @@ export interface CommissioningChecklistItem {
   pass: boolean;
 }
 
+export interface CommissioningRunsResponse {
+  generated_at: string;
+  runs: CommissioningRun[];
+}
+
+export interface CommissioningRun {
+  run_id: string;
+  device_id: string;
+  lookup: string;
+  profile_id: string | null;
+  site: string | null;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  checklist: string[] | null;
+  notes: string | null;
+  performed_by: string | null;
+  report_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AdminOverviewResponse {
   generated_at: string;
   scope: "admin" | "tenant" | "empty";

@@ -4,7 +4,13 @@ import { Link } from "react-router-dom";
 import { useApiClient } from "../../app/contexts";
 import { Page } from "../../components";
 import { formatNumber, formatRelative } from "../../utils/format";
-import type { CommissioningChecklistItem, CommissioningDevice, CommissioningResponse } from "../../types/api";
+import type {
+  CommissioningChecklistItem,
+  CommissioningDevice,
+  CommissioningResponse,
+  CommissioningRun,
+  CommissioningRunsResponse,
+} from "../../types/api";
 
 type AsyncState = "loading" | "error" | "ready";
 
@@ -22,6 +28,8 @@ export default function CommissioningPage() {
   const api = useApiClient();
   const [state, setState] = useState<AsyncState>("loading");
   const [data, setData] = useState<CommissioningState | null>(null);
+  const [runsState, setRunsState] = useState<AsyncState>("loading");
+  const [runs, setRuns] = useState<CommissioningRun[]>([]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -36,6 +44,24 @@ export default function CommissioningPage() {
       .catch((error) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setState("error");
+      });
+    return () => controller.abort();
+  }, [api]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setRunsState("loading");
+    api
+      .get<CommissioningRunsResponse>("/api/commissioning/runs?status=completed&limit=10", {
+        signal: controller.signal,
+      })
+      .then((payload) => {
+        setRuns(payload.runs ?? []);
+        setRunsState("ready");
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setRunsState("error");
       });
     return () => controller.abort();
   }, [api]);
@@ -72,6 +98,7 @@ export default function CommissioningPage() {
           {summary.total ? `${completionPct}% checklist complete across fleet` : "No devices in scope"}
         </div>
       </div>
+      <ReportsCard runsState={runsState} runs={runs} />
       <div className="stack mt-1">
         {devices.map((device) => (
           <div className="card" key={device.lookup}>
@@ -155,4 +182,56 @@ function buildChecklist(device: CommissioningDevice): CommissioningChecklistItem
     pass: Boolean(device.mode),
   });
   return items;
+}
+
+interface ReportsCardProps {
+  runsState: AsyncState;
+  runs: CommissioningRun[];
+}
+
+function ReportsCard({ runsState, runs }: ReportsCardProps) {
+  return (
+    <div className="card mt-1">
+      <div className="card-header">
+        <div className="card-title">Commissioning reports</div>
+        {runsState === "ready" ? <span className="pill">{runs.length}</span> : null}
+      </div>
+      {runsState === "loading" ? (
+        <div className="muted">Loading reports...</div>
+      ) : runsState === "error" ? (
+        <div className="callout error">Unable to load commissioning reports</div>
+      ) : runs.length === 0 ? (
+        <div className="empty">No completed runs yet</div>
+      ) : (
+        <div className="stack compact">
+          {runs.map((run) => (
+            <div key={run.run_id} className="stack compact">
+              <div className="flex-between">
+                <div>
+                  <div className="card-title">{run.device_id}</div>
+                  <div className="subdued">
+                    Completed {formatRelative(run.completed_at ?? run.updated_at)} · Run {run.run_id}
+                  </div>
+                  {run.site ? <div className="subdued">{run.site}</div> : null}
+                </div>
+                <span className="pill">{run.status}</span>
+              </div>
+              {run.report_url ? (
+                <a className="link" href={run.report_url} target="_blank" rel="noreferrer">
+                  Download PDF
+                </a>
+              ) : (
+                <div className="callout error">Report unavailable for download</div>
+              )}
+              <div className="mt-02">
+                <Link to={`/device?device=${encodeURIComponent(run.lookup)}`} className="link">
+                  Open device
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }

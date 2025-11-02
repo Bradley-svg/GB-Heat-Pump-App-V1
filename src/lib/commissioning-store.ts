@@ -1,5 +1,6 @@
 import type { Env } from "../env";
 import { andWhere, nowISO } from "../utils";
+import { generateCommissioningReport } from "./commissioning-report";
 
 export interface CommissioningRunRecord {
   run_id: string;
@@ -163,7 +164,28 @@ export async function createCommissioningRun(
     return { ok: false, reason: "device_not_found" };
   }
 
-  return { ok: true, run: mapRunRow(row) };
+  let runRecord = mapRunRow(row);
+
+  if (runRecord.status === "completed" && !runRecord.report_url) {
+    try {
+      const report = await generateCommissioningReport(env, runRecord);
+      if (report?.url) {
+        const updatedAtNow = nowISO();
+        await env.DB
+          .prepare(`UPDATE commissioning_runs SET report_url = ?1, updated_at = ?2 WHERE run_id = ?3`)
+          .bind(report.url, updatedAtNow, runRecord.run_id)
+          .run();
+        runRecord = { ...runRecord, report_url: report.url, updated_at: updatedAtNow };
+      }
+    } catch (error) {
+      console.warn("commissioning.report_failed", {
+        run_id: runRecord.run_id,
+        error,
+      });
+    }
+  }
+
+  return { ok: true, run: runRecord };
 }
 
 export async function listCommissioningRuns(
