@@ -1,21 +1,12 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { Outlet, RouterProvider, createMemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import DevicesPage from "../pages/devices/DevicesPage";
 import type { DeviceListResponse } from "../types/api";
+import { ApiClientContext, CurrentUserContext } from "../app/contexts";
+import type { CurrentUserState } from "../app/hooks/use-current-user";
 import { createApiClientMock, mockApiGet, renderWithApi } from "./testUtils";
-
-function LocationTracker({ onChange }: { onChange: (value: string) => void }) {
-  const location = useLocation();
-
-  useEffect(() => {
-    onChange(`${location.pathname}${location.search}`);
-  }, [location, onChange]);
-
-  return null;
-}
 
 describe("DevicesPage", () => {
   it("allows admins to toggle between all devices and assigned scope", async () => {
@@ -55,7 +46,7 @@ describe("DevicesPage", () => {
     expect(deviceCalls[deviceCalls.length - 1][0]).toContain("mine=1");
   });
 
-  it("navigates to device details via Link while preserving query params", async () => {
+  it("navigates to device details via Link while preserving query params and basename", async () => {
     const listResponse: DeviceListResponse = {
       items: [
         {
@@ -80,24 +71,50 @@ describe("DevicesPage", () => {
     const apiClient = createApiClientMock({
       get: mockApiGet(getMock),
     });
-    const locations: string[] = [];
-
-    renderWithApi(
-      <>
-        <LocationTracker onChange={(value) => locations.push(value)} />
-        <DevicesPage />
-      </>,
-      apiClient,
-      "/app/devices",
+    const userState: CurrentUserState = {
+      status: "ready",
+      user: { email: "admin@example.com", roles: ["admin"], clientIds: [] },
+      error: null,
+      refresh: () => {
+        // no-op for tests
+      },
+    };
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/",
+          element: (
+            <ApiClientContext.Provider value={apiClient}>
+              <CurrentUserContext.Provider value={userState}>
+                <Outlet />
+              </CurrentUserContext.Provider>
+            </ApiClientContext.Provider>
+          ),
+          children: [
+            { path: "devices", element: <DevicesPage /> },
+            { path: "device", element: <div /> },
+          ],
+        },
+      ],
+      {
+        initialEntries: ["/app/devices"],
+        basename: "/app",
+        future: { v7_relativeSplatPath: true, v7_startTransition: true },
+      },
     );
+
+    render(<RouterProvider router={router} />);
 
     await waitFor(() => expect(getMock).toHaveBeenCalled());
 
     const link = await screen.findByRole("link", { name: "Device 42" });
+    expect(link).toHaveAttribute("href", "/app/device?device=token%2042");
     fireEvent.click(link);
 
-    await waitFor(() => expect(locations).toContain("/app/device?device=token%2042"));
-    expect(locations[0]).toBe("/app/devices");
-    expect(locations[locations.length - 1]).toBe("/app/device?device=token%2042");
+    await waitFor(() =>
+      expect(`${router.state.location.pathname}${router.state.location.search}`).toBe(
+        "/app/device?device=token%2042",
+      ),
+    );
   });
 });

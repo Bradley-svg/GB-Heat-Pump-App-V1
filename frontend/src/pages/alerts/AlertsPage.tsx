@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useApiClient } from "../../app/contexts";
 import { Page } from "../../components";
@@ -108,12 +108,9 @@ function AlertCard({ alert }: AlertCardProps) {
             <div className="meta">
               {alert.last_update ? `Last update ${formatRelative(alert.last_update)}` : "No recent update"}
             </div>
-            <a
-              href={`/app/device?device=${encodeURIComponent(alert.lookup)}`}
-              className="link inline-link"
-            >
+            <Link to={`/device?device=${encodeURIComponent(alert.lookup)}`} className="link inline-link">
               Inspect device
-            </a>
+            </Link>
           </div>
         </div>
       </div>

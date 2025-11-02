@@ -63,7 +63,7 @@ export default function AdminArchivePage() {
                 </div>
                 <div className="text-right">
                   <div className="meta">Alerts {row.alerts}</div>
-                  <Link to={`/app/device?device=${encodeURIComponent(row.lookup)}`} className="link">
+                  <Link to={`/device?device=${encodeURIComponent(row.lookup)}`} className="link">
                     Open
                   </Link>
                 </div>

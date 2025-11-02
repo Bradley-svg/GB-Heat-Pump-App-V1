@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { useApiClient } from "../../app/contexts";
 import { Page } from "../../components";
@@ -191,12 +192,9 @@ export default function CompactDashboardPage() {
                   <div className="meta">
                     {alert.faults && alert.faults.length > 3 ? `+${alert.faults.length - 3} more` : ""}
                   </div>
-                  <a
-                    href={`/app/device?device=${encodeURIComponent(alert.lookup)}`}
-                    className="link inline-link"
-                  >
+                  <Link to={`/device?device=${encodeURIComponent(alert.lookup)}`} className="link inline-link">
                     Open
-                  </a>
+                  </Link>
                 </div>
               </div>
             ))}
@@ -227,9 +225,9 @@ export default function CompactDashboardPage() {
                 {devices.map((device) => (
                   <tr key={device.lookup}>
                     <td>
-                      <a href={`/app/device?device=${encodeURIComponent(device.lookup)}`} className="link">
+                      <Link to={`/device?device=${encodeURIComponent(device.lookup)}`} className="link">
                         {device.device_id || "(device)"}
-                      </a>
+                      </Link>
                     </td>
                     <td>{device.site ?? "-"}</td>
                     <td>

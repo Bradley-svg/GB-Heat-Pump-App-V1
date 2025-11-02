@@ -114,7 +114,7 @@ export default function DevicesPage() {
                 {items.map((device) => (
                   <tr key={device.lookup}>
                     <td>
-                      <Link className="link" to={`/app/device?device=${encodeURIComponent(device.lookup)}`}>
+                      <Link className="link" to={`/device?device=${encodeURIComponent(device.lookup)}`}>
                         {device.device_id}
                       </Link>
                     </td>

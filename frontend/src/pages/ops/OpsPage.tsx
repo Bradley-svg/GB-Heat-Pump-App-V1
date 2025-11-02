@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { Link } from "react-router-dom";
 
 import { useApiClient } from "../../app/contexts";
 import { useApiRequest } from "../../app/hooks/use-api-request";
@@ -208,12 +209,9 @@ export default function OpsPage() {
                     <td>
                       {row.device_id ? (
                         row.lookup ? (
-                          <a
-                            className="link"
-                            href={`/app/device?device=${encodeURIComponent(row.lookup)}`}
-                          >
+                          <Link className="link" to={`/device?device=${encodeURIComponent(row.lookup)}`}>
                             {row.device_id}
-                          </a>
+                          </Link>
                         ) : (
                           row.device_id
                         )

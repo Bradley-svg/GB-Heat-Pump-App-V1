@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { useApiClient } from "../../app/contexts";
 import { Page } from "../../components";
@@ -96,9 +97,9 @@ export default function CommissioningPage() {
               ))}
             </div>
             <div className="mt-06">
-              <a href={`/app/device?device=${encodeURIComponent(device.lookup)}`} className="link">
+              <Link to={`/device?device=${encodeURIComponent(device.lookup)}`} className="link">
                 Open device
-              </a>
+              </Link>
             </div>
           </div>
         ))}

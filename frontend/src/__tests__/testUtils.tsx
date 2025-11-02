@@ -7,12 +7,27 @@ import { ApiClientContext, CurrentUserContext } from "../app/contexts";
 import type { ApiClient, RequestOptions } from "../services/api-client";
 import type { CurrentUserState } from "../app/hooks/use-current-user";
 
+interface RenderWithApiOptions {
+  basename?: string | null;
+}
+
 export function renderWithApi(
   ui: ReactElement,
   apiClient: ApiClient,
   route = "/app",
   currentUser?: CurrentUserState,
+  options?: RenderWithApiOptions,
 ) {
+  const basename = options?.basename === undefined ? "/app" : options.basename;
+  const initialRoute =
+    basename && route.startsWith(basename) ?
+      route :
+      basename && route.startsWith("/") ?
+        `${basename}${route}` :
+        basename ?
+          `${basename}${route.startsWith("/") ? route : `/${route}`}` :
+          route;
+
   const userState: CurrentUserState =
     currentUser ?? {
       status: "ready",
@@ -21,10 +36,11 @@ export function renderWithApi(
       refresh: () => {
         // no-op for tests
       },
-    };
+  };
   return render(
     <MemoryRouter
-      initialEntries={[route]}
+      basename={basename ?? undefined}
+      initialEntries={[initialRoute]}
       future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
     >
       <ApiClientContext.Provider value={apiClient}>
