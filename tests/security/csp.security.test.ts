@@ -10,10 +10,13 @@ describe("Content-Security-Policy overrides", () => {
     const { env, dispose } = await createWorkerEnv({
       APP_API_BASE: "https://api.remote.test/v1",
       APP_ASSET_BASE: "https://cdn.remote.test/app/assets?v=7#bundle",
+      ALLOW_DEV_ACCESS_SHIM: "true",
+      DEV_ALLOW_USER:
+        '{"email":"admin.test@greenbro.io","roles":["admin"],"clientIds":["profile-west"]}',
     });
 
     try {
-      const response = await app.fetch(new Request("https://example.com/app"), env);
+      const response = await app.fetch(new Request("https://example.com/app/overview"), env);
       expect(response.status).toBe(200);
 
       const csp = response.headers.get("content-security-policy");

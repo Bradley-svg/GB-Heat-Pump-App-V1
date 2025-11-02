@@ -20,6 +20,7 @@ const MIGRATION_FILES = [
   "0005_ops_metrics_rate_limit_index.sql",
   "0006_mqtt_webhook_messages.sql",
   "0007_alert_lifecycle.sql",
+  "0008_device_key_hash_constraint.sql",
   "schema-indexes.sql",
 ];
 

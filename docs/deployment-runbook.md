@@ -20,6 +20,7 @@ This runbook captures the happy path for rolling out Worker changes, database mi
 - Confirm the branch is green in **Frontend CI** and **Worker CI**.
 - Review pending migrations: `npm run migrate:list`.
 - Ensure required secrets are set for the target environment (`wrangler secret put ... --env <env>`).
+- Replace any placeholder secrets (e.g. `CURSOR_SECRET`, `ACCESS_AUD`, `ASSET_SIGNING_SECRET`) with strong values stored in the password manager before the first production deploy.
 - Verify Cloudflare credentials (`npx wrangler whoami`) and select the right account.
 
 ---
