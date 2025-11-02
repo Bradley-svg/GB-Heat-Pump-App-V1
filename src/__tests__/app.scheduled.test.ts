@@ -1,10 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ExecutionContext, ScheduledEvent } from "@cloudflare/workers-types";
 
 import app from "../app";
 import type { Env } from "../env";
 import type { Logger } from "../utils/logging";
 import * as logging from "../utils/logging";
+
+type ScheduledEvent = Parameters<(typeof app)["scheduled"]>[0];
+type ScheduledExecutionContext = Parameters<(typeof app)["scheduled"]>[2];
+
+type StaleResult = { device_id: string };
+type StatementMock = {
+  bind: (...args: unknown[]) => StatementMock;
+  all: () => Promise<{ results: StaleResult[] }>;
+};
 
 function mockSystemLogger() {
   const debug = vi.fn();
@@ -29,13 +37,15 @@ function createScheduledEnv(
   options: { staleResults?: Array<{ device_id: string }> } = {},
 ) {
   const { staleResults = [] } = options;
-  const bindCalls: any[][] = [];
-  const statement = {
-    bind: vi.fn(function bind(this: any, ...args: any[]) {
+  const bindCalls: unknown[][] = [];
+  const statement: StatementMock = {
+    bind: vi.fn(function bind(this: StatementMock, ...args: unknown[]) {
       bindCalls.push(args);
-      return statement;
-    }),
-    all: vi.fn().mockResolvedValue({ results: staleResults }),
+      return this;
+    }) as StatementMock["bind"],
+    all: vi.fn(async function all() {
+      return { results: staleResults };
+    }) as StatementMock["all"],
   };
   const prepare = vi.fn().mockReturnValue(statement);
   const env = {
@@ -63,7 +73,7 @@ describe("app.scheduled", () => {
     });
     const { debug } = mockSystemLogger();
 
-    await app.scheduled({} as ScheduledEvent, env, {} as ExecutionContext);
+    await app.scheduled({} as ScheduledEvent, env, {} as ScheduledExecutionContext);
 
     expect(bindCalls[0]?.[0]).toBeCloseTo(120 / 86400, 10);
     expect(debug).toHaveBeenCalledWith(
@@ -79,7 +89,7 @@ describe("app.scheduled", () => {
     });
     const { debug } = mockSystemLogger();
 
-    await app.scheduled({} as ScheduledEvent, env, {} as ExecutionContext);
+    await app.scheduled({} as ScheduledEvent, env, {} as ScheduledExecutionContext);
 
     expect(bindCalls[0]?.[0]).toBeCloseTo(270 / 86400, 10);
     expect(debug).toHaveBeenCalledWith(
