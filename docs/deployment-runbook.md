@@ -4,6 +4,18 @@ This runbook captures the happy path for rolling out Worker changes, database mi
 
 ---
 
+## Environment Reference
+
+| Env (Wrangler `--env`) | Worker script | Primary URL | D1 database (name -> id) | R2 buckets (binding -> name) | Secrets to provision |
+|------------------------|---------------|-------------|--------------------------|-----------------------------|----------------------|
+| default (remote/dev)   | `gb-heat-pump-app-v1` | `https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev` | `GREENBRO_DB` -> `ee7ad98b-3629-4985-bd7d-a60c401953a7` | `GB_BUCKET`->`greenbro-brand`; `APP_STATIC`->`greenbro-app-static` | `ACCESS_AUD`, `ACCESS_JWKS_URL` (`https://bradleyayliffl.cloudflareaccess.com/cdn-cgi/access/certs`), `CURSOR_SECRET`, `ASSET_SIGNING_SECRET` |
+| preview                | `gb-heat-pump-app-v1-preview` | `https://gb-heat-pump-app-v1-preview.bradleyayliffl.workers.dev` (workers.dev) | `GREENBRO_DB` -> `ee7ad98b-3629-4985-bd7d-a60c401953a7` | `GB_BUCKET`->`greenbro-brand`; `APP_STATIC`->`greenbro-app-static` | `ACCESS_AUD`, `ACCESS_JWKS_URL`, `CURSOR_SECRET`, `ASSET_SIGNING_SECRET` (set after first deploy) |
+| production             | `gb-heat-pump-app-v1-production` | `https://app.greenbro.co.za` (route; confirm DNS before first deploy) | `GREENBRO_DB` -> `ee7ad98b-3629-4985-bd7d-a60c401953a7` | `GB_BUCKET`->`greenbro-brand`; `APP_STATIC`->`greenbro-app-static` | `ACCESS_AUD`, `ACCESS_JWKS_URL`, `CURSOR_SECRET`, `ASSET_SIGNING_SECRET`, optional `ALLOWED_PREFIXES`, ingestion limits |
+
+> `ACCESS_AUD` values are managed in Cloudflare Access and stored only via `wrangler secret put`. Rotate/update them alongside the Access application policies described in `docs/platform-setup-guide.md`.
+
+---
+
 ## 1. Pre-Deployment Checklist
 
 - Confirm the branch is green in **Frontend CI** and **Worker CI**.

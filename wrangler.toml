@@ -50,6 +50,56 @@ bucket_name = "greenbro-app-static"
 # optional for local dev:
 # preview_bucket_name = "greenbro-app-static-dev"
 
+[env.preview]
+  workers_dev = true
+
+  [env.preview.vars]
+  APP_BASE_URL = "https://gb-heat-pump-app-v1-preview.bradleyayliffl.workers.dev"
+  APP_API_BASE = "https://gb-heat-pump-app-v1-preview.bradleyayliffl.workers.dev"
+  APP_ASSET_BASE = "https://pub-3f14c9b10881423a97f40e12402d4b03.r2.dev/app/assets/"
+  RETURN_DEFAULT = "https://www.greenbro.co.za/"
+  TIMEZONE = "Africa/Johannesburg"
+  HEARTBEAT_INTERVAL_SECS = "30"
+  OFFLINE_MULTIPLIER = "6"
+
+  [[env.preview.d1_databases]]
+  binding = "DB"
+  database_name = "GREENBRO_DB"
+  database_id = "ee7ad98b-3629-4985-bd7d-a60c401953a7"
+
+  [[env.preview.r2_buckets]]
+  binding = "GB_BUCKET"
+  bucket_name = "greenbro-brand"
+
+  [[env.preview.r2_buckets]]
+  binding = "APP_STATIC"
+  bucket_name = "greenbro-app-static"
+
+[env.production]
+  workers_dev = true
+
+  [env.production.vars]
+  APP_BASE_URL = "https://app.greenbro.co.za"
+  APP_API_BASE = "https://app.greenbro.co.za"
+  APP_ASSET_BASE = "https://pub-3f14c9b10881423a97f40e12402d4b03.r2.dev/app/assets/"
+  RETURN_DEFAULT = "https://www.greenbro.co.za/"
+  TIMEZONE = "Africa/Johannesburg"
+  HEARTBEAT_INTERVAL_SECS = "30"
+  OFFLINE_MULTIPLIER = "6"
+
+  [[env.production.d1_databases]]
+  binding = "DB"
+  database_name = "GREENBRO_DB"
+  database_id = "ee7ad98b-3629-4985-bd7d-a60c401953a7"
+
+  [[env.production.r2_buckets]]
+  binding = "GB_BUCKET"
+  bucket_name = "greenbro-brand"
+
+  [[env.production.r2_buckets]]
+  binding = "APP_STATIC"
+  bucket_name = "greenbro-app-static"
+
 [env.local]
   [env.local.vars]
   # Enable the Access shim for local Miniflare sessions (adjust as needed).
