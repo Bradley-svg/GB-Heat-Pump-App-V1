@@ -35,7 +35,10 @@ export function AppShell() {
   const isAdmin = normalizedRoles.includes("admin");
 
   return (
-    <BrowserRouter basename="/app">
+    <BrowserRouter
+      basename="/app"
+      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+    >
       <AppLayout user={user}>
         <Suspense fallback={<LoadingScreen message="Loading page..." />}>
           <Routes>
