@@ -134,7 +134,7 @@ bucket_name = "greenbro-brand-staging"
 - Optional signed URL via `ASSET_SIGNING_SECRET`.
 - Key allow list from `ALLOWED_PREFIXES`.
 
-Once deployed, reach the R2 router through `/r2/*` (or the path configured in `src/app.ts`).
+Once deployed, the primary worker (`https://app.greenbro.co.za`) also fronts the R2 API at `https://app.greenbro.co.za/r2/*` (adjust `src/app.ts` if you need a different prefix).
 
 ### 4.4 R2 workflow diagram
 ```

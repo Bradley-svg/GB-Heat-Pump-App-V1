@@ -15,6 +15,9 @@ export interface Env {
   OFFLINE_MULTIPLIER?: string;
   CURSOR_SECRET: string;
   APP_STATIC?: R2Bucket;
+  GB_BUCKET?: R2Bucket;
+  ASSET_SIGNING_SECRET?: string;
+  ALLOWED_PREFIXES?: string;
   INGEST_ALLOWED_ORIGINS?: string;
   INGEST_RATE_LIMIT_PER_MIN?: string;
   INGEST_SIGNATURE_TOLERANCE_SECS?: string;

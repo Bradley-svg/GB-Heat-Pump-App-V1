@@ -17,6 +17,7 @@ import { resolveAppConfig, serializeAppConfig } from "./app-config";
 import { baseSecurityHeaderOptions, mergeSecurityHeaderOptions } from "./utils/security-options";
 import { expandAssetBase } from "./utils/asset-base";
 import { resolveLogoutReturn } from "./utils/return-url";
+import { handleR2Request } from "./r2";
 export { resolveAppConfig, serializeAppConfig } from "./app-config";
 
 const STATIC_CONTENT_TYPES: Record<string, string> = {
@@ -195,6 +196,10 @@ export default {
       return applySecurity(
         new Response("// stub\n", { headers: { "content-type": "application/javascript" } }),
       );
+    }
+
+    if (path === "/r2" || path.startsWith("/r2/")) {
+      return handleR2Request(req, env, { routePrefix: "/r2" });
     }
 
     if (req.method === "OPTIONS") {

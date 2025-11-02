@@ -17,6 +17,7 @@ RETURN_DEFAULT = "https://www.greenbro.co.za/"
 TIMEZONE = "Africa/Johannesburg"
 APP_API_BASE = "https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev"
 APP_ASSET_BASE = "https://pub-3f14c9b10881423a97f40e12402d4b03.r2.dev/app/assets/"
+ALLOWED_PREFIXES = "brand/"
 # INGEST_ALLOWED_ORIGINS = "https://devices.greenbro.io,https://app.greenbro.io"
 # INGEST_RATE_LIMIT_PER_MIN = "120"
 # INGEST_SIGNATURE_TOLERANCE_SECS = "300"
@@ -53,6 +54,10 @@ bucket_name = "greenbro-app-static"
 [env.production]
   workers_dev = true
 
+  [[env.production.routes]]
+  pattern = "app.greenbro.co.za"
+  custom_domain = true
+
   [env.production.vars]
   APP_BASE_URL = "https://app.greenbro.co.za"
   APP_API_BASE = "https://app.greenbro.co.za"
@@ -61,6 +66,7 @@ bucket_name = "greenbro-app-static"
   TIMEZONE = "Africa/Johannesburg"
   HEARTBEAT_INTERVAL_SECS = "30"
   OFFLINE_MULTIPLIER = "6"
+  ALLOWED_PREFIXES = "brand/"
 
   [[env.production.d1_databases]]
   binding = "DB"
@@ -74,6 +80,11 @@ bucket_name = "greenbro-app-static"
   [[env.production.r2_buckets]]
   binding = "APP_STATIC"
   bucket_name = "greenbro-app-static"
+
+  # Main worker serves API, SPA, and /r2/* on the same hostname.
+  [[env.production.routes]]
+  pattern = "app.greenbro.co.za/*"
+  zone_name = "greenbro.co.za"
 
 [env.local]
   [env.local.vars]
