@@ -14,6 +14,7 @@ export interface AlertRecord {
   acknowledged_at: string | null;
   resolved_at: string | null;
   resolved_by: string | null;
+  assigned_to: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -31,6 +32,7 @@ export interface CreateAlertParams {
   acknowledged_at?: string | null;
   resolved_at?: string | null;
   resolved_by?: string | null;
+  assigned_to?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -63,6 +65,7 @@ interface AlertRow {
   acknowledged_at: string | null;
   resolved_at: string | null;
   resolved_by: string | null;
+  assigned_to: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -90,6 +93,7 @@ function mapAlertRow(row: AlertRow): AlertRecord {
     acknowledged_at: row.acknowledged_at,
     resolved_at: row.resolved_at,
     resolved_by: row.resolved_by,
+    assigned_to: row.assigned_to,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -103,6 +107,7 @@ export async function createAlert(env: Env, params: CreateAlertParams): Promise<
   const acknowledgedAt = params.acknowledged_at ?? null;
   const resolvedAt = params.resolved_at ?? null;
   const resolvedBy = params.resolved_by ?? null;
+  const assignedTo = params.assigned_to ?? null;
   const summary = params.summary ?? null;
   const description = params.description ?? null;
   const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
@@ -134,8 +139,8 @@ export async function createAlert(env: Env, params: CreateAlertParams): Promise<
         `INSERT INTO alerts (
             alert_id, device_id, profile_id, alert_type, severity, status,
             summary, description, metadata_json, acknowledged_at, resolved_at,
-            resolved_by, created_at, updated_at
-          ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`,
+            resolved_by, assigned_to, created_at, updated_at
+          ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)`,
       )
       .bind(
         id,
@@ -150,6 +155,7 @@ export async function createAlert(env: Env, params: CreateAlertParams): Promise<
         acknowledgedAt,
         resolvedAt,
         resolvedBy,
+        assignedTo,
         createdAt,
         updatedAt,
       )
@@ -217,4 +223,301 @@ export async function listAlerts(env: Env, filters: AlertListFilters): Promise<A
 
   const rows = await env.DB.prepare(sql).bind(...bind).all<AlertRow>();
   return (rows.results ?? []).map(mapAlertRow);
+}
+
+interface AlertCommentRow {
+  comment_id: string;
+  alert_id: string;
+  action: string;
+  author_id: string | null;
+  author_email: string | null;
+  body: string | null;
+  metadata_json: string | null;
+  created_at: string;
+}
+
+export interface AlertCommentRecord {
+  comment_id: string;
+  alert_id: string;
+  action: string;
+  author_id: string | null;
+  author_email: string | null;
+  body: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+function mapAlertCommentRow(row: AlertCommentRow): AlertCommentRecord {
+  let metadata: Record<string, unknown> | null = null;
+  if (row.metadata_json) {
+    try {
+      const parsed = JSON.parse(row.metadata_json);
+      if (parsed && typeof parsed === "object") metadata = parsed as Record<string, unknown>;
+    } catch {
+      metadata = null;
+    }
+  }
+
+  return {
+    comment_id: row.comment_id,
+    alert_id: row.alert_id,
+    action: row.action,
+    author_id: row.author_id,
+    author_email: row.author_email,
+    body: row.body,
+    metadata,
+    created_at: row.created_at,
+  };
+}
+
+export async function getAlert(env: Env, alertId: string): Promise<AlertRecord | null> {
+  const row = await env.DB
+    .prepare(`SELECT * FROM alerts WHERE alert_id = ?1 LIMIT 1`)
+    .bind(alertId)
+    .first<AlertRow>();
+  if (!row) return null;
+  return mapAlertRow(row);
+}
+
+export interface AlertLifecycleUpdateBase {
+  alert_id: string;
+  actor_id: string;
+  actor_email?: string | null;
+  comment?: string | null;
+  acknowledged_at?: string | null;
+  resolved_at?: string | null;
+}
+
+export type AlertLifecycleUpdateParams =
+  | (AlertLifecycleUpdateBase & {
+      action: "acknowledge";
+      assignee?: string | null;
+    })
+  | (AlertLifecycleUpdateBase & {
+      action: "assign";
+      assignee: string;
+    })
+  | (AlertLifecycleUpdateBase & {
+      action: "resolve";
+    });
+
+export type AlertLifecycleUpdateResult =
+  | { ok: true; alert: AlertRecord; comment: AlertCommentRecord | null }
+  | { ok: false; reason: "not_found" };
+
+export async function updateAlertLifecycle(
+  env: Env,
+  params: AlertLifecycleUpdateParams,
+): Promise<AlertLifecycleUpdateResult> {
+  const current = await env.DB
+    .prepare(`SELECT * FROM alerts WHERE alert_id = ?1 LIMIT 1`)
+    .bind(params.alert_id)
+    .first<AlertRow>();
+  if (!current) {
+    return { ok: false, reason: "not_found" };
+  }
+
+  const now = nowISO();
+  const actorEmail = params.actor_email ?? null;
+  let commentMetadata: Record<string, unknown> | null = null;
+  let commentAction = params.action;
+  let commentBody: string | null = params.comment ?? null;
+  let shouldInsertComment = Boolean(params.comment);
+  let assignedTo = current.assigned_to;
+  let acknowledgedAt = current.acknowledged_at;
+  let status = current.status;
+  let resolvedAt = current.resolved_at;
+  let resolvedBy = current.resolved_by;
+
+  if (params.action === "acknowledge") {
+    acknowledgedAt = params.acknowledged_at ?? now;
+    if (current.status !== "resolved") {
+      status = "acknowledged";
+    }
+    if (params.assignee !== undefined) {
+      assignedTo = params.assignee;
+      if (!params.comment) {
+        commentBody = null;
+      }
+      if (params.assignee !== null) {
+        commentMetadata = { assignee: params.assignee };
+      }
+      shouldInsertComment = shouldInsertComment || params.assignee !== undefined;
+    }
+  } else if (params.action === "assign") {
+    assignedTo = params.assignee;
+    commentMetadata = { assignee: params.assignee };
+    shouldInsertComment = true;
+    commentAction = "assign";
+  } else if (params.action === "resolve") {
+    status = "resolved";
+    resolvedAt = params.resolved_at ?? now;
+    resolvedBy = params.actor_id;
+    if (!acknowledgedAt) {
+      acknowledgedAt = resolvedAt;
+    }
+  }
+
+  const updateStmt = env.DB
+    .prepare(
+      `UPDATE alerts
+          SET status = ?2,
+              acknowledged_at = ?3,
+              resolved_at = ?4,
+              resolved_by = ?5,
+              assigned_to = ?6,
+              updated_at = ?7
+        WHERE alert_id = ?1`,
+    )
+    .bind(
+      params.alert_id,
+      status,
+      acknowledgedAt,
+      resolvedAt,
+      resolvedBy,
+      assignedTo,
+      now,
+    );
+
+  const statements = [updateStmt];
+  let commentRecord: AlertCommentRecord | null = null;
+
+  if (shouldInsertComment) {
+    const commentId = crypto.randomUUID();
+    const metadataJson = commentMetadata ? JSON.stringify(commentMetadata) : null;
+    const insertStmt = env.DB
+      .prepare(
+        `INSERT INTO alert_comments (
+            comment_id, alert_id, action, author_id, author_email, body, metadata_json, created_at
+          ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+      )
+      .bind(
+        commentId,
+        params.alert_id,
+        commentAction,
+        params.actor_id,
+        actorEmail,
+        commentBody,
+        metadataJson,
+        now,
+      );
+    statements.push(insertStmt);
+
+    commentRecord = {
+      comment_id: commentId,
+      alert_id: params.alert_id,
+      action: commentAction,
+      author_id: params.actor_id,
+      author_email: actorEmail,
+      body: commentBody,
+      metadata: commentMetadata,
+      created_at: now,
+    };
+  }
+
+  await env.DB.batch(statements);
+
+  const refreshed = await getAlert(env, params.alert_id);
+  if (!refreshed) {
+    return { ok: false, reason: "not_found" };
+  }
+
+  return { ok: true, alert: refreshed, comment: commentRecord };
+}
+
+export async function listAlertComments(env: Env, alertId: string): Promise<AlertCommentRecord[]> {
+  const rows = await env.DB
+    .prepare(
+      `SELECT * FROM alert_comments WHERE alert_id = ?1 ORDER BY created_at ASC, comment_id ASC`,
+    )
+    .bind(alertId)
+    .all<AlertCommentRow>();
+  return (rows.results ?? []).map(mapAlertCommentRow);
+}
+
+export async function listAlertCommentsForAlerts(
+  env: Env,
+  alertIds: string[],
+): Promise<Map<string, AlertCommentRecord[]>> {
+  const map = new Map<string, AlertCommentRecord[]>();
+  if (!alertIds.length) {
+    return map;
+  }
+  const unique = [...new Set(alertIds)];
+  const placeholders = unique.map((_, idx) => `?${idx + 1}`).join(",");
+  const rows = await env.DB
+    .prepare(
+      `SELECT * FROM alert_comments
+         WHERE alert_id IN (${placeholders})
+         ORDER BY alert_id ASC, created_at ASC, comment_id ASC`,
+    )
+    .bind(...unique)
+    .all<AlertCommentRow>();
+
+  for (const row of rows.results ?? []) {
+    const record = mapAlertCommentRow(row);
+    const bucket = map.get(record.alert_id);
+    if (bucket) {
+      bucket.push(record);
+    } else {
+      map.set(record.alert_id, [record]);
+    }
+  }
+
+  for (const id of unique) {
+    if (!map.has(id)) {
+      map.set(id, []);
+    }
+  }
+
+  return map;
+}
+
+export async function addAlertComment(
+  env: Env,
+  params: {
+    alert_id: string;
+    action: string;
+    body: string | null;
+    actor_id: string;
+    actor_email?: string | null;
+    metadata?: Record<string, unknown> | null;
+  },
+): Promise<AlertCommentRecord> {
+  const now = nowISO();
+  const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
+  const commentId = crypto.randomUUID();
+  const insertStmt = env.DB
+    .prepare(
+      `INSERT INTO alert_comments (
+          comment_id, alert_id, action, author_id, author_email, body, metadata_json, created_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+    )
+    .bind(
+      commentId,
+      params.alert_id,
+      params.action,
+      params.actor_id,
+      params.actor_email ?? null,
+      params.body ?? null,
+      metadataJson,
+      now,
+    );
+
+  const updateAlertStmt = env.DB
+    .prepare(`UPDATE alerts SET updated_at = ?2 WHERE alert_id = ?1`)
+    .bind(params.alert_id, now);
+
+  await env.DB.batch([insertStmt, updateAlertStmt]);
+
+  return {
+    comment_id: commentId,
+    alert_id: params.alert_id,
+    action: params.action,
+    author_id: params.actor_id,
+    author_email: params.actor_email ?? null,
+    body: params.body ?? null,
+    metadata: params.metadata ?? null,
+    created_at: now,
+  };
 }

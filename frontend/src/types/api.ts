@@ -189,6 +189,56 @@ export interface AlertsFeedItem {
   last_update: string | null;
 }
 
+export interface AlertComment {
+  comment_id: string;
+  alert_id: string;
+  action: "acknowledge" | "assign" | "resolve" | "comment";
+  author_id: string | null;
+  author_email: string | null;
+  body: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  pending?: boolean;
+}
+
+export interface AlertRecord {
+  alert_id: string;
+  device_id: string;
+  lookup: string;
+  profile_id: string | null;
+  site: string | null;
+  alert_type: string;
+  severity: "info" | "warning" | "critical";
+  status: "open" | "acknowledged" | "resolved";
+  summary: string | null;
+  description: string | null;
+  metadata: Record<string, unknown> | null;
+  acknowledged_at: string | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  assigned_to: string | null;
+  created_at: string;
+  updated_at: string;
+  comments: AlertComment[];
+}
+
+export interface AlertListResponse {
+  generated_at: string;
+  items: AlertRecord[];
+}
+
+export interface UpdateAlertLifecycleResponse {
+  ok: true;
+  alert: AlertRecord;
+  comment: AlertComment | null;
+}
+
+export interface CreateAlertCommentResponse {
+  ok: true;
+  alert: AlertRecord;
+  comment: AlertComment;
+}
+
 export interface CommissioningResponse {
   generated_at: string;
   summary: {

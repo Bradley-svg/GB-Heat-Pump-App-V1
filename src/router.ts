@@ -3,7 +3,13 @@ import { Router } from "itty-router";
 import type { Env } from "./env";
 import { json } from "./utils/responses";
 import { safeDecode } from "./utils";
-import { handleAlertsFeed, handleCreateAlertRecord, handleListAlertRecords } from "./routes/alerts";
+import {
+  handleAlertsFeed,
+  handleCreateAlertRecord,
+  handleListAlertRecords,
+  handleUpdateAlertRecord,
+  handleCreateAlertComment,
+} from "./routes/alerts";
 import { handleArchive } from "./routes/archive";
 import { handleClientCompact } from "./routes/client";
 import { handleDeviceHistory, handleLatest, handleListDevices } from "./routes/devices";
@@ -63,6 +69,14 @@ router
   .get("/api/devices", (req, env) => handleListDevices(req, env))
   .get("/api/alerts", (req, env) => handleListAlertRecords(req, env))
   .post("/api/alerts", (req, env) => handleCreateAlertRecord(req, env))
+  .patch(
+    "/api/alerts/:id",
+    withParam("id", (req, env, alertId) => handleUpdateAlertRecord(req, env, alertId)),
+  )
+  .post(
+    "/api/alerts/:id/comments",
+    withParam("id", (req, env, alertId) => handleCreateAlertComment(req, env, alertId)),
+  )
   .get("/api/alerts/recent", (req, env) => handleAlertsFeed(req, env))
   .get("/api/commissioning/checklist", (req, env) => handleCommissioning(req, env))
   .get("/api/commissioning/runs", (req, env) => handleListCommissioningRuns(req, env))

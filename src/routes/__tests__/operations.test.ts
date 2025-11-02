@@ -31,6 +31,7 @@ const MIGRATIONS = [
   "migrations/001_init.sql",
   "migrations/0002_indexes.sql",
   "migrations/0003_operational_entities.sql",
+  "migrations/0007_alert_lifecycle.sql",
 ];
 
 const DEV_SEED = "seeds/dev/seed.sql";

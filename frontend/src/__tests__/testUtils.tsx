@@ -59,6 +59,8 @@ export function createApiClientMock(overrides: Partial<ApiClient> = {}): ApiClie
     Promise.reject<T>(new Error(`Unexpected GET ${path}`));
   const defaultPost: ApiClient["post"] = <T,>(path: string, _body: unknown, _options?: RequestOptions) =>
     Promise.reject<T>(new Error(`Unexpected POST ${path}`));
+  const defaultPatch: ApiClient["patch"] = <T,>(path: string, _body: unknown, _options?: RequestOptions) =>
+    Promise.reject<T>(new Error(`Unexpected PATCH ${path}`));
   const defaultPut: ApiClient["put"] = <T,>(path: string, _body: unknown, _options?: RequestOptions) =>
     Promise.reject<T>(new Error(`Unexpected PUT ${path}`));
   const defaultDelete: ApiClient["delete"] = <T,>(path: string, _options?: RequestOptions) =>
@@ -67,6 +69,7 @@ export function createApiClientMock(overrides: Partial<ApiClient> = {}): ApiClie
   return {
     get: overrides.get ?? defaultGet,
     post: overrides.post ?? defaultPost,
+    patch: overrides.patch ?? defaultPatch,
     put: overrides.put ?? defaultPut,
     delete: overrides.delete ?? defaultDelete,
   };
@@ -74,6 +77,7 @@ export function createApiClientMock(overrides: Partial<ApiClient> = {}): ApiClie
 
 type ApiGetMock = Mock<ApiClient["get"]>;
 type ApiPostMock = Mock<ApiClient["post"]>;
+type ApiPatchMock = Mock<ApiClient["patch"]>;
 type ApiPutMock = Mock<ApiClient["put"]>;
 type ApiDeleteMock = Mock<ApiClient["delete"]>;
 
@@ -84,6 +88,12 @@ export function mockApiGet(fn: ApiGetMock): ApiClient["get"] {
 }
 
 export function mockApiPost(fn: ApiPostMock): ApiClient["post"] {
+  return function <T,>(path: string, body: unknown, options?: RequestOptions): Promise<T> {
+    return fn(path, body, options) as Promise<T>;
+  };
+}
+
+export function mockApiPatch(fn: ApiPatchMock): ApiClient["patch"] {
   return function <T,>(path: string, body: unknown, options?: RequestOptions): Promise<T> {
     return fn(path, body, options) as Promise<T>;
   };

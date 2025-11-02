@@ -211,6 +211,101 @@ describe.sequential("API flows via Miniflare", () => {
     }
   });
 
+  it("supports full alert lifecycle actions with audit trail", async () => {
+    const { env, dispose } = await createWorkerEnv();
+    currentUser = adminUser;
+
+    try {
+      const acknowledgeRes = await workerApp.fetch(
+        makeRequest("/api/alerts/alert-0001", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "acknowledge", comment: "Acknowledged by integration test" }),
+        }),
+        env,
+      );
+      expect(acknowledgeRes.status).toBe(200);
+      const acknowledgeBody = (await acknowledgeRes.json()) as {
+        ok: boolean;
+        alert: { status: string; acknowledged_at: string | null };
+        comment: { action: string } | null;
+      };
+      expect(acknowledgeBody.ok).toBe(true);
+      expect(acknowledgeBody.alert.status).toBe("acknowledged");
+      expect(acknowledgeBody.comment?.action).toBe("acknowledge");
+
+      const assignRes = await workerApp.fetch(
+        makeRequest("/api/alerts/alert-0001", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "assign", assignee: "tech.integration", comment: "Taking ownership" }),
+        }),
+        env,
+      );
+      expect(assignRes.status).toBe(200);
+      const assignBody = (await assignRes.json()) as {
+        alert: { assigned_to: string | null };
+        comment: { metadata?: { assignee?: string } } | null;
+      };
+      expect(assignBody.alert.assigned_to).toBe("tech.integration");
+      expect(assignBody.comment?.metadata?.assignee).toBe("tech.integration");
+
+      const resolveRes = await workerApp.fetch(
+        makeRequest("/api/alerts/alert-0001", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "resolve", comment: "Resolved after reboot" }),
+        }),
+        env,
+      );
+      expect(resolveRes.status).toBe(200);
+      const resolveBody = (await resolveRes.json()) as {
+        alert: { status: string; resolved_by: string | null; resolved_at: string | null };
+      };
+      expect(resolveBody.alert.status).toBe("resolved");
+      expect(resolveBody.alert.resolved_by).toBe(adminUser.email);
+      expect(resolveBody.alert.resolved_at).toBeTruthy();
+
+      const commentRes = await workerApp.fetch(
+        makeRequest("/api/alerts/alert-0001/comments", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ comment: "Follow-up note from integration test" }),
+        }),
+        env,
+      );
+      expect(commentRes.status).toBe(200);
+      const commentBody = (await commentRes.json()) as {
+        alert: { comments: Array<{ body: string }> };
+        comment: { action: string; body: string | null };
+      };
+      expect(commentBody.comment.action).toBe("comment");
+      expect(commentBody.comment.body).toBe("Follow-up note from integration test");
+      expect(commentBody.alert.comments.some((c) => c.body === "Follow-up note from integration test")).toBe(true);
+
+      const listRes = await workerApp.fetch(makeRequest("/api/alerts?limit=5"), env);
+      expect(listRes.status).toBe(200);
+      const listBody = (await listRes.json()) as { items: Array<{ alert_id: string; status: string }> };
+      const updated = listBody.items.find((item) => item.alert_id === "alert-0001");
+      expect(updated?.status).toBe("resolved");
+
+      const auditRows = await env.DB.prepare(
+        `SELECT action FROM audit_trail WHERE entity_type = 'alert' AND entity_id = ?1 ORDER BY created_at ASC`,
+      )
+        .bind("alert-0001")
+        .all<{ action: string }>();
+      const actions = (auditRows.results ?? []).map((row) => row.action);
+      expect(actions).toEqual([
+        "alert.acknowledge",
+        "alert.assign",
+        "alert.resolve",
+        "alert.commented",
+      ]);
+    } finally {
+      dispose();
+    }
+  });
+
   it("validates ingest signatures and enforces rate limits", async () => {
     const { env, dispose } = await createWorkerEnv({ INGEST_RATE_LIMIT_PER_MIN: "1" });
     try {

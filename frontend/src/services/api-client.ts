@@ -20,6 +20,7 @@ export interface ApiClient {
   get<T>(path: string, options?: RequestOptions): Promise<T>;
   post<T>(path: string, body: unknown, options?: RequestOptions): Promise<T>;
   put<T>(path: string, body: unknown, options?: RequestOptions): Promise<T>;
+  patch<T>(path: string, body: unknown, options?: RequestOptions): Promise<T>;
   delete<T>(path: string, options?: RequestOptions): Promise<T>;
 }
 
@@ -194,6 +195,20 @@ class FetchApiClient implements ApiClient {
       path,
       {
         method: "POST",
+        body: JSON.stringify(body),
+        ...rest,
+      },
+      signal,
+    );
+  }
+
+  patch<T>(path: string, body: unknown, options?: RequestOptions): Promise<T> {
+    const { signal, ...rest } = options ?? {};
+    return requestJson<T>(
+      this.apiBase,
+      path,
+      {
+        method: "PATCH",
         body: JSON.stringify(body),
         ...rest,
       },
