@@ -1,0 +1,88 @@
+{
+  "monitors": [
+    {
+      "name": "GB Workers :: Fleet offline ratio",
+      "type": "query alert",
+      "query": "avg(last_5m):avg:greenbro.devices.offline_ratio{env:production} > 0.35",
+      "message": "Offline ratio is above critical (35%). Investigate heartbeat ingestion per docs/observability.md.",
+      "tags": [
+        "service:gb-workers",
+        "team:platform",
+        "severity:critical"
+      ],
+      "options": {
+        "thresholds": {
+          "critical": 0.35,
+          "warning": 0.2
+        },
+        "evaluation_delay": 120,
+        "notify_audit": false,
+        "notify_no_data": true,
+        "no_data_timeframe": 15
+      }
+    },
+    {
+      "name": "GB Workers :: Server error rate",
+      "type": "query alert",
+      "query": "avg(last_5m):avg:greenbro.ops.server_error_rate{env:production} > 0.05",
+      "message": "5xx error rate crossed critical threshold (5%). Check slow/server error routes in Workers Observability dashboard.",
+      "tags": [
+        "service:gb-workers",
+        "team:platform",
+        "severity:critical"
+      ],
+      "options": {
+        "thresholds": {
+          "critical": 0.05,
+          "warning": 0.02
+        },
+        "evaluation_delay": 60,
+        "notify_audit": false,
+        "notify_no_data": true,
+        "no_data_timeframe": 10
+      }
+    },
+    {
+      "name": "GB Workers :: Slow request rate",
+      "type": "query alert",
+      "query": "avg(last_5m):avg:greenbro.ops.slow_rate{env:production} > 0.15",
+      "message": "Slow rate above 15%. Inspect avg duration per route and D1 latency.",
+      "tags": [
+        "service:gb-workers",
+        "team:platform",
+        "severity:warning"
+      ],
+      "options": {
+        "thresholds": {
+          "critical": 0.3,
+          "warning": 0.15
+        },
+        "evaluation_delay": 60,
+        "notify_audit": false,
+        "notify_no_data": true,
+        "no_data_timeframe": 10
+      }
+    },
+    {
+      "name": "GB Workers :: Ingest rate limits",
+      "type": "query alert",
+      "query": "avg(last_5m):sum:greenbro.logs.count{env:production,msg:heartbeat.rate_limited OR status:429 AND route:/api/ingest} > 120",
+      "message": "Heartbeat rate limiting above acceptable threshold. Coordinate with device team to throttle traffic.",
+      "tags": [
+        "service:gb-workers",
+        "team:platform",
+        "severity:warning"
+      ],
+      "options": {
+        "thresholds": {
+          "critical": 120,
+          "warning": 90
+        },
+        "evaluation_delay": 60,
+        "notify_audit": false,
+        "notify_no_data": true,
+        "no_data_timeframe": 10
+      }
+    }
+  ]
+}
