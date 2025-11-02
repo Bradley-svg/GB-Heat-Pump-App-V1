@@ -18,6 +18,7 @@ TIMEZONE = "Africa/Johannesburg"
 APP_API_BASE = "https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev"
 APP_ASSET_BASE = "https://pub-3f14c9b10881423a97f40e12402d4b03.r2.dev/app/assets/"
 ALLOWED_PREFIXES = "brand/"
+# REQUIRED outside local dev:
 # INGEST_ALLOWED_ORIGINS = "https://devices.greenbro.io,https://app.greenbro.io"
 # INGEST_RATE_LIMIT_PER_MIN = "120"
 # INGEST_SIGNATURE_TOLERANCE_SECS = "300"
@@ -67,6 +68,8 @@ bucket_name = "greenbro-app-static"
   HEARTBEAT_INTERVAL_SECS = "30"
   OFFLINE_MULTIPLIER = "6"
   ALLOWED_PREFIXES = "brand/"
+  # REQUIRED: set per-environment ingest allowlist
+  # INGEST_ALLOWED_ORIGINS = "https://devices.greenbro.io,https://app.greenbro.io"
 
   [[env.production.d1_databases]]
   binding = "DB"

@@ -17,12 +17,16 @@ export interface CorsEvaluation {
   allowOrigin: string | null;
 }
 
-function parseAllowedOrigins(env: Env): string[] {
-  const raw = env.INGEST_ALLOWED_ORIGINS || "*";
-  return raw
+function parseAllowedOrigins(env: Env): { origins: string[]; configured: boolean } {
+  const raw = env.INGEST_ALLOWED_ORIGINS;
+  if (typeof raw !== "string") {
+    return { origins: [], configured: false };
+  }
+  const origins = raw
     .split(/[, \n\r]+/)
     .map((entry) => entry.trim())
     .filter(Boolean);
+  return { origins, configured: origins.length > 0 };
 }
 
 function matchesOrigin(origin: string, rule: string) {
@@ -38,7 +42,10 @@ function matchesOrigin(origin: string, rule: string) {
 
 export function evaluateCors(req: Request, env: Env): CorsEvaluation {
   const origin = req.headers.get("Origin");
-  const allowedOrigins = parseAllowedOrigins(env);
+  const { origins: allowedOrigins, configured } = parseAllowedOrigins(env);
+  if (!configured) {
+    return { allowed: false, origin: origin ?? null, allowOrigin: null };
+  }
   if (!origin) {
     const allowAny = allowedOrigins.includes("*");
     return {

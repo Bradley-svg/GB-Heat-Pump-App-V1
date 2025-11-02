@@ -23,6 +23,7 @@ function baseEnv(overrides: Partial<Env> = {}): Env {
     HEARTBEAT_INTERVAL_SECS: "30",
     OFFLINE_MULTIPLIER: "6",
     CURSOR_SECRET: "integration-secret-test",
+    INGEST_ALLOWED_ORIGINS: "*",
     ...overrides,
   };
 }
@@ -241,6 +242,25 @@ describe("handleIngest", () => {
 
     expect(res.status).toBe(403);
     expect(res.headers.has("access-control-allow-origin")).toBe(false);
+    expect(verifyDeviceKeyMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when ingest allowlist is missing", async () => {
+    const env = baseEnv();
+    delete (env as any).INGEST_ALLOWED_ORIGINS;
+    const payload = {
+      device_id: "dev-123",
+      metrics: { supplyC: 12 },
+    };
+
+    const req = await buildSignedRequest("demo", payload, {
+      origin: "https://device.local",
+    });
+    const res = await handleIngest(req, env, "demo");
+
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as any;
+    expect(body.error).toBe("Origin not allowed");
     expect(verifyDeviceKeyMock).not.toHaveBeenCalled();
   });
 

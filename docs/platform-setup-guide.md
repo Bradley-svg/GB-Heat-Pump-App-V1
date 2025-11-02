@@ -174,9 +174,11 @@ Override these with `[env.<name>.vars]` when staging or production diverge.
 | `CURSOR_SECRET`            | AES key for pagination cursors. |
 | `ASSET_SIGNING_SECRET`     | Enables signed R2 reads (only if using signed URLs). |
 | `ALLOWED_PREFIXES`         | Optional allow list for R2 keys (for example `brand/,reports/`). |
-| `INGEST_ALLOWED_ORIGINS`   | CSV of allowed device origins. |
+| `INGEST_ALLOWED_ORIGINS`   | **Required** allowlist of device origins; Worker returns 403 if unset (comma or newline separated). |
 | `INGEST_RATE_LIMIT_PER_MIN`| Rate limiting for ingestion endpoints. |
 | `INGEST_SIGNATURE_TOLERANCE_SECS` | Replay protection window for device signatures. |
+
+> Non-local development (remote dev, staging, production) must set `INGEST_ALLOWED_ORIGINS`. For purely local `wrangler dev --local` sessions you can omit it, but ingest requests from browsers will be refused until the allowlist is populated.
 
 Set secrets in each environment:
 ```bash

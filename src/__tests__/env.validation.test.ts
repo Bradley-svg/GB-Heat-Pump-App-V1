@@ -21,6 +21,7 @@ function createEnv(overrides: Partial<Env> = {}): Env {
     APP_BASE_URL: "https://app.example.com/app",
     RETURN_DEFAULT: "https://example.com/",
     CURSOR_SECRET: "integration-secret-12345",
+    INGEST_ALLOWED_ORIGINS: "https://devices.example.com",
   } satisfies Partial<Env>;
   return { ...base, ...overrides } as Env;
 }
@@ -67,5 +68,20 @@ describe("validateEnv", () => {
   it("fails when APP_ASSET_BASE uses a disallowed scheme", () => {
     const env = createEnv({ APP_ASSET_BASE: "file:///etc/passwd" });
     expect(() => validateEnv(env)).toThrowError(/APP_ASSET_BASE/);
+  });
+
+  it("fails when INGEST_ALLOWED_ORIGINS is missing in non-local environments", () => {
+    const env = createEnv();
+    delete (env as any).INGEST_ALLOWED_ORIGINS;
+    expect(() => validateEnv(env)).toThrowError(/INGEST_ALLOWED_ORIGINS/);
+  });
+
+  it("allows missing INGEST_ALLOWED_ORIGINS for local development", () => {
+    const env = createEnv({
+      APP_BASE_URL: "http://localhost:8787/app",
+      RETURN_DEFAULT: "/app",
+    });
+    delete (env as any).INGEST_ALLOWED_ORIGINS;
+    expect(() => validateEnv(env)).not.toThrow();
   });
 });

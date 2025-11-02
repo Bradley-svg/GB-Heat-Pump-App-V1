@@ -51,6 +51,7 @@ export async function createWorkerEnv(overrides: Partial<Env> = {}): Promise<Wor
     CURSOR_SECRET: "integration-secret",
     HEARTBEAT_INTERVAL_SECS: "30",
     OFFLINE_MULTIPLIER: "6",
+    INGEST_ALLOWED_ORIGINS: "https://devices.test",
   };
 
   const env: Env = { ...baseEnv, ...overrides, DB };

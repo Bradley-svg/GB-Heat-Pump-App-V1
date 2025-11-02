@@ -37,6 +37,7 @@ export class EnvValidationError extends Error {
 
 const HTTP_SCHEMES = new Set(["http:", "https:"]);
 const ABSOLUTE_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
+const LOCAL_FLAG_VALUES = new Set(["1", "true", "yes", "on"]);
 
 function isHttpUrl(candidate: string): boolean {
   try {
@@ -145,6 +146,33 @@ const EnvSchema = z
           path: ["APP_ASSET_BASE"],
           code: z.ZodIssueCode.custom,
           message: "APP_ASSET_BASE must use http(s) scheme when absolute",
+        });
+      }
+    }
+
+    const ingestOriginsRaw =
+      typeof value.INGEST_ALLOWED_ORIGINS === "string" ? value.INGEST_ALLOWED_ORIGINS.trim() : "";
+    const allowShim =
+      typeof value.ALLOW_DEV_ACCESS_SHIM === "string" &&
+      LOCAL_FLAG_VALUES.has(value.ALLOW_DEV_ACCESS_SHIM.trim().toLowerCase());
+    const hasDevUser =
+      typeof value.DEV_ALLOW_USER === "string" && value.DEV_ALLOW_USER.trim().length > 0;
+    const appBaseLower = appBase.toLowerCase();
+    const appBaseIsLocal =
+      appBaseLower.startsWith("http://localhost") ||
+      appBaseLower.startsWith("http://127.0.0.1") ||
+      appBaseLower.startsWith("http://0.0.0.0") ||
+      appBaseLower.startsWith("http://[::1]");
+    const isLocalEnv = allowShim || hasDevUser || appBaseIsLocal;
+
+    if (!ingestOriginsRaw) {
+      if (isLocalEnv) {
+        console.warn("INGEST_ALLOWED_ORIGINS is not set; ingest endpoints will deny browser origins.");
+      } else {
+        ctx.addIssue({
+          path: ["INGEST_ALLOWED_ORIGINS"],
+          code: z.ZodIssueCode.custom,
+          message: "INGEST_ALLOWED_ORIGINS must be configured for non-local environments",
         });
       }
     }
