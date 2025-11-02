@@ -164,6 +164,21 @@ export default {
     const baseSecurity = baseSecurityHeaderOptions(env);
     const applySecurity = (response: Response, overrides?: SecurityHeaderOptions) =>
       withSecurityHeaders(response, mergeSecurityHeaderOptions(baseSecurity, overrides));
+    const respondUnauthenticated = () => {
+      if (req.method === "GET" || req.method === "HEAD") {
+        try {
+          const loginUrl = new URL(
+            `/cdn-cgi/access/login/${encodeURIComponent(env.ACCESS_AUD)}`,
+            url,
+          );
+          loginUrl.searchParams.set("redirect_url", url.toString());
+          return applySecurity(Response.redirect(loginUrl.toString(), 302));
+        } catch {
+          // fall back to 401 below
+        }
+      }
+      return applySecurity(new Response("Unauthorized", { status: 401 }));
+    };
 
     if (path === "/") {
       return Response.redirect(url.origin + "/app", 302);
@@ -195,15 +210,16 @@ export default {
 
     if (path === "/app" || path === "/app/") {
       const user = await requireAccessUser(req, env);
-      if (user) {
-        const landingPath = landingFor(user);
-        if (!landingPath.startsWith("/") || landingPath.startsWith("//")) {
-          throw new Error(`Invalid landing path: ${landingPath}`);
-        }
-        const landingUrl = new URL(landingPath, env.APP_BASE_URL);
-        if (url.pathname !== landingUrl.pathname) {
-          return Response.redirect(landingUrl.toString(), 302);
-        }
+      if (!user) {
+        return respondUnauthenticated();
+      }
+      const landingPath = landingFor(user);
+      if (!landingPath.startsWith("/") || landingPath.startsWith("//")) {
+        throw new Error(`Invalid landing path: ${landingPath}`);
+      }
+      const landingUrl = new URL(landingPath, env.APP_BASE_URL);
+      if (url.pathname !== landingUrl.pathname) {
+        return applySecurity(Response.redirect(landingUrl.toString(), 302));
       }
       const spa = await serveAppStatic("/app", env);
       if (spa) {
@@ -221,6 +237,10 @@ export default {
     }
 
     if (path.startsWith("/app/assets/")) {
+      const user = await requireAccessUser(req, env);
+      if (!user) {
+        return respondUnauthenticated();
+      }
       const assetRes = await serveAppStatic(path, env);
       if (assetRes) {
         const overrides = assetRes.scriptHashes ? { scriptHashes: assetRes.scriptHashes } : undefined;
@@ -230,7 +250,10 @@ export default {
     }
 
     if (path.startsWith("/app/")) {
-      await requireAccessUser(req, env);
+      const user = await requireAccessUser(req, env);
+      if (!user) {
+        return respondUnauthenticated();
+      }
       const spa = await serveAppStatic(path, env);
       if (spa) {
         const overrides = spa.scriptHashes ? { scriptHashes: spa.scriptHashes } : undefined;
