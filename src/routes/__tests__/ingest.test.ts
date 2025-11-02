@@ -84,6 +84,25 @@ describe("handleIngest", () => {
     expect(payload.error).toBe("Invalid JSON");
   });
 
+  it("rejects payloads over 256KB when using multi-byte characters", async () => {
+    const env = baseEnv();
+    const multiByteChar = "😀";
+    const encoder = new TextEncoder();
+    const bytesPerChar = encoder.encode(multiByteChar).length;
+    const repeat = Math.floor(256_000 / bytesPerChar) + 1;
+    const payload = {
+      device_id: "dev-utf8",
+      metrics: { note: multiByteChar.repeat(repeat) },
+    };
+    const req = await buildSignedRequest("demo", payload);
+
+    const res = await handleIngest(req, env, "demo");
+    expect(res.status).toBe(413);
+    const body = (await res.json()) as any;
+    expect(body.error).toBe("Payload too large");
+    expect(verifyDeviceKeyMock).not.toHaveBeenCalled();
+  });
+
   it("returns 401 when device key verification fails", async () => {
     verifyDeviceKeyMock.mockResolvedValue({ ok: false, reason: "mismatch" });
     const env = baseEnv();

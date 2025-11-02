@@ -20,6 +20,8 @@ const TIMESTAMP_HEADER = "X-GREENBRO-TIMESTAMP";
 const INGEST_ROUTE = "/api/ingest";
 const HEARTBEAT_ROUTE = "/api/heartbeat";
 
+const textEncoder = new TextEncoder();
+
 type SignatureValidation =
   | { ok: true }
   | { ok: false; status: number; error: string };
@@ -147,7 +149,7 @@ function readRawBody(raw: string): unknown {
 }
 
 function payloadSizeOk(raw: string) {
-  return raw.length <= 256_000;
+  return textEncoder.encode(raw).length <= 256_000;
 }
 
 export async function handleIngest(req: Request, env: Env, profileId: string) {
