@@ -21,6 +21,12 @@ wrangler analytics engine upload-schema "${DATASET_NAME}" \
   --column status:int \
   --column duration_ms:float \
   --column device_id:string \
-  --column profile_id:string
+  --column profile_id:string \
+  --column route:string \
+  --column status_code:int \
+  --column metric:string \
+  --column metric_key:string \
+  --column count:int \
+  --column bucket_minute:timestamp
 
 echo "Dataset schema uploaded."

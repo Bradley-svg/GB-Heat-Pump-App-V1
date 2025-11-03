@@ -49,7 +49,7 @@ function parseSignatureTimestamp(raw: string): number | null {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-async function recordOpsMetric(
+export async function recordOpsMetric(
   env: Env,
   route: string,
   statusCode: number,
@@ -64,10 +64,16 @@ async function recordOpsMetric(
       .bind(nowISO(), route, statusCode, durationMs, deviceId)
       .run();
   } catch (error) {
-    (logger ?? systemLogger({ route })).error("ops_metrics.insert_failed", {
+    const bucketMs = Math.floor(Date.now() / 60_000) * 60_000;
+    const scopedLogger = logger ?? systemLogger({ route });
+    scopedLogger.error("ops_metrics.insert_failed", {
       route,
       status_code: statusCode,
       device_id: deviceId,
+      metric: "greenbro.ops_metrics.insert_failed",
+      metric_key: "ops_metrics.insert_failed",
+      count: 1,
+      bucket_minute: new Date(bucketMs).toISOString(),
       error,
     });
   }

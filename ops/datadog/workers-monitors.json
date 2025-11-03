@@ -142,6 +142,27 @@
         "notify_audit": false,
         "notify_no_data": false
       }
+    },
+    {
+      "name": "GB Workers :: Ops metrics insert failure",
+      "type": "query alert",
+      "query": "avg(last_5m):sum:greenbro.logs.count{env:production,msg:ops_metrics.insert_failed}.rollup(count, 60) > 6",
+      "message": "ops_metrics.insert_failed logs are averaging above critical threshold (>6/min). Check D1 health, recent deploys, and follow docs/observability.md#ops-metrics-insert-failure-runbook.",
+      "tags": [
+        "service:gb-workers",
+        "team:platform",
+        "severity:critical"
+      ],
+      "options": {
+        "thresholds": {
+          "critical": 6,
+          "warning": 3
+        },
+        "evaluation_delay": 60,
+        "notify_audit": false,
+        "notify_no_data": true,
+        "no_data_timeframe": 5
+      }
     }
   ]
 }

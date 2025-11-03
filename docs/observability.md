@@ -57,6 +57,7 @@ Current thresholds baked into `src/telemetry/index.ts`:
 | Avg req duration (ms) | 1500 | 3000 | Based on `ops_metrics.duration_ms` average per route. |
 | Ingest rate limit breaches per device (per min) | 90 | 120 | Uses worker-side throttling config. |
 | Consecutive ingest failures | 3 | 5 | Consecutive DB/validation failures by device. |
+| Ops metrics insert failures per min | 3 | 6 | Derived from log-based metric; indicates D1 writes rejecting ops metrics. |
 
 The JSON payload also surfaces real time indicators:
 
@@ -160,6 +161,23 @@ These fields are designed to feed dashboards or alerting pipelines without addit
   - **Pause test**: In staging, comment out the `*/5 * * * *` entry in `wrangler.toml`, deploy, and wait 12 minutes. The gap monitors should enter `Alert` and post to the routing channel. Revert the cron entry and deploy again to clear.
   - **Replay test**: Use `npx wrangler tail --format=json --sampling-rate 1 > cron-gap.log` during a healthy window, then replay with `cat cron-gap.log | datadog logs send --service gb-workers --source workers` to confirm the monitor clears after synthetic events.
 - **Recovery validation**: `cron.offline_check.completed` or `.noop` and `cron.ingest_nonce_prune.completed` logs reappear within the next window; Datadog monitors exit alert; device offline ratios remain stable.
+
+### 6. Ops metrics insert failure runbook {#ops-metrics-insert-failure-runbook}
+
+- **Detection**: Datadog monitor `GB Workers :: Ops metrics insert failure` watches `ops_metrics.insert_failed` logs via `greenbro.logs.count.rollup(count, 60)` and fires when the minute-averaged count exceeds 3 (warn) or 6 (critical) for five minutes.
+- **Immediate checks**:
+  1. Verify Cloudflare D1 status and quota (`https://www.cloudflarestatus.com/` and Workers dashboard).
+  2. Run a read-only probe: `wrangler d1 execute GREENBRO_DB --command "SELECT COUNT(*) FROM ops_metrics;"` to confirm the database responds.
+  3. Tail recent failures for context: `npx wrangler tail --format=json | jq 'select(.msg=="ops_metrics.insert_failed")'`.
+  4. If only a specific route/device is impacted, inspect the associated deploy changes or ingest payloads.
+- **Response**:
+  - If D1 is degraded, pause noisy automation that depends on `ops_metrics` (dashboards still work, but counts lag) and open a Cloudflare support ticket.
+  - When errors follow a deploy, roll back the worker and re-run `wrangler deploy --env production` once the fix is ready.
+  - For sustained spikes on a single device/route, temporarily disable that traffic (Access block or firmware toggle) while the DB issue is resolved.
+- **Recovery validation**:
+  - `ops_metrics.insert_failed` logs drop back below 1/min for 10 consecutive minutes.
+  - Datadog monitor returns to `OK` and the `/metrics` endpoint shows fresh ops window data.
+  - Optional spot check: `wrangler analytics engine query greenbro_logs --sql "SELECT bucket_minute, SUM(count) AS failures FROM greenbro_logs WHERE msg = 'ops_metrics.insert_failed' AND bucket_minute >= DATEADD('minute', -60, NOW()) GROUP BY bucket_minute ORDER BY bucket_minute DESC;"` confirms counts are zeroing out.
 
 ## External dashboards
 
