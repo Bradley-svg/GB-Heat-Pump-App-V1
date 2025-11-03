@@ -75,7 +75,7 @@ or run the statement inline with `--command`.
 2. **Seed/update the factory device** - execute the SQL above.
 3. **Secrets**
    ```bash
-   printf 'https://devices.greenbro.io,https://app.greenbro.co.za' | wrangler secret put INGEST_ALLOWED_ORIGINS
+   printf 'https://devices.greenbro.io,https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev' | wrangler secret put INGEST_ALLOWED_ORIGINS
    printf '120' | wrangler secret put INGEST_RATE_LIMIT_PER_MIN
    printf '300' | wrangler secret put INGEST_SIGNATURE_TOLERANCE_SECS
    ```
@@ -102,7 +102,7 @@ or run the statement inline with `--command`.
 ### Sample heartbeat
 
 ```
-POST https://app.greenbro.co.za/api/heartbeat/profile-factory
+POST https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev/api/heartbeat/profile-factory
 X-GREENBRO-DEVICE-KEY: GBR-Factory-2025-Alpha
 X-GREENBRO-TIMESTAMP: 2025-10-25T10:12:00Z
 X-GREENBRO-SIGNATURE: aa7522dc14b64604d6a32570ac9cc5125a0f762e05a8c1914a411353060acd9a
@@ -114,7 +114,7 @@ Content-Type: application/json
 ### Sample telemetry post
 
 ```
-POST https://app.greenbro.co.za/api/ingest/profile-factory
+POST https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev/api/ingest/profile-factory
 X-GREENBRO-DEVICE-KEY: GBR-Factory-2025-Alpha
 X-GREENBRO-TIMESTAMP: 2025-10-25T10:12:05Z
 X-GREENBRO-SIGNATURE: 8444358f44376213154006dec76ce12eee2a803c45533cc7d441486b41ea38a4

@@ -9,7 +9,7 @@ import { createWorkerEnv } from "../helpers/worker-env";
 
 const REAL_ALLOWED_ORIGINS = [
   "https://devices.greenbro.io",
-  "https://app.greenbro.co.za",
+  "https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev",
 ] as const;
 const REAL_ALLOWLIST = REAL_ALLOWED_ORIGINS.join(",");
 const REAL_RATE_LIMIT_PER_MIN = 120;

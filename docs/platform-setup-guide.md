@@ -11,7 +11,7 @@ The Worker trusts Cloudflare Access JWTs via `requireAccessUser` (`src/lib/acces
 ### 1.1 Create or update the Access application
 1. In the Cloudflare dashboard, go to **Zero Trust > Access > Applications**.
 2. Create an **Application > Self-hosted** entry (or update the existing one):
-   - **Application domain**: `app.greenbro.co.za` (match the Worker route in `wrangler.toml`).
+  - **Application domain**: `gb-heat-pump-app-v1.bradleyayliffl.workers.dev` (match the Worker route in `wrangler.toml`).
    - **Session duration**: `>=24h` (Worker rotates sessions via Access).
    - **Allowed IdPs**: include Okta, Google, or other IdPs used by the ops teams.
 3. Save the application, then capture:
@@ -31,14 +31,14 @@ If you need non-interactive automation (for example CI seeding R2), mint a **Ser
 - If you prefer to exercise the real flow, inject a JWT into `Cf-Access-Jwt-Assertion` manually (generate via `cloudflared access login`), or temporarily stub `requireAccessUser` in tests.
 - Ensure secrets exist for the Worker: `wrangler secret put ACCESS_AUD`.
 
-### 1.4 Enforce policies on `app.greenbro.co.za`
+### 1.4 Enforce policies on `gb-heat-pump-app-v1.bradleyayliffl.workers.dev`
 
 1. In the Access application you created above, add policies for each role the Worker expects:
    - **Admin**: grant to platform/ops groups that administer devices (maps to `roles:["admin"]`).
    - **Contractor**: grant limited access for installers or field technicians (`roles:["contractor"]`).
    - **Client**: grant read-only visibility to customer-facing operators (`roles:["client"]`).
 2. For each policy, confirm the **Include** rules reference the right identity providers or service tokens.
-3. Set the **Application domain** to `https://app.greenbro.co.za/*` and add a second domain of `https://gb-heat-pump-app-v1.<team>.workers.dev/*` to cover the fallback Workers.dev hostname.
+3. Set the **Application domain** to `https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev/*`.
 4. After saving the policies, copy the updated **AUD** value if Cloudflare assigned a new tag and store it in the password manager. You will reuse it in the next section when binding Worker secrets.
 
 > Tip: enforce a default-deny policy after enumerating the allow rules so unlisted users receive an explicit deny instead of falling through.
@@ -51,7 +51,7 @@ Run the following once to populate the Worker secrets. Paste values from the pas
 wrangler secret put ACCESS_AUD
 wrangler secret put ACCESS_JWKS_URL
 wrangler secret put CURSOR_SECRET
-wrangler secret put INGEST_ALLOWED_ORIGINS           # e.g. https://devices.greenbro.io,https://app.greenbro.co.za
+wrangler secret put INGEST_ALLOWED_ORIGINS           # e.g. https://devices.greenbro.io,https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev
 wrangler secret put INGEST_RATE_LIMIT_PER_MIN        # firmware cap (120 today)
 wrangler secret put INGEST_SIGNATURE_TOLERANCE_SECS  # default 300
 wrangler secret put ASSET_SIGNING_SECRET             # optional unless issuing signed URLs
@@ -170,7 +170,7 @@ bucket_name = "greenbro-brand-staging"
 - Optional signed URL via `ASSET_SIGNING_SECRET`.
 - Key allow list from `ALLOWED_PREFIXES`.
 
-Once deployed, the primary worker (`https://app.greenbro.co.za`) also fronts the R2 API at `https://app.greenbro.co.za/r2/*` (adjust `src/app.ts` if you need a different prefix).
+Once deployed, the worker (`https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev`) also fronts the R2 API at `https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev/r2/*` (adjust `src/app.ts` if you need a different prefix).
 
 ### 4.4 R2 workflow diagram
 ```
@@ -210,7 +210,7 @@ Override these with `[env.<name>.vars]` when staging or production diverge.
 | `CURSOR_SECRET`            | AES key for pagination cursors. |
 | `ASSET_SIGNING_SECRET`     | Enables signed R2 reads (only if using signed URLs). |
 | `ALLOWED_PREFIXES`         | Optional allow list for R2 keys (for example `brand/,reports/`). |
-| `INGEST_ALLOWED_ORIGINS`   | **Required** allowlist of device origins; Worker returns 403 if unset (comma or newline separated). Production firmware expects `https://devices.greenbro.io,https://app.greenbro.co.za`. |
+| `INGEST_ALLOWED_ORIGINS`   | **Required** allowlist of device origins; Worker returns 403 if unset (comma or newline separated). Production firmware expects `https://devices.greenbro.io,https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev`. |
 | `INGEST_RATE_LIMIT_PER_MIN`| Rate limiting for ingestion endpoints. Production cadence requires `120` to avoid false positives. |
 | `INGEST_SIGNATURE_TOLERANCE_SECS` | Replay protection window for device signatures. Set to `300` seconds unless firmware clock drift changes. |
 

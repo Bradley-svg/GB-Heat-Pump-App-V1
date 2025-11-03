@@ -12,10 +12,10 @@ database_name = "GREENBRO_DB"
 database_id = "ee7ad98b-3629-4985-bd7d-a60c401953a7"
 
 [vars]
-APP_BASE_URL = "https://app.greenbro.co.za"
+APP_BASE_URL = "https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev"
 RETURN_DEFAULT = "https://www.greenbro.co.za/"
 TIMEZONE = "Africa/Johannesburg"
-APP_API_BASE = "https://app.greenbro.co.za"
+APP_API_BASE = "https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev"
 APP_ASSET_BASE = "https://pub-3f14c9b10881423a97f40e12402d4b03.r2.dev/app/assets/"
 ALLOWED_PREFIXES = "brand/"
 # Ingest controls are provided via `wrangler secret put` per environment:
@@ -40,13 +40,6 @@ OFFLINE_MULTIPLIER = "6"              # mark offline if > 6× heartbeat interval
 [triggers]
 crons = ["*/5 * * * *"]
 
-[[routes]]
-pattern = "app.greenbro.co.za"
-custom_domain = true
-
-[[routes]]
-pattern = "app.greenbro.co.za/*"
-zone_name = "greenbro.co.za"
 
 [[r2_buckets]]
 binding = "GB_BUCKET"

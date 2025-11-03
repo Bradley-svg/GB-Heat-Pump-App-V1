@@ -1,4 +1,4 @@
-# Ingest Security Controls
+﻿# Ingest Security Controls
 
 The ingest and heartbeat APIs now enforce origin allowlists, HMAC request signing, and
 per-device throttling. This guide summarizes the required request headers, available
@@ -13,7 +13,7 @@ configuration knobs, and the day-to-day steps for managing devices and allowed o
   - `X-GREENBRO-SIGNATURE` with an HMAC-SHA256 digest of the canonical string
     `${timestamp}.${rawBody}`. The HMAC key is the **SHA-256 hash** stored in
     `devices.device_key_hash`.
-- Requests exceeding 256 KB are rejected with `413 Payload too large`.
+- Requests exceeding 256â€¯KB are rejected with `413 Payload too large`.
 - Replay protection: timestamps more than `INGEST_SIGNATURE_TOLERANCE_SECS` (default 300s)
   away from the worker clock are rejected.
 
@@ -23,12 +23,12 @@ Set the comma- or newline-separated allowlist via `INGEST_ALLOWED_ORIGINS`. Exam
 
 ```toml
 [vars]
-INGEST_ALLOWED_ORIGINS = "https://devices.greenbro.io,https://app.greenbro.io"
+INGEST_ALLOWED_ORIGINS = "https://devices.greenbro.io,https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev"
 ```
 
 Guidance:
 
-- Provision the value with Wrangler secrets: `printf 'https://devices.greenbro.io,https://app.greenbro.co.za' | wrangler secret put INGEST_ALLOWED_ORIGINS`.
+- Provision the value with Wrangler secrets: `printf 'https://devices.greenbro.io,https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev' | wrangler secret put INGEST_ALLOWED_ORIGINS`.
 - Keep the allowlist aligned with firmware images shipped to the field; update both sides before rolling out new hardware URLs.
 
 - `*` (default) keeps previous permissive behaviour. Remove it to lock down access.

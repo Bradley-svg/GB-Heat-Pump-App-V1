@@ -10,7 +10,7 @@ The platform now deploys a single Worker (`gb-heat-pump-app-v1`). Key bindings a
 
 | Worker script | Primary URLs | D1 database (name -> id) | R2 buckets (binding -> name) | Secrets to provision |
 |---------------|--------------|--------------------------|------------------------------|----------------------|
-| `gb-heat-pump-app-v1` | `https://app.greenbro.co.za` (primary route); fallback `https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev` | `GREENBRO_DB` -> `ee7ad98b-3629-4985-bd7d-a60c401953a7` | `GB_BUCKET`->`greenbro-brand`; `APP_STATIC`->`greenbro-app-static` | `ACCESS_AUD`, `ACCESS_JWKS_URL` (`https://bradleyayliffl.cloudflareaccess.com/cdn-cgi/access/certs`), `CURSOR_SECRET`, `ASSET_SIGNING_SECRET`, optional `ALLOWED_PREFIXES`, ingestion limits (`INGEST_ALLOWED_ORIGINS`, `INGEST_RATE_LIMIT_PER_MIN=120`, `INGEST_SIGNATURE_TOLERANCE_SECS=300`) |
+| `gb-heat-pump-app-v1` | `https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev` | `GREENBRO_DB` -> `ee7ad98b-3629-4985-bd7d-a60c401953a7` | `GB_BUCKET`->`greenbro-brand`; `APP_STATIC`->`greenbro-app-static` | `ACCESS_AUD`, `ACCESS_JWKS_URL` (`https://bradleyayliffl.cloudflareaccess.com/cdn-cgi/access/certs`), `CURSOR_SECRET`, `ASSET_SIGNING_SECRET`, optional `ALLOWED_PREFIXES`, ingestion limits (`INGEST_ALLOWED_ORIGINS`, `INGEST_RATE_LIMIT_PER_MIN=120`, `INGEST_SIGNATURE_TOLERANCE_SECS=300`) |
 
 > `ACCESS_AUD` values are managed in Cloudflare Access and stored only via `wrangler secret put`. Rotate/update them alongside the Access application policies described in `docs/platform-setup-guide.md`.
 
@@ -126,7 +126,7 @@ Keep this runbook with the release engineer rotation to guarantee consistent rol
 
 ### Sample queries / checks
 
-- Worker metrics (JSON): `curl -H "cf-access-jwt-assertion:$JWT" https://app.greenbro.co.za/metrics?format=json | jq '.ops_summary.server_error_rate'`.
+- Worker metrics (JSON): `curl -H "cf-access-jwt-assertion:$JWT" https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev/metrics?format=json | jq '.ops_summary.server_error_rate'`.
 - Prometheus scrape: `greenbro_ops_server_error_rate > 0.02`, `sum(rate(greenbro_ops_requests_total{route="/api/ingest",status="429"}[5m]))`.
 - Log search (R2 export via `aws s3 cp`): `jq 'select(.msg=="request.failed") | {ts, route, status, request_id}' *.json`.
 - Quick health tail: `npx wrangler tail --format=json --sampling-rate 1 | jq 'select(.msg=="cron.offline_check.completed")'`.

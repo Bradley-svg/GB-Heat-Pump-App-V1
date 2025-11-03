@@ -10,7 +10,7 @@ This document captures where the system's sensitive values live, how to provisio
 | `ACCESS_AUD` | Cloudflare Access audience tag that the Worker verifies on incoming requests. | Treat as sensitive to avoid leaking internal Access configuration. Rotation requires updating Access policies in Cloudflare. |
 | `ACCESS_JWKS_URL` | JWKS endpoint published by Cloudflare Access that contains signing keys for issued JWTs. | Not strictly secret, but keep private to avoid exposing Access topology. Rotate if Access domain or certificate bundle changes. |
 | `ASSET_SIGNING_SECRET` | HMAC secret for generating signed URLs to the R2-backed asset worker. | Optional: only required when issuing signed `GET`/`HEAD` URLs. Rotation requires updating any producer of signed URLs. |
-| `INGEST_ALLOWED_ORIGINS` | Comma or newline-separated list of browser origins that may call `/api/ingest` and `/api/heartbeat`. | Production firmware expects `https://devices.greenbro.io,https://app.greenbro.co.za`. Update immediately if firmware allowlist changes. |
+| `INGEST_ALLOWED_ORIGINS` | Comma or newline-separated list of browser origins that may call `/api/ingest` and `/api/heartbeat`. | Production firmware expects `https://devices.greenbro.io,https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev`. Update immediately if firmware allowlist changes. |
 | `INGEST_RATE_LIMIT_PER_MIN` | Per-device throttle for ingest + heartbeat endpoints. | Current firmware transmits at up to 120 requests/minute. Set to `120` unless hardware cadence changes. |
 | `INGEST_SIGNATURE_TOLERANCE_SECS` | Acceptable clock skew for signed ingest requests. | Default `300` seconds (5 minutes). Tighten or relax in lockstep with firmware timestamp tolerance. |
 
