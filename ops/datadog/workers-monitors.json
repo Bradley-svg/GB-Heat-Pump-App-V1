@@ -43,6 +43,27 @@
       }
     },
     {
+      "name": "GB Workers :: Client error rate",
+      "type": "query alert",
+      "query": "avg(last_5m):avg:greenbro.ops.client_error_rate{env:production} > 0.15",
+      "message": "4xx error rate crossed critical threshold (15%). Investigate Access policy changes, firmware regressions, or misuse per docs/observability.md.",
+      "tags": [
+        "service:gb-workers",
+        "team:platform",
+        "severity:warning"
+      ],
+      "options": {
+        "thresholds": {
+          "critical": 0.15,
+          "warning": 0.08
+        },
+        "evaluation_delay": 60,
+        "notify_audit": false,
+        "notify_no_data": true,
+        "no_data_timeframe": 10
+      }
+    },
+    {
       "name": "GB Workers :: Slow request rate",
       "type": "query alert",
       "query": "avg(last_5m):avg:greenbro.ops.slow_rate{env:production} > 0.15",

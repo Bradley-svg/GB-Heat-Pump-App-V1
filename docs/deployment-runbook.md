@@ -1,4 +1,4 @@
-﻿# Deployment Runbook
+# Deployment Runbook
 
 This runbook captures the happy path for rolling out Worker changes, database migrations, and cron trigger updates. Use it alongside `docs/platform-setup-guide.md` and `docs/observability.md` for deeper background.
 
@@ -76,7 +76,7 @@ Cron schedules in `wrangler.toml` (under `[triggers]`) deploy automatically with
 
 **Verification**
 - After a deploy, confirm the cron is registered: `npx wrangler deployments status` (look for the `crons` block).
-- Watch for the scheduled Worker logs: `npx wrangler tail --filter "offline_cron"` and confirm `cron.offline_check.completed` appears within the expected window (see `docs/observability.md` Â§2).
+- Watch for the scheduled Worker logs: `npx wrangler tail --filter "offline_cron"` and confirm `cron.offline_check.completed` appears within the expected window (see `docs/observability.md` §2).
 
 **Rollback**
 - Redeploy with the previous `wrangler.toml` (with the prior cron list) using `npm run deploy`.
@@ -106,25 +106,26 @@ Keep this runbook with the release engineer rotation to guarantee consistent rol
 
 ## 7. Observability & Alerts
 
-### Log streaming (Workers â†’ R2)
+### Log streaming (Workers -> R2)
 
 1. Ensure the analytics bucket exists (one-time): `npx wrangler r2 bucket create greenbro-observability`.
 2. Provision an R2 API token with write scope for `greenbro-observability` and export `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`.
 3. Export Cloudflare auth for automation (`CLOUDFLARE_ACCOUNT_ID=0bee3514d14fef8558ccaf0bf2b72eb1`, `CLOUDFLARE_API_TOKEN=<token with Logpush write>`).
-4. Run `bash ops/logpush/create-workers-logpush.sh`. This wires the `workers_logs` dataset to `r2://greenbro-observability/workers-logs` with a 60s push interval.
+4. Run `bash ops/logpush/create-workers-logpush.sh`. This wires the `workers_logs` dataset to `r2://greenbro-observability/workers-logs` with a 60s push interval. Refer to `docs/observability-setup-checklist.md` for the full configuration workflow.
 5. Validate: `curl -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/logpush/jobs"` and confirm the job is `enabled:true`.
 
 > Wrangler OAuth tokens do not currently ship with Logpush scopes; create a scoped API token via the Cloudflare dashboard or Terraform before step 4.
 
 ### Analytics datasets
 
+- Initialize or update the Workers Analytics Engine dataset with `bash ops/analytics/upload-greenbro-logs-schema.sh [dataset_name]`. Omit the argument to use the default `greenbro_logs` dataset referenced in `docs/observability.md`.
 - `workers_logs` schema: `{ request_id:string, ts:timestamp, level:string, msg:string, method:string, path:string, status:int, duration_ms:float, device_id:string, profile_id:string }`.
-- If the dataset is not present in Workers Analytics, upload it once with the latest Wrangler (`wrangler analytics engine upload-schema greenbro_logs --column request_id:string ...`). The command is documented in `docs/observability.md`; Cloudflare dashboard offers the same workflow if the CLI flag is unavailable.
+- If you cannot run the helper script (for example inside an automation target that lacks Bash), run `wrangler analytics engine upload-schema greenbro_logs --column request_id:string ...` manually. The extended command is documented in `docs/observability.md`; the Cloudflare dashboard offers the same workflow if the CLI flag is unavailable.
 
 ### Dashboards
 
 - Grafana: import `ops/grafana/greenbro-workers-observability.json` against the Prometheus data source that scrapes `/metrics`. The panels mirror the offline ratio (warn 20% / crit 35%), 5xx/4xx error rates, ingest 429s (warn 90/min, crit 120/min), and route-level throughput.
-- Datadog: apply `ops/datadog/workers-monitors.json` via `datadog monitors create` or Terraform. Monitors cover offline ratio, server error rate, slow rate, and ingest rate-limit spikes. Tag them with `service:gb-workers` for routing.
+- Datadog: apply `ops/datadog/workers-monitors.json` via `datadog monitors create` or Terraform. Monitors cover offline ratio, server + client error rates, slow rate, and ingest rate-limit spikes. Tag them with `service:gb-workers` for routing.
 
 ### Sample queries / checks
 
@@ -134,3 +135,4 @@ Keep this runbook with the release engineer rotation to guarantee consistent rol
 - Quick health tail: `npx wrangler tail --format=json --sampling-rate 1 | jq 'select(.msg=="cron.offline_check.completed")'`.
 
 Link the alert destinations back to this section (runbook URL) so on-call has immediate context when thresholds fire.
+

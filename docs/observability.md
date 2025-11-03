@@ -40,7 +40,7 @@ log.info("widgets.enrichment_started");
 log.error("widgets.enrichment_failed", { error });
 ```
 
-Logs are persisted through Cloudflare Workers Observability (`wrangler.toml` sets `persist = true`), which means they are queryable in Workers Analytics and available for Logpush export.
+Logs are persisted through Cloudflare Workers Observability (`wrangler.toml` sets `persist = true`), which means they are queryable in Workers Analytics and available for Logpush export. For the environment bootstrap steps that turn on Logpush, dashboards, and alert policies, follow `docs/observability-setup-checklist.md`.
 
 ## Metrics and alert thresholds
 
@@ -75,30 +75,8 @@ These fields are designed to feed dashboards or alerting pipelines without addit
 ## Workers Analytics & Logpush integration
 
 1. **Persisted logs**: Wrangler configuration already enables `observability.logs.persist = true`. This streams the JSON payloads into Workers Analytics (available in the Cloudflare dashboard under *Workers > Observability*).
-2. **Create or map a dataset** (one-time):
-   ```bash
-   wrangler analytics engine upload-schema greenbro_logs \
-     --column request_id:string \
-     --column ts:timestamp \
-     --column level:string \
-     --column msg:string \
-     --column method:string \
-     --column path:string \
-     --column status:int \
-     --column duration_ms:float \
-     --column device_id:string \
-     --column profile_id:string
-   ```
-   (Adjust schema if you want to capture additional fields.)
-3. **Wire a Logpush job** to ship logs to storage or an external SIEM:
-   ```bash
-   wrangler observability logpush create \
-     --dataset workers_logs \
-     --destination-type r2 \
-     --bucket-url r2://greenbro-observability/logs/ \
-     --frequency 1m
-   ```
-   Alternative destinations (HTTPS, Google BigQuery, AWS S3, Datadog, Splunk, etc.) are also supported.
+2. **Create or map a dataset** (one-time): `bash ops/analytics/upload-greenbro-logs-schema.sh`. Pass a custom dataset name as the first argument if you do not want to use the default `greenbro_logs`. The script shells out to `wrangler analytics engine upload-schema` with the JSON log columns documented below. Re-run it whenever you add fields to the structured log payload.
+3. **Wire a Logpush job** to ship logs to storage or an external SIEM: `bash ops/logpush/create-workers-logpush.sh`. Export the Cloudflare account + API token variables and the destination R2 credentials before running. The script targets the `workers_logs` dataset with a 60s batch interval. Alternative destinations (HTTPS, Google BigQuery, AWS S3, Datadog, Splunk, etc.) are also supported; adjust the script payload if needed.
 4. **Dashboards**: Once Logpush is enabled, point your analytics stack at the JSON payload. Fields are consistent across events, making it easy to build Grafana or DataDog dashboards (eg. `avg(duration_ms)` by `route`, `count` by `device_id`).
 
 ### Quick analytics checks
