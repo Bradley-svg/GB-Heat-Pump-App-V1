@@ -18,6 +18,7 @@ import { baseSecurityHeaderOptions, mergeSecurityHeaderOptions } from "./utils/s
 import { expandAssetBase } from "./utils/asset-base";
 import { resolveLogoutReturn } from "./utils/return-url";
 import { handleR2Request } from "./r2";
+import { runTelemetryRetention, TELEMETRY_RETENTION_CRON } from "./jobs/retention";
 export { resolveAppConfig, serializeAppConfig } from "./app-config";
 
 const STATIC_CONTENT_TYPES: Record<string, string> = {
@@ -270,7 +271,17 @@ export default {
     return handleRequest(req, env);
   },
 
-  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
+  async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
+    if (event.cron === TELEMETRY_RETENTION_CRON) {
+      const retentionLog = systemLogger({ task: "retention-cron" });
+      try {
+        await runTelemetryRetention(env, { logger: retentionLog });
+      } catch (error) {
+        retentionLog.error("cron.retention.failed", { error });
+      }
+      return;
+    }
+
     const log = systemLogger({ task: "offline-cron" });
     try {
       const result = await env.DB.prepare(

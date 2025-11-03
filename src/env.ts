@@ -16,6 +16,7 @@ export interface Env {
   CURSOR_SECRET: string;
   APP_STATIC?: R2Bucket;
   GB_BUCKET?: R2Bucket;
+  RETENTION_ARCHIVE?: R2Bucket;
   ASSET_SIGNING_SECRET?: string;
   ALLOWED_PREFIXES?: string;
   INGEST_ALLOWED_ORIGINS?: string;
@@ -23,6 +24,9 @@ export interface Env {
   INGEST_DEDUP_WINDOW_MINUTES?: string;
   INGEST_SIGNATURE_TOLERANCE_SECS?: string;
   MQTT_WEBHOOK_QUEUE?: Queue;
+  TELEMETRY_RETENTION_DAYS?: string;
+  RETENTION_BACKUP_PREFIX?: string;
+  RETENTION_BACKUP_BEFORE_DELETE?: string;
 }
 
 export type User = {

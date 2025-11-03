@@ -4,6 +4,7 @@ import app from "../app";
 import type { Env } from "../env";
 import type { Logger } from "../utils/logging";
 import * as logging from "../utils/logging";
+import * as retention from "../jobs/retention";
 
 type ScheduledEvent = Parameters<(typeof app)["scheduled"]>[0];
 type ScheduledExecutionContext = Parameters<(typeof app)["scheduled"]>[2];
@@ -106,6 +107,33 @@ describe("app.scheduled", () => {
     expect(debug).toHaveBeenCalledWith(
       "cron.offline_check.noop",
       expect.objectContaining({ threshold_secs: 270 }),
+    );
+  });
+
+  it("delegates retention cron events to the telemetry retention job", async () => {
+    const { env } = createScheduledEnv();
+    const retentionSpy = vi.spyOn(retention, "runTelemetryRetention").mockResolvedValue({
+      retentionDays: 90,
+      cutoffMs: 0,
+      cutoffIso: "2024-01-01T00:00:00.000Z",
+      telemetry: { scanned: 0, deleted: 0, batches: 0, backups: [] },
+      mqttWebhookMessages: { scanned: 0, deleted: 0, batches: 0, backups: [] },
+      opsMetricsDeleted: 0,
+    });
+    const { spy } = mockSystemLogger();
+
+    await app.scheduled(
+      { cron: retention.TELEMETRY_RETENTION_CRON } as ScheduledEvent,
+      env,
+      {} as ScheduledExecutionContext,
+    );
+
+    expect(retentionSpy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith({ task: "retention-cron" });
+
+    // Offline cron should not run in this pathway.
+    expect(env.DB.prepare).not.toHaveBeenCalledWith(
+      expect.stringContaining("DELETE FROM ingest_nonces"),
     );
   });
 });
