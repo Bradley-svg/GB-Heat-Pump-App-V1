@@ -57,9 +57,19 @@ bucket_name = "greenbro-app-static"
 # optional for local dev:
 # preview_bucket_name = "greenbro-app-static-dev"
 
+[[r2_buckets]]
+binding = "RETENTION_ARCHIVE"
+bucket_name = "greenbro-telemetry-archive"
+# optional for local dev:
+# preview_bucket_name = "greenbro-telemetry-archive-dev"
+
 [env.local]
   [env.local.vars]
   # Enable the Access shim for local Miniflare sessions (adjust as needed).
   ALLOW_DEV_ACCESS_SHIM = "true"
   DEV_ALLOW_USER = '{"email":"local-admin@example.com","roles":["admin"],"clientIds":["profile-west"]}'
+
+[env.production]
+  [env.production.vars]
+  RETENTION_BACKUP_BEFORE_DELETE = "true"
 
