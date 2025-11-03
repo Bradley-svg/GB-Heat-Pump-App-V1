@@ -33,6 +33,7 @@ import {
   handleUpdateMqttMapping,
 } from "./routes/mqtt";
 import { handleMqttWebhook } from "./routes/mqtt-webhook";
+import { handleClientErrorReport } from "./routes/observability";
 import { bindRequestLogger, loggerForRequest, releaseRequestLogger } from "./utils/logging";
 
 const router: AppRouter = Router();
@@ -66,6 +67,7 @@ router
   .get("/api/mqtt/mappings", (req, env) => handleListMqttMappings(req, env))
   .post("/api/mqtt/mappings", (req, env) => handleCreateMqttMapping(req, env))
   .post("/api/mqtt-webhook", (req, env) => handleMqttWebhook(req, env))
+  .post("/api/observability/client-errors", (req, env) => handleClientErrorReport(req, env))
   .put(
     "/api/mqtt/mappings/:id",
     withParam("id", (req, env, mappingId) => handleUpdateMqttMapping(req, env, mappingId)),
