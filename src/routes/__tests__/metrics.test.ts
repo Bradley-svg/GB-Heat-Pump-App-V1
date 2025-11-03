@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
-import type { Env } from "../../env";
+import type { Env, User } from "../../env";
+import * as accessModule from "../../lib/access";
 import { handleMetrics } from "../metrics";
 
 function createMockEnv(overrides?: {
@@ -54,8 +55,25 @@ function createMockEnv(overrides?: {
   return { env, prepare, deviceRow, opsRows };
 }
 
+const requireAccessUserMock = vi.spyOn(accessModule, "requireAccessUser");
+
+const ADMIN_USER: User = {
+  email: "admin@example.com",
+  roles: ["admin"],
+  clientIds: [],
+};
+
+afterEach(() => {
+  requireAccessUserMock.mockReset();
+});
+
+afterAll(() => {
+  requireAccessUserMock.mockRestore();
+});
+
 describe("handleMetrics", () => {
   it("returns JSON metrics when requested", async () => {
+    requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
     const { env, deviceRow, opsRows } = createMockEnv();
     const req = new Request("https://example.com/metrics?format=json");
     const res = await handleMetrics(req, env);
@@ -99,6 +117,7 @@ describe("handleMetrics", () => {
   });
 
   it("returns Prometheus metrics text by default", async () => {
+    requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
     const { env } = createMockEnv();
     const req = new Request("https://example.com/metrics");
     const res = await handleMetrics(req, env);
@@ -109,5 +128,13 @@ describe("handleMetrics", () => {
     expect(body).toContain("greenbro_devices_total 5");
     expect(body).toContain('greenbro_ops_requests_total{route="/api/ingest",status="200"} 2');
     expect(body).toMatch(/greenbro_metrics_generated_at \d+/);
+  });
+
+  it("returns 401 when no access token is provided", async () => {
+    requireAccessUserMock.mockResolvedValueOnce(null);
+    const { env } = createMockEnv();
+    const req = new Request("https://example.com/metrics");
+    const res = await handleMetrics(req, env);
+    expect(res.status).toBe(401);
   });
 });

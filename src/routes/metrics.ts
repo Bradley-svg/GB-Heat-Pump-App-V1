@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import { requireAccessUser, userIsAdmin } from "../lib/access";
 import { json, text } from "../utils/responses";
 import { validationErrorResponse } from "../utils/validation";
 import { MetricsQuerySchema } from "../schemas/metrics";
@@ -10,6 +11,12 @@ import {
 } from "../lib/ops-metrics";
 
 export async function handleMetrics(req: Request, env: Env) {
+  const user = await requireAccessUser(req, env);
+  if (!user) return json({ error: "Unauthorized" }, { status: 401 });
+  if (!userIsAdmin(user)) {
+    return json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const url = new URL(req.url);
   const paramsResult = MetricsQuerySchema.safeParse({
     format: url.searchParams.get("format"),
