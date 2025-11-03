@@ -1,4 +1,4 @@
-name = "gb-heat-pump-app-v1-production"
+name = "gb-heat-pump-app-v1"
 main = "src/app.ts"
 # Must NOT be in the future. Use a recent date.
 compatibility_date = "2024-12-20"
@@ -92,3 +92,4 @@ bucket_name = "greenbro-app-static"
   # Enable the Access shim for local Miniflare sessions (adjust as needed).
   ALLOW_DEV_ACCESS_SHIM = "true"
   DEV_ALLOW_USER = '{"email":"local-admin@example.com","roles":["admin"],"clientIds":["profile-west"]}'
+
