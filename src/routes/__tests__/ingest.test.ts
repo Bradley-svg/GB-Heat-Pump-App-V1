@@ -145,6 +145,8 @@ describe("handleIngest", () => {
     const metricsInsert = { kind: "telemetry" };
     const latestInsert = { kind: "latest_state" };
     const deviceUpdate = { kind: "device_update" };
+    const nonceInsert = { kind: "nonce_insert" };
+    const nonceDeleteRun = vi.fn().mockResolvedValue(undefined);
     const opsRun = vi.fn().mockResolvedValue(undefined);
 
     const prepare = vi.fn((sql: string) => {
@@ -179,6 +181,20 @@ describe("handleIngest", () => {
       if (sql.startsWith("UPDATE devices SET online=1")) {
         return {
           bind: vi.fn(() => deviceUpdate),
+        };
+      }
+
+      if (sql.startsWith("DELETE FROM ingest_nonces")) {
+        return {
+          bind: vi.fn(() => ({
+            run: nonceDeleteRun,
+          })),
+        };
+      }
+
+      if (sql.startsWith("INSERT INTO ingest_nonces")) {
+        return {
+          bind: vi.fn(() => nonceInsert),
         };
       }
 
@@ -223,8 +239,14 @@ describe("handleIngest", () => {
 
     expect(selectFirst).toHaveBeenCalled();
     expect(countFirst).toHaveBeenCalled();
+    expect(nonceDeleteRun).toHaveBeenCalled();
     expect(batch).toHaveBeenCalledTimes(1);
-    expect(batch.mock.calls[0][0]).toEqual([metricsInsert, latestInsert, deviceUpdate]);
+    expect(batch.mock.calls[0][0]).toEqual([
+      metricsInsert,
+      latestInsert,
+      deviceUpdate,
+      nonceInsert,
+    ]);
     expect(opsRun).toHaveBeenCalled();
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
     expect(res.headers.get("vary")).toBe("origin");
@@ -243,6 +265,117 @@ describe("handleIngest", () => {
     expect(res.status).toBe(403);
     expect(res.headers.has("access-control-allow-origin")).toBe(false);
     expect(verifyDeviceKeyMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects duplicate payloads within the dedup window", async () => {
+    verifyDeviceKeyMock.mockResolvedValue({ ok: true, deviceKeyHash: DEVICE_KEY_HASH });
+    const selectFirst = vi.fn().mockResolvedValue({ profile_id: "demo" });
+    const countFirst = vi.fn().mockResolvedValue({ cnt: 0 });
+
+    const metricsInsert = { kind: "telemetry" };
+    const latestInsert = { kind: "latest_state" };
+    const deviceUpdate = { kind: "device_update" };
+    const nonceInsert = { kind: "nonce_insert" };
+    const nonceDeleteRun = vi.fn().mockResolvedValue(undefined);
+    const opsRun = vi.fn().mockResolvedValue(undefined);
+
+    const duplicateError = new Error(
+      "UNIQUE constraint failed: ingest_nonces.device_id, ingest_nonces.ts_ms",
+    );
+
+    const prepare = vi.fn((sql: string) => {
+      if (sql.startsWith("SELECT COUNT(*) AS cnt FROM ops_metrics")) {
+        return {
+          bind: vi.fn(() => ({
+            first: countFirst,
+          })),
+        };
+      }
+
+      if (sql.includes("SELECT profile_id FROM devices")) {
+        return {
+          bind: vi.fn(() => ({
+            first: selectFirst,
+          })),
+        };
+      }
+
+      if (sql.startsWith("DELETE FROM ingest_nonces")) {
+        return {
+          bind: vi.fn(() => ({
+            run: nonceDeleteRun,
+          })),
+        };
+      }
+
+      if (sql.startsWith("INSERT INTO telemetry")) {
+        return {
+          bind: vi.fn(() => metricsInsert),
+        };
+      }
+
+      if (sql.startsWith("INSERT INTO latest_state")) {
+        return {
+          bind: vi.fn(() => latestInsert),
+        };
+      }
+
+      if (sql.startsWith("UPDATE devices SET online=1")) {
+        return {
+          bind: vi.fn(() => deviceUpdate),
+        };
+      }
+
+      if (sql.startsWith("INSERT INTO ingest_nonces")) {
+        return {
+          bind: vi.fn(() => nonceInsert),
+        };
+      }
+
+      if (sql.startsWith("INSERT INTO ops_metrics")) {
+        return {
+          bind: vi.fn(() => ({
+            run: opsRun,
+          })),
+        };
+      }
+
+      throw new Error(`Unexpected SQL: ${sql}`);
+    });
+
+    const batch = vi.fn().mockRejectedValue(duplicateError);
+
+    const env: Env = {
+      ...baseEnv(),
+      DB: {
+        prepare,
+        batch,
+      } as any,
+    };
+
+    const payload = {
+      device_id: "dev-duplicate",
+      metrics: {
+        supplyC: 30.5,
+      },
+    };
+
+    const req = await buildSignedRequest("demo", payload);
+    const res = await handleIngest(req, env, "demo");
+
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as any;
+    expect(body.error).toBe("Duplicate payload");
+
+    expect(nonceDeleteRun).toHaveBeenCalled();
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(batch.mock.calls[0][0]).toEqual([
+      metricsInsert,
+      latestInsert,
+      deviceUpdate,
+      nonceInsert,
+    ]);
+    expect(opsRun).toHaveBeenCalled();
   });
 
   it("returns 403 when ingest allowlist is missing", async () => {

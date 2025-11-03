@@ -20,6 +20,7 @@ export interface Env {
   ALLOWED_PREFIXES?: string;
   INGEST_ALLOWED_ORIGINS?: string;
   INGEST_RATE_LIMIT_PER_MIN?: string;
+  INGEST_DEDUP_WINDOW_MINUTES?: string;
   INGEST_SIGNATURE_TOLERANCE_SECS?: string;
   MQTT_WEBHOOK_QUEUE?: Queue;
 }

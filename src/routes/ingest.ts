@@ -12,6 +12,7 @@ import { validationErrorResponse } from "../utils/validation";
 import { HeartbeatPayloadSchema, TelemetryPayloadSchema } from "../schemas/ingest";
 import type { HeartbeatPayload, TelemetryPayload } from "../schemas/ingest";
 import { deriveTelemetryMetrics } from "../telemetry";
+import { ingestDedupWindowMs } from "../utils/ingest-dedup";
 import { loggerForRequest, systemLogger, type Logger } from "../utils/logging";
 
 const DEVICE_KEY_HEADER = "X-GREENBRO-DEVICE-KEY";
@@ -98,6 +99,19 @@ async function isRateLimited(
   const rawCount = row?.cnt ?? 0;
   const count = typeof rawCount === "number" ? rawCount : Number(rawCount);
   return Number.isFinite(count) && count >= limitPerMinute;
+}
+
+function isNonceConflict(error: unknown): boolean {
+  if (!error) return false;
+  const message =
+    error instanceof Error ? error.message :
+    typeof error === "string" ? error :
+    "";
+  if (!message) return false;
+  return (
+    message.includes("ingest_nonces") &&
+    message.toLowerCase().includes("unique constraint failed")
+  );
 }
 
 async function ensureSignature(
@@ -248,9 +262,9 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
     }
   }
 
+  const deviceLog = log.with({ device_id: body.device_id });
   const limitPerMinute = parsedRateLimit(env);
   if (await isRateLimited(env, INGEST_ROUTE, body.device_id, limitPerMinute)) {
-    const deviceLog = log.with({ device_id: body.device_id });
     await recordOpsMetric(
       env,
       INGEST_ROUTE,
@@ -282,7 +296,17 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
     rssi: body.rssi ?? null,
   });
 
+  const dedupWindowMs = ingestDedupWindowMs(env);
+  const dedupExpiresAt = tsMs + dedupWindowMs;
+  const dedupCleanupCutoff = Date.now();
+
   try {
+    await env.DB.prepare(
+      `DELETE FROM ingest_nonces WHERE device_id = ?1 AND ts_ms = ?2 AND expires_at < ?3`,
+    )
+      .bind(body.device_id, tsMs, dedupCleanupCutoff)
+      .run();
+
     await env.DB.batch([
       env.DB.prepare(
         `INSERT INTO telemetry (device_id, ts, metrics_json, deltaT, thermalKW, cop, cop_quality, status_json, faults_json)
@@ -334,9 +358,11 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
       env.DB.prepare(
         `UPDATE devices SET online=1, last_seen_at=?2 WHERE device_id=?1`,
       ).bind(body.device_id, new Date(tsMs).toISOString()),
+      env.DB.prepare(
+        `INSERT INTO ingest_nonces (device_id, ts_ms, expires_at) VALUES (?1, ?2, ?3)`,
+      ).bind(body.device_id, tsMs, dedupExpiresAt),
     ]);
 
-    const deviceLog = log.with({ device_id: body.device_id });
     await recordOpsMetric(env, INGEST_ROUTE, 200, Date.now() - t0, body.device_id, deviceLog);
     deviceLog.info("ingest.telemetry_stored", {
       payload_ts: new Date(tsMs).toISOString(),
@@ -347,7 +373,20 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
     });
     return withCors(req, env, json({ ok: true }), cors);
   } catch (e: any) {
-    const deviceLog = log.with({ device_id: body.device_id });
+    if (isNonceConflict(e)) {
+      await recordOpsMetric(env, INGEST_ROUTE, 409, Date.now() - t0, body.device_id, deviceLog);
+      deviceLog.warn("ingest.duplicate_payload", {
+        payload_ts: new Date(tsMs).toISOString(),
+        dedup_window_ms: dedupWindowMs,
+      });
+      return withCors(
+        req,
+        env,
+        json({ error: "Duplicate payload" }, { status: 409 }),
+        cors,
+      );
+    }
+
     deviceLog.error("ingest.db_error", { error: e });
     await recordOpsMetric(env, INGEST_ROUTE, 500, Date.now() - t0, body.device_id, deviceLog);
     return withCors(

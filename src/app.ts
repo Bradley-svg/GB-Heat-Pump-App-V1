@@ -272,6 +272,19 @@ export default {
 
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
     const log = systemLogger({ task: "offline-cron" });
+    try {
+      const result = await env.DB.prepare(
+        `DELETE FROM ingest_nonces WHERE expires_at < ?1`,
+      )
+        .bind(Date.now())
+        .run();
+      log.debug("cron.ingest_nonce_prune.completed", {
+        deleted: result.meta?.changes ?? 0,
+      });
+    } catch (error) {
+      log.error("cron.ingest_nonce_prune.failed", { error });
+    }
+
     const hbInterval = coerceFiniteNumber(
       env.HEARTBEAT_INTERVAL_SECS,
       DEFAULT_HEARTBEAT_INTERVAL_SECS,

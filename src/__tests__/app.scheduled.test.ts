@@ -12,6 +12,7 @@ type StaleResult = { device_id: string };
 type StatementMock = {
   bind: (...args: unknown[]) => StatementMock;
   all: () => Promise<{ results: StaleResult[] }>;
+  run: () => Promise<{ success: boolean; meta?: { changes?: number } }>;
 };
 
 function mockSystemLogger() {
@@ -38,6 +39,7 @@ function createScheduledEnv(
 ) {
   const { staleResults = [] } = options;
   const bindCalls: unknown[][] = [];
+  const run = vi.fn(async () => ({ success: true, meta: { changes: 0 } }));
   const statement: StatementMock = {
     bind: vi.fn(function bind(this: StatementMock, ...args: unknown[]) {
       bindCalls.push(args);
@@ -46,6 +48,7 @@ function createScheduledEnv(
     all: vi.fn(async function all() {
       return { results: staleResults };
     }) as StatementMock["all"],
+    run: run as StatementMock["run"],
   };
   const prepare = vi.fn().mockReturnValue(statement);
   const env = {
@@ -58,7 +61,7 @@ function createScheduledEnv(
     ...overrides,
   } as Env;
 
-  return { env, bindCalls, statement, prepare };
+  return { env, bindCalls, statement, prepare, run };
 }
 
 describe("app.scheduled", () => {
@@ -75,7 +78,11 @@ describe("app.scheduled", () => {
 
     await app.scheduled({} as ScheduledEvent, env, {} as ScheduledExecutionContext);
 
-    expect(bindCalls[0]?.[0]).toBeCloseTo(120 / 86400, 10);
+    expect(bindCalls.length).toBeGreaterThanOrEqual(2);
+    const offlineBind = bindCalls.find(
+      (args) => typeof args?.[0] === "number" && (args[0] as number) < 1,
+    );
+    expect(offlineBind?.[0]).toBeCloseTo(120 / 86400, 10);
     expect(debug).toHaveBeenCalledWith(
       "cron.offline_check.noop",
       expect.objectContaining({ threshold_secs: 120 }),
@@ -91,7 +98,11 @@ describe("app.scheduled", () => {
 
     await app.scheduled({} as ScheduledEvent, env, {} as ScheduledExecutionContext);
 
-    expect(bindCalls[0]?.[0]).toBeCloseTo(270 / 86400, 10);
+    expect(bindCalls.length).toBeGreaterThanOrEqual(2);
+    const offlineBind = bindCalls.find(
+      (args) => typeof args?.[0] === "number" && (args[0] as number) < 1,
+    );
+    expect(offlineBind?.[0]).toBeCloseTo(270 / 86400, 10);
     expect(debug).toHaveBeenCalledWith(
       "cron.offline_check.noop",
       expect.objectContaining({ threshold_secs: 270 }),
