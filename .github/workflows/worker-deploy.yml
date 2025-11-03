@@ -3,14 +3,6 @@ name: Worker Deploy
 on:
   workflow_dispatch:
     inputs:
-      environment:
-        description: "Deployment target"
-        required: true
-        default: "default"
-        type: choice
-        options:
-          - default
-          - production
       apply_migrations:
         description: "Apply D1 migrations before deploying?"
         required: true
@@ -24,9 +16,9 @@ on:
 
 jobs:
   deploy:
-    name: Deploy Worker (${{ github.event.inputs.environment }})
+    name: Deploy Worker (gb-heat-pump-app-v1)
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment }}
+    environment: production
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -48,28 +40,15 @@ jobs:
         run: npm run test:ci
 
       - name: Apply D1 migrations (default)
-        if: ${{ fromJSON(github.event.inputs.apply_migrations) && github.event.inputs.environment == 'default' }}
+        if: ${{ fromJSON(github.event.inputs.apply_migrations) }}
         run: npm run migrate:apply
  
-      - name: Apply D1 migrations (production)
-        if: ${{ fromJSON(github.event.inputs.apply_migrations) && github.event.inputs.environment == 'production' }}
-        run: npm run migrate:apply:production
-
-      - name: Deploy Worker (default)
-        if: ${{ github.event.inputs.environment == 'default' }}
+      - name: Deploy Worker
         run: npm run deploy
 
-      - name: Deploy Worker (production)
-        if: ${{ github.event.inputs.environment == 'production' }}
-        run: npm run deploy:production
-
       - name: Sync cron triggers (default)
-        if: ${{ fromJSON(github.event.inputs.sync_cron) && github.event.inputs.environment == 'default' }}
+        if: ${{ fromJSON(github.event.inputs.sync_cron) }}
         run: npm run cron:deploy
 
-      - name: Sync cron triggers (production)
-        if: ${{ fromJSON(github.event.inputs.sync_cron) && github.event.inputs.environment == 'production' }}
-        run: npm run cron:deploy:production
-
       - name: Show latest deployments
-        run: npx wrangler deployments list --env ${{ github.event.inputs.environment }}
+        run: npx wrangler deployments list

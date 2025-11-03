@@ -1,4 +1,4 @@
-# Telemetry: Factory Integration Pack
+﻿# Telemetry: Factory Integration Pack
 
 This kit gives the factory everything it needs to run the first live telemetry test against the production Worker. It covers environment readiness, the bench device credentials, exact HTTP payloads, and the validation steps operators should follow while the controller is posting data.
 
@@ -59,7 +59,7 @@ INSERT INTO devices (
 Apply with Wrangler:
 
 ```bash
-wrangler d1 execute GREENBRO_DB --env production --file ./docs/sql/factory-device.sql
+wrangler d1 execute GREENBRO_DB --file ./docs/sql/factory-device.sql
 ```
 
 or run the statement inline with `--command`.
@@ -70,20 +70,20 @@ or run the statement inline with `--command`.
 
 1. **Run migrations**
    ```bash
-   wrangler d1 migrations apply GREENBRO_DB --env production
+   wrangler d1 migrations apply GREENBRO_DB
    ```
 2. **Seed/update the factory device** - execute the SQL above.
 3. **Secrets**
    ```bash
-   printf 'https://devices.greenbro.io,https://app.greenbro.co.za' | wrangler secret put INGEST_ALLOWED_ORIGINS --env production
-   printf '120' | wrangler secret put INGEST_RATE_LIMIT_PER_MIN --env production
-   printf '300' | wrangler secret put INGEST_SIGNATURE_TOLERANCE_SECS --env production
+   printf 'https://devices.greenbro.io,https://app.greenbro.co.za' | wrangler secret put INGEST_ALLOWED_ORIGINS
+   printf '120' | wrangler secret put INGEST_RATE_LIMIT_PER_MIN
+   printf '300' | wrangler secret put INGEST_SIGNATURE_TOLERANCE_SECS
    ```
-   Re-run `wrangler secret list --env production` to confirm bindings.
+   Re-run `wrangler secret list` to confirm bindings.
 4. **Deploy (if needed)**
    ```bash
-   npm run deploy:production
-   wrangler triggers deploy --env production
+   npm run deploy
+   wrangler triggers deploy
    ```
 5. **Access spot-check** - confirm `/app` still prompts via Cloudflare Access and `wrangler tail` shows no `env` validation errors.
 
@@ -131,12 +131,12 @@ Content-Type: application/json
 
 1. **Tail logs**
    ```bash
-   wrangler tail --env production
+   wrangler tail
    ```
    Expect `heartbeat.accepted` and `ingest.accepted` with `device_id=GB-HP-FACTORY-01`.
 2. **Confirm latest state**
    ```bash
-   wrangler d1 execute GREENBRO_DB --env production --command "
+   wrangler d1 execute GREENBRO_DB --command "
      SELECT device_id, online, last_seen_at FROM devices WHERE device_id='GB-HP-FACTORY-01';
      SELECT device_id, supplyC, returnC, flowLps, updated_at FROM latest_state WHERE device_id='GB-HP-FACTORY-01';
    "
@@ -144,7 +144,7 @@ Content-Type: application/json
    `online` should flip to `1`, `updated_at` aligns with telemetry timestamp.
 3. **Check telemetry history**
    ```bash
-   wrangler d1 execute GREENBRO_DB --env production --command "
+   wrangler d1 execute GREENBRO_DB --command "
      SELECT device_id, ts, json_extract(metrics_json, '$.supplyC') AS supplyC
      FROM telemetry WHERE device_id='GB-HP-FACTORY-01' ORDER BY ts DESC LIMIT 5;
    "
@@ -152,7 +152,7 @@ Content-Type: application/json
 4. **UI spot check** - Log in via the dashboard, open `/app/device?device=GB-HP-FACTORY-01` (admin role) and confirm live tiles refresh within ~20 seconds.
 5. **Ops metrics** - Optional sanity for rate limiting and status distribution:
    ```bash
-   wrangler d1 execute GREENBRO_DB --env production --command "
+   wrangler d1 execute GREENBRO_DB --command "
      SELECT route, status_code, COUNT(*) as hits
      FROM ops_metrics
      WHERE device_id='GB-HP-FACTORY-01'

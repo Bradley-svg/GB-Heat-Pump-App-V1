@@ -29,7 +29,7 @@ If you need non-interactive automation (for example CI seeding R2), mint a **Ser
   - PowerShell: `$env:ALLOW_DEV_ACCESS_SHIM='true'; $env:DEV_ALLOW_USER='{"email":"admin@example.com","roles":["admin"]}' ; wrangler dev --local`
   The shim only activates when `Cf-Access-Jwt-Assertion` is missing; any supplied JWT is still fully verified.
 - If you prefer to exercise the real flow, inject a JWT into `Cf-Access-Jwt-Assertion` manually (generate via `cloudflared access login`), or temporarily stub `requireAccessUser` in tests.
-- Ensure secrets exist in each active environment (for example production): `wrangler secret put ACCESS_AUD --env production`.
+- Ensure secrets exist for the Worker: `wrangler secret put ACCESS_AUD`.
 
 ### 1.4 Enforce policies on `app.greenbro.co.za`
 
@@ -45,7 +45,7 @@ If you need non-interactive automation (for example CI seeding R2), mint a **Ser
 
 ### 1.5 Bind Access and ingest secrets to the Worker
 
-Run the following once per environment. Use `--env production` for the production Worker and omit it for the default remote/dev environment. Paste values from the password manager so they survive future rotations.
+Run the following once to populate the Worker secrets. Paste values from the password manager so they survive future rotations.
 
 ```bash
 wrangler secret put ACCESS_AUD
@@ -60,10 +60,10 @@ wrangler secret put ASSET_SIGNING_SECRET             # optional unless issuing s
 After provisioning, run a `wrangler deploy --dry-run` to confirm every binding exists without publishing a new version:
 
 ```bash
-wrangler deploy --env production --dry-run
+wrangler deploy --dry-run
 ```
 
-If validation fails, rerun the `wrangler secret put ... --env production` commands above until the Worker starts cleanly.
+If validation fails, rerun the `wrangler secret put ...` commands above until the Worker starts cleanly.
 
 ### 1.6 Access workflow diagram
 ```
@@ -247,7 +247,7 @@ wrangler secret put INGEST_SIGNATURE_TOLERANCE_SECS
 
 ## 6. Quick Reference
 
-- Update Access secrets: `wrangler secret put ACCESS_AUD --env production`.
+- Update Access secrets: `wrangler secret put ACCESS_AUD`.
 - Apply D1 migrations: `npm run migrate:apply`.
 - Seed local data: `npm run seed:dev`.
 - Upload to R2: `curl -X PUT -H "Cf-Access-Jwt-Assertion: <token>" --data-binary @file.png https://<worker>/r2/brand/file.png`.

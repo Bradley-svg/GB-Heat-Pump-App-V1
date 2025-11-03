@@ -33,7 +33,7 @@ wrangler secret put INGEST_SIGNATURE_TOLERANCE_SECS   # default 300 seconds
 Recommendations:
 
 1. Store canonical secret values in the team password manager (1Password vault: Platform / Infra) before running `wrangler secret put`.
-2. Use the `--env production` flag when targeting the production Worker. For temporary testing, set secrets on the default environment unless your workflow dictates otherwise.
+2. The Worker now deploys as a single script (`gb-heat-pump-app-v1`), so omit the `--env` flag when setting secrets.
 3. Run `wrangler secret list [--env <name>]` after provisioning to confirm bindings exist and remove superseded entries.
 
 ### Local Development

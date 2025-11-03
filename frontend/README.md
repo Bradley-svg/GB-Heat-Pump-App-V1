@@ -50,7 +50,6 @@ The manual `wrangler r2 object put` commands documented in `docs/frontend.md` ar
 
 ```bash
 npm run publish:r2                   # Upload index.html and every file in dist/client/assets/
-npm run publish:r2 -- --env production  # Target the production environment binding
 npm run publish:r2 -- --dry-run      # Print commands without executing them
 ```
 

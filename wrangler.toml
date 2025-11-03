@@ -1,4 +1,4 @@
-name = "gb-heat-pump-app-v1-production"
+name = "gb-heat-pump-app-v1"
 main = "src/app.ts"
 # Must NOT be in the future. Use a recent date.
 compatibility_date = "2024-12-20"
@@ -12,7 +12,7 @@ database_name = "GREENBRO_DB"
 database_id = "ee7ad98b-3629-4985-bd7d-a60c401953a7"
 
 [vars]
-APP_BASE_URL = "https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev"
+APP_BASE_URL = "https://app.greenbro.co.za"
 RETURN_DEFAULT = "https://www.greenbro.co.za/"
 TIMEZONE = "Africa/Johannesburg"
 APP_API_BASE = "https://app.greenbro.co.za"
@@ -40,6 +40,14 @@ OFFLINE_MULTIPLIER = "6"              # mark offline if > 6× heartbeat interval
 [triggers]
 crons = ["*/5 * * * *"]
 
+[[routes]]
+pattern = "app.greenbro.co.za"
+custom_domain = true
+
+[[routes]]
+pattern = "app.greenbro.co.za/*"
+zone_name = "greenbro.co.za"
+
 [[r2_buckets]]
 binding = "GB_BUCKET"
 bucket_name = "greenbro-brand"
@@ -51,44 +59,6 @@ binding = "APP_STATIC"
 bucket_name = "greenbro-app-static"
 # optional for local dev:
 # preview_bucket_name = "greenbro-app-static-dev"
-
-[env.production]
-  workers_dev = true
-
-  [[env.production.routes]]
-  pattern = "app.greenbro.co.za"
-  custom_domain = true
-
-  [env.production.vars]
-  APP_BASE_URL = "https://app.greenbro.co.za"
-  APP_API_BASE = "https://app.greenbro.co.za"
-  APP_ASSET_BASE = "https://pub-3f14c9b10881423a97f40e12402d4b03.r2.dev/app/assets/"
-  RETURN_DEFAULT = "https://www.greenbro.co.za/"
-  TIMEZONE = "Africa/Johannesburg"
-  HEARTBEAT_INTERVAL_SECS = "30"
-  OFFLINE_MULTIPLIER = "6"
-  ALLOWED_PREFIXES = "brand/"
-
-  [[env.production.d1_databases]]
-  binding = "DB"
-  database_name = "GREENBRO_DB"
-  database_id = "ee7ad98b-3629-4985-bd7d-a60c401953a7"
-
-  [[env.production.r2_buckets]]
-  binding = "GB_BUCKET"
-  bucket_name = "greenbro-brand"
-
-  [[env.production.r2_buckets]]
-  binding = "APP_STATIC"
-  bucket_name = "greenbro-app-static"
-
-  # Main worker serves API, SPA, and /r2/* on the same hostname.
-  [[env.production.routes]]
-  pattern = "app.greenbro.co.za/*"
-  zone_name = "greenbro.co.za"
-
-  [env.production.triggers]
-  crons = ["*/5 * * * *"]
 
 [env.local]
   [env.local.vars]
