@@ -1,0 +1,46 @@
+name: Full CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  quality:
+    name: Typecheck, Lint, Test, and Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Install worker dependencies
+        run: npm ci
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Typecheck worker
+        run: npm run typecheck
+
+      - name: Lint frontend
+        run: npm run frontend:lint
+
+      - name: Run test suite
+        run: npm run test:ci
+
+      - name: Build artifacts
+        run: npm run build
