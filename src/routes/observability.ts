@@ -1,6 +1,7 @@
 import type { Env } from "../env";
 import { requireAccessUser } from "../lib/access";
 import { ClientErrorReportSchema } from "../schemas/observability";
+import type { ClientErrorReport } from "../schemas/observability";
 import { loggerForRequest } from "../utils/logging";
 import { json } from "../utils/responses";
 import { validationErrorResponse, validateWithSchema } from "../utils/validation";
@@ -20,7 +21,7 @@ export async function handleClientErrorReport(req: Request, env: Env) {
     return json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const parsed = validateWithSchema(ClientErrorReportSchema, payload);
+  const parsed = validateWithSchema<ClientErrorReport>(ClientErrorReportSchema, payload);
   if (!parsed.success) {
     return validationErrorResponse(parsed.issues);
   }

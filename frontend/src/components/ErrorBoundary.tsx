@@ -46,7 +46,7 @@ interface DefaultErrorFallbackProps {
   onRetry: () => void;
 }
 
-function DefaultErrorFallback({ onRetry }: DefaultErrorFallbackProps) {
+export function DefaultErrorFallback({ onRetry }: DefaultErrorFallbackProps) {
   return (
     <div role="alert" className="app-error-boundary">
       <h1>Something went wrong</h1>

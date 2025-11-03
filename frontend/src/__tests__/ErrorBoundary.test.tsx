@@ -1,3 +1,4 @@
+import type { ErrorInfo } from "react";
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -13,7 +14,7 @@ describe("ErrorBoundary", () => {
   });
 
   it("renders the default fallback when a child throws", () => {
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     render(
       <ErrorBoundary>
@@ -26,8 +27,8 @@ describe("ErrorBoundary", () => {
   });
 
   it("invokes the onError callback with error details", () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    const onError = vi.fn();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const onError = vi.fn<[Error, ErrorInfo], void>();
 
     render(
       <ErrorBoundary onError={onError}>
@@ -36,8 +37,8 @@ describe("ErrorBoundary", () => {
     );
 
     expect(onError).toHaveBeenCalledTimes(1);
-    const [errorArg, errorInfoArg] = onError.mock.calls[0];
+    const [[errorArg, errorInfoArg]] = onError.mock.calls;
     expect(errorArg).toBeInstanceOf(Error);
-    expect(errorInfoArg).toHaveProperty("componentStack");
+    expect(errorInfoArg.componentStack).toEqual(expect.any(String));
   });
 });

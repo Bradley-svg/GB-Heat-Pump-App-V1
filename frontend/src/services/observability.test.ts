@@ -2,11 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ErrorInfo } from "react";
 
-import type { ApiClient } from "./api-client";
+import type { ApiClient, RequestOptions } from "./api-client";
 import { reportUiError } from "./observability";
 import type { CurrentUserState } from "../app/hooks/use-current-user";
 
-type PostMock = ReturnType<typeof vi.fn>;
+type PostCallArgs = [string, unknown, RequestOptions?];
+type PostMock = ReturnType<typeof vi.fn<PostCallArgs, Promise<void>>>;
 
 function createApiClient(post: PostMock): ApiClient {
   return {
@@ -31,17 +32,17 @@ afterEach(() => {
 
 describe("reportUiError", () => {
   it("sends a formatted payload to the observability endpoint", async () => {
-    const post = vi.fn().mockResolvedValue(undefined);
+    const post = vi.fn<PostCallArgs, Promise<void>>().mockResolvedValue(undefined);
     const apiClient = createApiClient(post);
 
     const error = new Error("Something went wrong");
     Object.assign(error, { stack: "Error: Something went wrong\n  at ProblemChild (App.tsx:10)" });
-    const errorInfo = { componentStack: "in ProblemChild\n    in Boundary" } as ErrorInfo;
+    const errorInfo: ErrorInfo = { componentStack: "in ProblemChild\n    in Boundary" };
 
     await reportUiError(apiClient, { error, errorInfo, currentUser: readyUser });
 
     expect(post).toHaveBeenCalledTimes(1);
-    const [path, body, options] = post.mock.calls[0] as [string, Record<string, unknown>, RequestInit];
+    const [[path, body, options]] = post.mock.calls;
     expect(path).toBe("/api/observability/client-errors");
     expect(body).toMatchObject({
       name: "Error",
@@ -53,17 +54,17 @@ describe("reportUiError", () => {
         clientIds: readyUser.user?.clientIds,
       },
     });
-    expect(body.timestamp).toBeDefined();
+    expect(body).toHaveProperty("timestamp");
     expect(options).toMatchObject({ keepalive: true });
   });
 
   it("swallows delivery errors and logs a warning", async () => {
-    const post = vi.fn().mockRejectedValue(new Error("network failure"));
-    const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const post = vi.fn<PostCallArgs, Promise<void>>().mockRejectedValue(new Error("network failure"));
+    const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const apiClient = createApiClient(post);
 
     const error = new Error("Nope");
-    const errorInfo = { componentStack: "in FailingComponent" } as ErrorInfo;
+    const errorInfo: ErrorInfo = { componentStack: "in FailingComponent" };
 
     await reportUiError(apiClient, { error, errorInfo, currentUser: readyUser });
 

@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { D1Database, D1DatabaseAPI } from "@miniflare/d1";
+import { D1Database as MiniflareD1Database, D1DatabaseAPI } from "@miniflare/d1";
 
 import type { Env } from "../../src/env";
 
@@ -41,9 +41,13 @@ export async function createWorkerEnv(overrides: Partial<Env> = {}): Promise<Wor
   sqlite.exec(seedSql);
 
   const api = new D1DatabaseAPI(sqlite as any);
-  const DB = new D1Database({
-    fetch: (input: RequestInfo, init?: RequestInit) => api.fetch(input, init),
+  const boundFetch = api.fetch.bind(api);
+
+  const rawDb = new MiniflareD1Database({
+    fetch: boundFetch as any,
   });
+
+  const DB = rawDb as unknown as Env["DB"];
 
   const baseEnv: Env = {
     DB,

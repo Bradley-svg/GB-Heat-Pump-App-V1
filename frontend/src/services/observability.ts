@@ -104,13 +104,14 @@ function maybeRandomId(): string | undefined {
 }
 
 function formatUser(currentUser?: CurrentUserState) {
-  if (!currentUser || currentUser.status !== "ready" || !currentUser.user) {
+  const user = currentUser?.status === "ready" ? currentUser.user : undefined;
+  if (!user) {
     return undefined;
   }
   return {
-    email: currentUser.user.email,
-    roles: currentUser.user.roles,
-    clientIds: currentUser.user.clientIds ?? [],
+    email: user.email,
+    roles: user.roles,
+    clientIds: user.clientIds ?? [],
   };
 }
 

@@ -4,10 +4,7 @@ const decoder = new TextDecoder();
 type StoredObject = {
   key: string;
   value: Uint8Array;
-  httpMetadata?: {
-    contentType?: string;
-    cacheControl?: string;
-  };
+  httpMetadata?: R2HTTPMetadata | Headers;
   uploaded: Date;
   etag: string;
 };
@@ -62,7 +59,7 @@ export function createMockR2Bucket(initial: Record<string, { value: string; http
     });
   }
 
-  const bucketImpl: Partial<R2Bucket> = {
+  const bucketImpl = {
     async put(key: string, value: unknown, options?: R2PutOptions) {
       const bytes = await toUint8Array(value);
       const uploaded = new Date();
@@ -85,7 +82,7 @@ export function createMockR2Bucket(initial: Record<string, { value: string; http
         uploaded: entry.uploaded,
         httpMetadata: entry.httpMetadata,
         body: toStream(entry.value),
-      } as unknown as R2Object;
+      };
     },
 
     async head(key: string) {
@@ -97,14 +94,14 @@ export function createMockR2Bucket(initial: Record<string, { value: string; http
         etag: entry.etag,
         uploaded: entry.uploaded,
         httpMetadata: entry.httpMetadata,
-      } as unknown as R2ObjectHead;
+      };
     },
 
     async delete(key: string) {
       store.delete(key);
     },
 
-    async list(): Promise<R2Objects> {
+    async list() {
       return {
         objects: Array.from(store.values()).map((entry) => ({
           key: entry.key,
@@ -114,24 +111,25 @@ export function createMockR2Bucket(initial: Record<string, { value: string; http
           httpMetadata: entry.httpMetadata,
         })) as any,
         truncated: false,
+        delimitedPrefixes: [],
       };
     },
 
-    async createMultipartUpload(): Promise<R2MultipartUpload> {
+    async createMultipartUpload() {
       throw new Error("Multipart uploads not implemented in mock bucket");
     },
 
-    async resumeMultipartUpload(): Promise<R2MultipartUpload> {
+    async resumeMultipartUpload() {
       throw new Error("Multipart uploads not implemented in mock bucket");
     },
 
-    async multipartUpload(): Promise<R2Object | null> {
+    async multipartUpload() {
       throw new Error("Multipart uploads not implemented in mock bucket");
     },
   };
 
   return {
-    bucket: bucketImpl as R2Bucket,
+    bucket: bucketImpl as unknown as R2Bucket,
     async readText(key: string) {
       const entry = store.get(key);
       if (!entry) return null;
