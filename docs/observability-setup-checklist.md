@@ -58,6 +58,7 @@ If you rely on a different visualization stack (for example DataDog dashboards),
    ```
    or via Terraform if the service catalog prefers infrastructure-as-code.
 3. Confirm the monitors appear under the `service:gb-workers` tag set and route to the platform on-call schedule.
+4. Spot check that the cron gap monitors (`GB Workers :: Offline cron gap`, `GB Workers :: Ingest nonce prune gap`) show a status of OK once the Worker has emitted logs after import.
 
 ### Pager routing
 
@@ -70,3 +71,4 @@ If you rely on a different visualization stack (for example DataDog dashboards),
 - Open the Grafana dashboard and verify panels light up with fresh data (may require waiting for the next scrape).
 - In Datadog, use the "Test Notifications" feature on each monitor to validate channel wiring.
 - Update the runbooks (`docs/deployment-runbook.md`, `docs/observability.md`) with the date of completion and any environment-specific overrides.
+- Run the cron gap simulation from `docs/observability.md#cron-gap-runbook` (pause or replay logs) at least once per environment to validate alert firing end-to-end.

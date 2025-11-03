@@ -144,6 +144,23 @@ These fields are designed to feed dashboards or alerting pipelines without addit
   - Capture failing payloads via logs (request_id) for replay after fix.
 - **Recovery validation**: `ingest.telemetry_stored` logs resume and server error rate drops.
 
+### 5. Cron gap runbook {#cron-gap-runbook}
+
+- **Detection**: Datadog monitors `GB Workers :: Offline cron gap` and `GB Workers :: Ingest nonce prune gap` fire when no `cron.offline_check.*` or `cron.ingest_nonce_prune.*` log appears for more than 10 minutes (2x the 5-minute schedule). Both queries aggregate `greenbro.logs.count` with `rollup(count, 600)` so a single completion, noop, or failure log keeps them green.
+- **Immediate checks**:
+  1. Open Cloudflare Workers -> Scheduled Triggers for the production worker to confirm the `*/5 * * * *` cron is still enabled and observe the last run timestamp.
+  2. Tail logs locally: `npx wrangler tail --format=json --sampling-rate 1 | jq 'select(.msg|test(\"cron.(offline_check|ingest_nonce_prune)\"))'` to review the last emission or confirm the gap.
+  3. If a recent deploy touched `src/app.ts` cron logic or `wrangler.toml` triggers, roll back or redeploy using the previous build.
+  4. For `cron.ingest_nonce_prune.failed`, check D1 status (`wrangler d1 execute <DB> --command "SELECT COUNT(*) FROM ingest_nonces"`) and Cloudflare health advisories.
+- **Response**:
+  - Re-enable the cron via Cloudflare UI if it was paused, then redeploy with `wrangler deploy --env production` to ensure configuration sync.
+  - Investigate Cloudflare queue delays or account-level errors; engage support if scheduled events are globally lagging.
+  - When failures stem from D1, consider temporarily increasing nonce TTL to avoid blocking ingestion until pruning resumes.
+- **Testing**:
+  - **Pause test**: In staging, comment out the `*/5 * * * *` entry in `wrangler.toml`, deploy, and wait 12 minutes. The gap monitors should enter `Alert` and post to the routing channel. Revert the cron entry and deploy again to clear.
+  - **Replay test**: Use `npx wrangler tail --format=json --sampling-rate 1 > cron-gap.log` during a healthy window, then replay with `cat cron-gap.log | datadog logs send --service gb-workers --source workers` to confirm the monitor clears after synthetic events.
+- **Recovery validation**: `cron.offline_check.completed` or `.noop` and `cron.ingest_nonce_prune.completed` logs reappear within the next window; Datadog monitors exit alert; device offline ratios remain stable.
+
 ## External dashboards
 
 - **Grafana / Prometheus**: Scrape `/metrics`, alert using the thresholds above.

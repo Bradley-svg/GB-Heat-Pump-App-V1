@@ -104,6 +104,44 @@
         "notify_no_data": true,
         "no_data_timeframe": 10
       }
+    },
+    {
+      "name": "GB Workers :: Offline cron gap",
+      "type": "query alert",
+      "query": "avg(last_10m):default_zero(sum:greenbro.logs.count{env:production,msg:cron.offline_check.completed OR msg:cron.offline_check.noop OR msg:cron.offline_check.failed}.rollup(count, 600)) < 1",
+      "message": "Offline cron has not emitted a completion/noop log in >10m (>=2x schedule). Confirm Worker cron status, queue execution, and D1 connectivity per docs/observability.md#cron-gap-runbook.",
+      "tags": [
+        "service:gb-workers",
+        "team:platform",
+        "severity:critical"
+      ],
+      "options": {
+        "thresholds": {
+          "critical": 1.0
+        },
+        "evaluation_delay": 60,
+        "notify_audit": false,
+        "notify_no_data": false
+      }
+    },
+    {
+      "name": "GB Workers :: Ingest nonce prune gap",
+      "type": "query alert",
+      "query": "avg(last_10m):default_zero(sum:greenbro.logs.count{env:production,msg:cron.ingest_nonce_prune.completed OR msg:cron.ingest_nonce_prune.failed}.rollup(count, 600)) < 1",
+      "message": "Nonce prune cron has not emitted a completion log in >10m (>=2x schedule). Check scheduled Worker execution, D1 quota, and recent deploys per docs/observability.md#cron-gap-runbook.",
+      "tags": [
+        "service:gb-workers",
+        "team:platform",
+        "severity:critical"
+      ],
+      "options": {
+        "thresholds": {
+          "critical": 1.0
+        },
+        "evaluation_delay": 60,
+        "notify_audit": false,
+        "notify_no_data": false
+      }
     }
   ]
 }
