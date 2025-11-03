@@ -8,6 +8,31 @@ const REPORT_KEY_PREFIX = "reports/commissioning/";
 const DEFAULT_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
 const PDF_LINE_HEIGHT = 18;
 
+const PDF_ASCII_FALLBACKS: Record<string, string> = {
+  "\u00a0": " ",
+  "\u2013": "-",
+  "\u2014": "-",
+  "\u2018": "'",
+  "\u2019": "'",
+  "\u201c": "\"",
+  "\u201d": "\"",
+  "\u2022": "*",
+};
+
+function sanitizePdfText(input: string): string {
+  return input
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .split("")
+    .map((char) => {
+      if (char === "\n" || char === "\r") return "\n";
+      if (char === "\t") return " ";
+      if (char >= " " && char <= "~") return char;
+      return PDF_ASCII_FALLBACKS[char] ?? "?";
+    })
+    .join("");
+}
+
 interface PdfLayoutContext {
   cursorX: number;
   cursorY: number;
@@ -16,7 +41,8 @@ interface PdfLayoutContext {
 }
 
 function escapePdfText(input: string): string {
-  return input.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)").replace(/\r?\n/g, " ");
+  const sanitized = sanitizePdfText(input);
+  return sanitized.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)").replace(/\r?\n/g, " ");
 }
 
 function wrapText(text: string, maxWidth = 88): string[] {
@@ -60,7 +86,7 @@ function buildContent(run: CommissioningRunRecord, generatedAt: string): string 
     lines.push("Notes:");
     const noteLines = wrapText(run.notes);
     for (const line of noteLines) {
-      lines.push(`• ${line}`);
+      lines.push(`* ${line}`);
     }
   }
 
@@ -88,7 +114,7 @@ function buildContent(run: CommissioningRunRecord, generatedAt: string): string 
 }
 
 function assemblePdf(streamContent: string): Uint8Array {
-  const streamBytes = encoder.encode(streamContent);
+  const streamBytes = encodeLatin1(streamContent);
   const objects: string[] = [];
 
   objects[1] = `1 0 obj
@@ -119,7 +145,9 @@ endobj
 endobj
 `;
 
-  const header = "%PDF-1.4\n%âãÏÓ\n";
+  const header = `%PDF-1.4
+${String.fromCharCode(0xe2, 0xe3, 0xcf, 0xd3)}
+`;
   let position = header.length;
   const offsets: number[] = [0];
   let body = header;
@@ -148,9 +176,16 @@ ${xrefStart}
 `;
 
   const pdfString = body + xref + trailer;
-  return encoder.encode(pdfString);
+  return encodeLatin1(pdfString);
 }
 
+function encodeLatin1(input: string): Uint8Array {
+  const bytes = new Uint8Array(input.length);
+  for (let i = 0; i < input.length; i += 1) {
+    bytes[i] = input.charCodeAt(i) & 0xff;
+  }
+  return bytes;
+}
 async function signReportUrl(env: Env, key: string, method: string, ttlSeconds: number): Promise<string | null> {
   if (!env.APP_BASE_URL || !env.ASSET_SIGNING_SECRET) {
     return null;
@@ -205,3 +240,6 @@ export async function generateCommissioningReport(
   }
   return { key, url, generated_at: generatedAt };
 }
+
+
+
