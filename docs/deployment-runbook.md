@@ -54,6 +54,17 @@ The platform now deploys a single Worker (`gb-heat-pump-app-v1`). Key bindings a
 
 > **GitHub Actions**: Trigger the `Worker Deploy` workflow (`.github/workflows/worker-deploy.yml`) for repeatable rollouts. The job targets `gb-heat-pump-app-v1` automatically and will run migrations plus cron synchronization when the inputs are enabled. Store `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as repository secrets before the first run.
 
+### Access shim guard
+
+Before deploying (locally or through CI), run `npm run check:prod-shim`. The job now executes automatically in every PR, CI, and deploy workflow. If it fails:
+
+1. Remove `ALLOW_DEV_ACCESS_SHIM` and `DEV_ALLOW_USER` from the target Worker:  
+   - default env: `npx wrangler secret delete ALLOW_DEV_ACCESS_SHIM` and `npx wrangler secret delete DEV_ALLOW_USER`  
+   - explicit env: `npx wrangler secret delete ALLOW_DEV_ACCESS_SHIM --env production`
+2. Unset any pipeline variables or repository/environment secrets named `ALLOW_DEV_ACCESS_SHIM` or `DEV_ALLOW_USER` in GitHub Actions (or the triggering platform).
+3. Confirm `wrangler.toml` only declares the shim entries under `[env.local.vars]` and remove them from other sections if present.
+4. Re-run `npm run check:prod-shim` to verify the guard passes before retrying the deploy.
+
 **Verification**
 - Inspect the deployment list: `npx wrangler deployments list` and note the new `deployment_id`.
 - Tail logs for the new version: `npx wrangler tail --format jsonl --sampling-rate 1`.

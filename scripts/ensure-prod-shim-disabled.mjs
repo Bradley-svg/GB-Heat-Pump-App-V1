@@ -5,11 +5,13 @@
  *
  * The script checks the default Worker environment plus any additional
  * `--env <name>` arguments by calling `wrangler secret list --json` and fails
- * when `ALLOW_DEV_ACCESS_SHIM` is present. It also surfaces a warning if
- * `DEV_ALLOW_USER` is configured, as that flag only makes sense with the shim.
+ * when shim-related secrets or flags are present outside local development.
+ * It also validates wrangler.toml so the shim cannot be enabled for non-local
+ * environments via committed configuration.
  */
 
 import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 
 const WRANGLER_BIN = "wrangler";
 const WRANGLER_OPTIONS_BASE = {
@@ -19,8 +21,18 @@ const WRANGLER_OPTIONS_BASE = {
 const WRANGLER_OPTIONS = process.platform === "win32"
   ? { ...WRANGLER_OPTIONS_BASE, shell: true }
   : WRANGLER_OPTIONS_BASE;
-const PROHIBITED_SECRET = "ALLOW_DEV_ACCESS_SHIM";
-const WARN_ONLY_SECRET = "DEV_ALLOW_USER";
+const WRANGLER_CONFIG_PATH = new URL("../wrangler.toml", import.meta.url);
+const PROHIBITED_ITEMS = [
+  {
+    name: "ALLOW_DEV_ACCESS_SHIM",
+    description: "development access shim flag",
+  },
+  {
+    name: "DEV_ALLOW_USER",
+    description: "development shim user override",
+  },
+];
+const LOCAL_SECTION_PREFIX = "env.local";
 
 function parseArgs(argv) {
   const envs = [];
@@ -40,6 +52,81 @@ function parseArgs(argv) {
   }
 
   return envs;
+}
+
+function hasWranglerAuth() {
+  return Boolean(
+    process.env.CLOUDFLARE_API_TOKEN
+      || process.env.WRANGLER_API_TOKEN
+      || process.env.WRANGLER_AUTH_TOKEN
+      || (process.env.CLOUDFLARE_API_KEY && process.env.CLOUDFLARE_EMAIL),
+  );
+}
+
+function stripTomlInlineComment(line) {
+  const hashIndex = line.indexOf("#");
+  if (hashIndex === -1) {
+    return line;
+  }
+  return line.slice(0, hashIndex);
+}
+
+function isAllowedLocalSection(section) {
+  if (!section) {
+    return false;
+  }
+  if (section === LOCAL_SECTION_PREFIX || section === `${LOCAL_SECTION_PREFIX}.vars`) {
+    return true;
+  }
+  return section.startsWith(`${LOCAL_SECTION_PREFIX}.`);
+}
+
+function inspectWranglerConfig() {
+  const findings = [];
+  if (!existsSync(WRANGLER_CONFIG_PATH)) {
+    return findings;
+  }
+
+  const contents = readFileSync(WRANGLER_CONFIG_PATH, "utf8");
+  const lines = contents.split(/\r?\n/);
+  let currentSection = "";
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const noComment = stripTomlInlineComment(trimmed).trim();
+    if (!noComment) {
+      continue;
+    }
+
+    if (/^\[\[.*\]\]$/.test(noComment)) {
+      currentSection = noComment.slice(2, -2).trim();
+      continue;
+    }
+
+    if (/^\[.*\]$/.test(noComment)) {
+      currentSection = noComment.slice(1, -1).trim();
+      continue;
+    }
+
+    for (const { name } of PROHIBITED_ITEMS) {
+      if (new RegExp(`^${name}\\s*=`).test(noComment) && !isAllowedLocalSection(currentSection)) {
+        findings.push({ name, section: currentSection || "root" });
+      }
+    }
+  }
+
+  return findings;
+}
+
+function addViolation(map, name, context) {
+  if (!map.has(name)) {
+    map.set(name, new Set());
+  }
+  map.get(name).add(context);
 }
 
 function listSecrets(envName) {
@@ -100,50 +187,72 @@ function extractNames(secrets) {
 function main() {
   try {
     const requestedEnvs = parseArgs(process.argv.slice(2));
-    const targets = [null, ...requestedEnvs];
-    const violations = [];
-    const warnings = [];
+    const violationMap = new Map();
+    const hasAuth = hasWranglerAuth();
 
-    if (process.env.ALLOW_DEV_ACCESS_SHIM && process.env.ALLOW_DEV_ACCESS_SHIM.trim()) {
-      violations.push("pipeline environment variables");
-    }
-
-    for (const envName of targets) {
-      const { missing, secrets } = listSecrets(envName);
-      if (missing) {
-        console.warn(
-          `[shim-check] Skipping ${envName} because the environment does not exist or has no secrets.`,
-        );
-        continue;
-      }
-
-      const names = extractNames(secrets);
-      if (names.has(PROHIBITED_SECRET)) {
-        violations.push(envName ?? "default");
-      }
-      if (names.has(WARN_ONLY_SECRET)) {
-        warnings.push(envName ?? "default");
+    for (const { name } of PROHIBITED_ITEMS) {
+      if (process.env[name] && process.env[name].trim()) {
+        addViolation(violationMap, name, "CI environment variables");
       }
     }
 
-    if (warnings.length > 0) {
-      console.warn(
-        `[shim-check] ${WARN_ONLY_SECRET} is configured for ${warnings.join(
-          ", ",
-        )}. Remove it in production environments.`,
+    const configFindings = inspectWranglerConfig();
+    for (const finding of configFindings) {
+      addViolation(
+        violationMap,
+        finding.name,
+        `wrangler.toml [${finding.section}]`,
       );
     }
 
-    if (violations.length > 0) {
+    if (hasAuth) {
+      const targets = [null, ...requestedEnvs];
+      for (const envName of targets) {
+        const { missing, secrets } = listSecrets(envName);
+        if (missing) {
+          console.warn(
+            `[shim-check] Skipping ${envName ?? "default"} because the environment does not exist or has no secrets.`,
+          );
+          continue;
+        }
+
+        const names = extractNames(secrets);
+        for (const { name } of PROHIBITED_ITEMS) {
+          if (names.has(name)) {
+            addViolation(
+              violationMap,
+              name,
+              `Cloudflare secret (${envName ?? "default"})`,
+            );
+          }
+        }
+      }
+    } else {
+      console.warn(
+        "[shim-check] Cloudflare API credentials were not provided. Skipping remote secret inspection.",
+      );
+    }
+
+    if (violationMap.size > 0) {
+      console.error("[shim-check] Development shim configuration detected:");
+      for (const item of PROHIBITED_ITEMS) {
+        if (!violationMap.has(item.name)) {
+          continue;
+        }
+        const contexts = Array.from(violationMap.get(item.name)).join(", ");
+        console.error(
+          ` - ${item.name} (${item.description}) present in ${contexts}`,
+        );
+      }
       console.error(
-        `[shim-check] ${PROHIBITED_SECRET} is enabled for ${violations.join(
-          ", ",
-        )}. Disable it before deploying.`,
+        "[shim-check] Remove the shim secrets or flags from non-local environments and rerun.",
       );
       process.exit(1);
     }
 
-    console.log("[shim-check] No development shim flags detected in deploy environments.");
+    console.log(
+      "[shim-check] No development shim secrets detected in deploy environments.",
+    );
   } catch (error) {
     console.error(
       `[shim-check] ${error instanceof Error ? error.message : String(error)}`,

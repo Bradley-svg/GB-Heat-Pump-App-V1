@@ -38,6 +38,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify shim flags are disabled
+        run: npm run check:prod-shim
+
       - name: Validate D1 migrations locally
         run: npm run migrate:apply:local
 
