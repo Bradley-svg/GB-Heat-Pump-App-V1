@@ -30,6 +30,22 @@ wrangler secret put INGEST_RATE_LIMIT_PER_MIN   # align with firmware cadence (e
 wrangler secret put INGEST_SIGNATURE_TOLERANCE_SECS   # default 300 seconds
 ```
 
+When provisioning several secrets at once, export the values into your shell session and run the helper script to push them via `wrangler secret put`:
+
+```bash
+export ACCESS_AUD=00000000-0000-0000-0000-000000000000
+export ACCESS_JWKS_URL=https://<team>.cloudflareaccess.com/cdn-cgi/access/certs
+export CURSOR_SECRET=generate-a-strong-value-here
+export INGEST_ALLOWED_ORIGINS=https://devices.greenbro.io,https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev
+export INGEST_RATE_LIMIT_PER_MIN=120
+export INGEST_SIGNATURE_TOLERANCE_SECS=300
+export ASSET_SIGNING_SECRET=only-if-signed-urls-required
+# optional development flags (populate only when needed)
+# export ALLOW_DEV_ACCESS_SHIM=true
+# export DEV_ALLOW_USER='{"email":"local-admin@example.com","roles":["admin"],"clientIds":["profile-west"]}'
+node scripts/bind-cloudflare-secrets.mjs --env production
+```
+
 Recommendations:
 
 1. Store canonical secret values in the team password manager (1Password vault: Platform / Infra) before running `wrangler secret put`.

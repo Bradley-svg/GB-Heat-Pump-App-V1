@@ -57,6 +57,8 @@ wrangler secret put INGEST_SIGNATURE_TOLERANCE_SECS  # default 300
 wrangler secret put ASSET_SIGNING_SECRET             # optional unless issuing signed URLs
 ```
 
+To push them all in one go, export the values in your shell and run `node scripts/bind-cloudflare-secrets.mjs --env <name>`; the helper pipes each value into `wrangler secret put` and validates numeric fields before handing them to Wrangler.
+
 After provisioning, run a `wrangler deploy --dry-run` to confirm every binding exists without publishing a new version:
 
 ```bash
