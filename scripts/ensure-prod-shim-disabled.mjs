@@ -35,7 +35,7 @@ function parseArgs(argv) {
 }
 
 function listSecrets(envName) {
-  const args = ["secret", "list", "--json"];
+  const args = ["secret", "list", "--format", "json"];
   if (envName) {
     args.push("--env", envName);
   }
