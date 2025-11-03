@@ -60,8 +60,7 @@ bucket_name = "greenbro-app-static"
 [[r2_buckets]]
 binding = "RETENTION_ARCHIVE"
 bucket_name = "greenbro-telemetry-archive"
-# optional for local dev:
-# preview_bucket_name = "greenbro-telemetry-archive-dev"
+preview_bucket_name = "greenbro-telemetry-archive-dev"
 
 [env.local]
   [env.local.vars]
