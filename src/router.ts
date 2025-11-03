@@ -1,8 +1,13 @@
 import { Router } from "itty-router";
 
+import { registerAdminRoutes } from "./router/admin";
+import { registerDeviceRoutes } from "./router/devices";
+import type { AppRouter } from "./router/params";
+import { withParam } from "./router/params";
+import { registerMetricsRoutes } from "./router/metrics";
+import { registerTelemetryRoutes } from "./router/telemetry";
 import type { Env } from "./env";
 import { json } from "./utils/responses";
-import { safeDecode } from "./utils";
 import {
   handleAlertsFeed,
   handleCreateAlertRecord,
@@ -12,20 +17,15 @@ import {
 } from "./routes/alerts";
 import { handleArchive } from "./routes/archive";
 import { handleClientCompact } from "./routes/client";
-import { handleDeviceHistory, handleLatest, handleListDevices } from "./routes/devices";
 import { handleFleetSummary } from "./routes/fleet";
 import { handleHeartbeat, handleIngest } from "./routes/ingest";
 import { handleMe } from "./routes/me";
 import { handleCommissioning } from "./routes/commissioning";
-import { handleAdminOverview } from "./routes/admin";
-import { handleOpsOverview } from "./routes/ops";
 import { handleHealth } from "./routes/health";
-import { handleMetrics } from "./routes/metrics";
 import {
   handleCreateCommissioningRun,
   handleListCommissioningRuns,
 } from "./routes/commissioning-runs";
-import { handleCreateAuditEntry, handleListAuditTrail } from "./routes/audit";
 import {
   handleCreateMqttMapping,
   handleDeleteMqttMapping,
@@ -34,39 +34,20 @@ import {
 } from "./routes/mqtt";
 import { handleMqttWebhook } from "./routes/mqtt-webhook";
 import { bindRequestLogger, loggerForRequest, releaseRequestLogger } from "./utils/logging";
-import { handleTelemetryLatestBatch, handleTelemetrySeries } from "./routes/telemetry";
 
-type RoutedRequest = Request & { params?: Record<string, string> };
-type RouteHandler = (req: Request, env: Env) => Promise<Response> | Response;
-type ParamHandler = (req: Request, env: Env, value: string) => Promise<Response> | Response;
-
-const router = Router();
-
-function decodeParam(req: RoutedRequest, key: string): string | null {
-  const raw = req.params?.[key] ?? null;
-  const decoded = safeDecode(raw);
-  if (decoded === null || decoded === "") return null;
-  return decoded;
-}
-
-function withParam(param: string, handler: ParamHandler): RouteHandler {
-  return (req, env) => {
-    const value = decodeParam(req as RoutedRequest, param);
-    if (!value) {
-      return json({ error: `Invalid ${param}` }, { status: 400 });
-    }
-    return handler(req, env, value);
-  };
-}
+const router: AppRouter = Router();
 
 router.get("/health", () => handleHealth());
-router.get("/metrics", (req: Request, env: Env) => handleMetrics(req, env));
+
+registerMetricsRoutes(router);
+registerDeviceRoutes(router, withParam);
+registerTelemetryRoutes(router);
+registerAdminRoutes(router);
 
 router
   .get("/api/me", (req, env) => handleMe(req, env))
   .get("/api/fleet/summary", (req, env) => handleFleetSummary(req, env))
   .get("/api/client/compact", (req, env) => handleClientCompact(req, env))
-  .get("/api/devices", (req, env) => handleListDevices(req, env))
   .get("/api/alerts", (req, env) => handleListAlertRecords(req, env))
   .post("/api/alerts", (req, env) => handleCreateAlertRecord(req, env))
   .patch(
@@ -81,13 +62,7 @@ router
   .get("/api/commissioning/checklist", (req, env) => handleCommissioning(req, env))
   .get("/api/commissioning/runs", (req, env) => handleListCommissioningRuns(req, env))
   .post("/api/commissioning/runs", (req, env) => handleCreateCommissioningRun(req, env))
-  .post("/api/telemetry/latest-batch", (req, env) => handleTelemetryLatestBatch(req, env))
-  .get("/api/telemetry/series", (req, env) => handleTelemetrySeries(req, env))
-  .get("/api/admin/overview", (req, env) => handleAdminOverview(req, env))
-  .get("/api/ops/overview", (req, env) => handleOpsOverview(req, env))
   .get("/api/archive/offline", (req, env) => handleArchive(req, env))
-  .get("/api/audit/logs", (req, env) => handleListAuditTrail(req, env))
-  .post("/api/audit/logs", (req, env) => handleCreateAuditEntry(req, env))
   .get("/api/mqtt/mappings", (req, env) => handleListMqttMappings(req, env))
   .post("/api/mqtt/mappings", (req, env) => handleCreateMqttMapping(req, env))
   .post("/api/mqtt-webhook", (req, env) => handleMqttWebhook(req, env))
@@ -98,14 +73,6 @@ router
   .delete(
     "/api/mqtt/mappings/:id",
     withParam("id", (req, env, mappingId) => handleDeleteMqttMapping(req, env, mappingId)),
-  )
-  .get(
-    "/api/devices/:id/latest",
-    withParam("id", (req, env, deviceId) => handleLatest(req, env, deviceId)),
-  )
-  .get(
-    "/api/devices/:id/history",
-    withParam("id", (req, env, deviceId) => handleDeviceHistory(req, env, deviceId)),
   )
   .post(
     "/api/ingest/:profile",
