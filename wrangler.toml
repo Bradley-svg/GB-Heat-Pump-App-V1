@@ -15,7 +15,7 @@ database_id = "ee7ad98b-3629-4985-bd7d-a60c401953a7"
 APP_BASE_URL = "https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev"
 RETURN_DEFAULT = "https://www.greenbro.co.za/"
 TIMEZONE = "Africa/Johannesburg"
-APP_API_BASE = "https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev"
+APP_API_BASE = "https://app.greenbro.co.za"
 APP_ASSET_BASE = "https://pub-3f14c9b10881423a97f40e12402d4b03.r2.dev/app/assets/"
 ALLOWED_PREFIXES = "brand/"
 # Ingest controls are provided via `wrangler secret put` per environment:
@@ -86,6 +86,9 @@ bucket_name = "greenbro-app-static"
   [[env.production.routes]]
   pattern = "app.greenbro.co.za/*"
   zone_name = "greenbro.co.za"
+
+  [env.production.triggers]
+  crons = ["*/5 * * * *"]
 
 [env.local]
   [env.local.vars]

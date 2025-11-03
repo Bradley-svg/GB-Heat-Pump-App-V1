@@ -11,7 +11,7 @@ The Worker trusts Cloudflare Access JWTs via `requireAccessUser` (`src/lib/acces
 ### 1.1 Create or update the Access application
 1. In the Cloudflare dashboard, go to **Zero Trust > Access > Applications**.
 2. Create an **Application > Self-hosted** entry (or update the existing one):
-   - **Application domain**: `gb-heat-pump-app-v1.<team>.workers.dev` (or your custom domain).
+   - **Application domain**: `app.greenbro.co.za` (match the Worker route in `wrangler.toml`).
    - **Session duration**: `>=24h` (Worker rotates sessions via Access).
    - **Allowed IdPs**: include Okta, Google, or other IdPs used by the ops teams.
 3. Save the application, then capture:
@@ -31,14 +31,48 @@ If you need non-interactive automation (for example CI seeding R2), mint a **Ser
 - If you prefer to exercise the real flow, inject a JWT into `Cf-Access-Jwt-Assertion` manually (generate via `cloudflared access login`), or temporarily stub `requireAccessUser` in tests.
 - Ensure secrets exist in each active environment (for example production): `wrangler secret put ACCESS_AUD --env production`.
 
-### 1.4 Access workflow diagram
+### 1.4 Enforce policies on `app.greenbro.co.za`
+
+1. In the Access application you created above, add policies for each role the Worker expects:
+   - **Admin**: grant to platform/ops groups that administer devices (maps to `roles:["admin"]`).
+   - **Contractor**: grant limited access for installers or field technicians (`roles:["contractor"]`).
+   - **Client**: grant read-only visibility to customer-facing operators (`roles:["client"]`).
+2. For each policy, confirm the **Include** rules reference the right identity providers or service tokens.
+3. Set the **Application domain** to `https://app.greenbro.co.za/*` and add a second domain of `https://gb-heat-pump-app-v1.<team>.workers.dev/*` to cover the fallback Workers.dev hostname.
+4. After saving the policies, copy the updated **AUD** value if Cloudflare assigned a new tag and store it in the password manager. You will reuse it in the next section when binding Worker secrets.
+
+> Tip: enforce a default-deny policy after enumerating the allow rules so unlisted users receive an explicit deny instead of falling through.
+
+### 1.5 Bind Access and ingest secrets to the Worker
+
+Run the following once per environment. Use `--env production` for the production Worker and omit it for the default remote/dev environment. Paste values from the password manager so they survive future rotations.
+
+```bash
+wrangler secret put ACCESS_AUD
+wrangler secret put ACCESS_JWKS_URL
+wrangler secret put CURSOR_SECRET
+wrangler secret put INGEST_ALLOWED_ORIGINS           # e.g. https://devices.greenbro.io,https://app.greenbro.co.za
+wrangler secret put INGEST_RATE_LIMIT_PER_MIN        # firmware cap (120 today)
+wrangler secret put INGEST_SIGNATURE_TOLERANCE_SECS  # default 300
+wrangler secret put ASSET_SIGNING_SECRET             # optional unless issuing signed URLs
+```
+
+After provisioning, run a `wrangler deploy --dry-run` to confirm every binding exists without publishing a new version:
+
+```bash
+wrangler deploy --env production --dry-run
+```
+
+If validation fails, rerun the `wrangler secret put ... --env production` commands above until the Worker starts cleanly.
+
+### 1.6 Access workflow diagram
 ```
 Browser -> Access login -> Cf-Access-Jwt-Assertion header
       -> Cloudflare edge -> Worker requireAccessUser()
       -> RBAC (src/rbac.ts) -> Route handler or R2 client
 ```
 
-### 1.5 Troubleshooting
+### 1.7 Troubleshooting
 - **401 Unauthorized**: Confirm the request includes `Cf-Access-Jwt-Assertion` and the decoded JWT `aud` matches `ACCESS_AUD`.
 - **JWT signature errors**: Ensure `ACCESS_JWKS_URL` matches your team domain exactly (no trailing slash). Flush the JWKS cache by redeploying if keys rotate.
 - **Role mismatches**: Inspect the role mapping in `src/rbac.ts:11`. Update Access policies to emit the expected group claims.
