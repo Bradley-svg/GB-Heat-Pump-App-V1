@@ -216,6 +216,26 @@ Override these with `[env.<name>.vars]` when staging or production diverge.
 
 > Non-local development (remote dev, staging, production) must set `INGEST_ALLOWED_ORIGINS`. For purely local `wrangler dev --local` sessions you can omit it, but ingest requests from browsers will be refused until the allowlist is populated.
 
+### 5.3 Optional queue bindings
+
+The MQTT webhook handler (`src/routes/mqtt-webhook.ts`) can enqueue inbound payloads for asynchronous processing when a Cloudflare Queue binding is available. Provisioning the queue is optional—if `MQTT_WEBHOOK_QUEUE` is absent, the Worker stores messages synchronously in D1 and returns a `201` response. This fallback is safe for low-throughput environments but pushes storage latency onto the caller.
+
+Bind a queue when you want ingestion to stay fast even under bursty MQTT traffic:
+
+1. Create the queue (one time per environment):
+   ```bash
+   wrangler queues create mqtt-webhook-events
+   ```
+2. Map the queue to the Worker by adding a producer binding in `wrangler.toml`:
+   ```toml
+   [[queues.producers]]
+   queue = "mqtt-webhook-events"
+   binding = "MQTT_WEBHOOK_QUEUE"
+   ```
+3. Redeploy the Worker so the binding is available at runtime.
+
+Document the decision in your deployment checklist so on-call engineers know whether webhook storage is synchronous (`delivery: "store"`) or via queue + fallback (`delivery: "queue"` / `"store_fallback"` in the logs and API response).
+
 Set secrets in each environment:
 ```bash
 wrangler secret put ACCESS_AUD
