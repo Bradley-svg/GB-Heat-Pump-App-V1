@@ -36,6 +36,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Abort if dev Access shim is enabled
+        run: npm run check:prod-shim
+
       - name: Run worker test suites
         run: npm run test:ci
 

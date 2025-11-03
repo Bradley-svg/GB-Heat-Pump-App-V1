@@ -40,11 +40,13 @@ export INGEST_ALLOWED_ORIGINS=https://devices.greenbro.io,https://gb-heat-pump-a
 export INGEST_RATE_LIMIT_PER_MIN=120
 export INGEST_SIGNATURE_TOLERANCE_SECS=300
 export ASSET_SIGNING_SECRET=only-if-signed-urls-required
-# optional development flags (populate only when needed)
+# optional development flags (local-only; production deploys will now fail if this flag is bound)
 # export ALLOW_DEV_ACCESS_SHIM=true
 # export DEV_ALLOW_USER='{"email":"local-admin@example.com","roles":["admin"],"clientIds":["profile-west"]}'
 node scripts/bind-cloudflare-secrets.mjs --env production
 ```
+
+> **Heads-up:** The worker runtime and deploy pipeline both reject `ALLOW_DEV_ACCESS_SHIM` outside localhost scenarios. Remove the flag (and any paired `DEV_ALLOW_USER`) before binding or deploying to shared/staging/production environments.
 
 Recommendations:
 

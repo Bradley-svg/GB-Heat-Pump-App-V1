@@ -28,6 +28,7 @@
     "smoke": "npm run test:smoke",
     "security": "npm run test:security",
     "test:ci": "npm run test && npm run test:integration && npm run test:smoke && npm run test:security",
+    "check:prod-shim": "node ./scripts/ensure-prod-shim-disabled.mjs --env production",
     "ops:db:sanity": "node ./scripts/db-sanity-check.mjs"
   },
   "devDependencies": {

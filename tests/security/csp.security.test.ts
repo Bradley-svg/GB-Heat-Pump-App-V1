@@ -8,6 +8,7 @@ import { createWorkerEnv } from "../helpers/worker-env";
 describe("Content-Security-Policy overrides", () => {
   it("includes configured API and asset origins in CSP directives", async () => {
     const { env, dispose } = await createWorkerEnv({
+      APP_BASE_URL: "http://127.0.0.1:8787/app",
       APP_API_BASE: "https://api.remote.test/v1",
       APP_ASSET_BASE: "https://cdn.remote.test/app/assets?v=7#bundle",
       ALLOW_DEV_ACCESS_SHIM: "true",

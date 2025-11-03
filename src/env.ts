@@ -162,9 +162,12 @@ const EnvSchema = z
 
     const ingestOriginsRaw =
       typeof value.INGEST_ALLOWED_ORIGINS === "string" ? value.INGEST_ALLOWED_ORIGINS.trim() : "";
+    const normalizedAllowShim =
+      typeof value.ALLOW_DEV_ACCESS_SHIM === "string"
+        ? value.ALLOW_DEV_ACCESS_SHIM.trim().toLowerCase()
+        : "";
     const allowShim =
-      typeof value.ALLOW_DEV_ACCESS_SHIM === "string" &&
-      LOCAL_FLAG_VALUES.has(value.ALLOW_DEV_ACCESS_SHIM.trim().toLowerCase());
+      normalizedAllowShim.length > 0 && LOCAL_FLAG_VALUES.has(normalizedAllowShim);
     const hasDevUser =
       typeof value.DEV_ALLOW_USER === "string" && value.DEV_ALLOW_USER.trim().length > 0;
     const appBaseLower = appBase.toLowerCase();
@@ -173,7 +176,17 @@ const EnvSchema = z
       appBaseLower.startsWith("http://127.0.0.1") ||
       appBaseLower.startsWith("http://0.0.0.0") ||
       appBaseLower.startsWith("http://[::1]");
-    const isLocalEnv = allowShim || hasDevUser || appBaseIsLocal;
+
+    if (allowShim && !appBaseIsLocal) {
+      ctx.addIssue({
+        path: ["ALLOW_DEV_ACCESS_SHIM"],
+        code: z.ZodIssueCode.custom,
+        message:
+          "ALLOW_DEV_ACCESS_SHIM may only be enabled when APP_BASE_URL points to a localhost origin",
+      });
+    }
+
+    const isLocalEnv = hasDevUser || appBaseIsLocal;
 
     if (!ingestOriginsRaw) {
       if (isLocalEnv) {

@@ -84,4 +84,18 @@ describe("validateEnv", () => {
     delete (env as any).INGEST_ALLOWED_ORIGINS;
     expect(() => validateEnv(env)).not.toThrow();
   });
+
+  it("fails when ALLOW_DEV_ACCESS_SHIM is enabled for non-local APP_BASE_URL", () => {
+    const env = createEnv({ ALLOW_DEV_ACCESS_SHIM: "true" });
+    expect(() => validateEnv(env)).toThrowError(/ALLOW_DEV_ACCESS_SHIM/);
+  });
+
+  it("allows ALLOW_DEV_ACCESS_SHIM when APP_BASE_URL points to localhost", () => {
+    const env = createEnv({
+      APP_BASE_URL: "http://127.0.0.1:8787/app",
+      ALLOW_DEV_ACCESS_SHIM: "true",
+      DEV_ALLOW_USER: JSON.stringify({ email: "local@example.com", roles: ["admin"] }),
+    });
+    expect(() => validateEnv(env)).not.toThrow();
+  });
 });

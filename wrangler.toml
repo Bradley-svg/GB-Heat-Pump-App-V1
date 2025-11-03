@@ -65,6 +65,8 @@ bucket_name = "greenbro-telemetry-archive"
 
 [env.local]
   [env.local.vars]
+  APP_BASE_URL = "http://127.0.0.1:8787/app"
+  APP_API_BASE = "http://127.0.0.1:8787"
   # Enable the Access shim for local Miniflare sessions (adjust as needed).
   ALLOW_DEV_ACCESS_SHIM = "true"
   DEV_ALLOW_USER = '{"email":"local-admin@example.com","roles":["admin"],"clientIds":["profile-west"]}'
