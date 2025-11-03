@@ -11,6 +11,14 @@
 
 import { spawnSync } from "node:child_process";
 
+const WRANGLER_BIN = "wrangler";
+const WRANGLER_OPTIONS_BASE = {
+  stdio: ["ignore", "pipe", "pipe"],
+  encoding: "utf8",
+};
+const WRANGLER_OPTIONS = process.platform === "win32"
+  ? { ...WRANGLER_OPTIONS_BASE, shell: true }
+  : WRANGLER_OPTIONS_BASE;
 const PROHIBITED_SECRET = "ALLOW_DEV_ACCESS_SHIM";
 const WARN_ONLY_SECRET = "DEV_ALLOW_USER";
 
@@ -40,18 +48,17 @@ function listSecrets(envName) {
     args.push("--env", envName);
   }
 
-  const result = spawnSync("wrangler", args, {
-    stdio: ["ignore", "pipe", "pipe"],
-    encoding: "utf8",
-  });
+  const result = spawnSync(WRANGLER_BIN, args, WRANGLER_OPTIONS);
 
   if (result.status !== 0) {
     const stderr = (result.stderr || "").toString();
-    if (envName && /not\s+found/i.test(stderr)) {
+    const stdout = (result.stdout || "").toString();
+    const combined = `${stderr} ${stdout}`.toLowerCase();
+    if (envName && /not\s+found|does\s+not\s+exist|10007/.test(combined)) {
       return { missing: true, secrets: [] };
     }
 
-    const details = stderr.trim() || (result.stdout || "").toString().trim();
+    const details = stderr.trim() || stdout.trim();
     const suffix = envName ? ` for environment "${envName}"` : "";
     throw new Error(
       `wrangler secret list${suffix} failed (exit ${result.status})${details ? `: ${details}` : ""}`,
