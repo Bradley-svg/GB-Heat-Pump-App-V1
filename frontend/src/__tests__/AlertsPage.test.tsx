@@ -8,7 +8,6 @@ import type { AlertListResponse, AlertRecord } from "../types/api";
 import {
   createApiClientMock,
   mockApiGet,
-  mockApiPatch,
   mockApiPost,
   renderWithApi,
 } from "./testUtils";

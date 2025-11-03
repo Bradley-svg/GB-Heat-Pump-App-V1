@@ -6,7 +6,7 @@ import { ApiClientContext, AppConfigContext, CurrentUserContext } from "./contex
 import { readAppConfig } from "./config";
 import { useCurrentUser } from "./hooks/use-current-user";
 
-interface ProvidersProps extends PropsWithChildren {}
+type ProvidersProps = PropsWithChildren;
 
 export function AppProviders({ children }: ProvidersProps) {
   const config = useMemo(() => readAppConfig(), []);
