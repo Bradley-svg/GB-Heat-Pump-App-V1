@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "wrangler dev --remote",
     "deploy": "wrangler deploy",
+    "postinstall": "npm --prefix frontend ci",
     "frontend:dev": "npm --prefix frontend run dev",
     "frontend:watch": "npm --prefix frontend run dev -- --host 0.0.0.0",
     "frontend:build": "npm --prefix frontend run build",
