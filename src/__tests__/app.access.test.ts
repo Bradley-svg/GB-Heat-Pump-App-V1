@@ -35,6 +35,19 @@ describe("app.fetch access enforcement", () => {
     );
   });
 
+  it("normalizes Access redirects to the canonical app origin", async () => {
+    const env = createEnv({ APP_BASE_URL: "https://app.example.com/app" });
+    const res = await app.fetch(
+      new Request("https://fallback.example.dev/app/overview?foo=1"),
+      env,
+    );
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe(
+      "https://app.example.com/cdn-cgi/access/login/test-aud?redirect_url=https%3A%2F%2Fapp.example.com%2Fapp%2Foverview%3Ffoo%3D1",
+    );
+  });
+
   it("serves the SPA when a development user is allowed", async () => {
     const env = createEnv({
       APP_BASE_URL: "http://127.0.0.1:8787/app",

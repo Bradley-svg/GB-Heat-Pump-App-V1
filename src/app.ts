@@ -166,14 +166,26 @@ export default {
     const baseSecurity = baseSecurityHeaderOptions(env);
     const applySecurity = (response: Response, overrides?: SecurityHeaderOptions) =>
       withSecurityHeaders(response, mergeSecurityHeaderOptions(baseSecurity, overrides));
+    const canonicalAppRequestUrl = (requestUrl: URL): URL => {
+      try {
+        const canonical = new URL(env.APP_BASE_URL);
+        canonical.pathname = requestUrl.pathname;
+        canonical.search = requestUrl.search;
+        canonical.hash = requestUrl.hash;
+        return canonical;
+      } catch {
+        return requestUrl;
+      }
+    };
     const respondUnauthenticated = () => {
       if (req.method === "GET" || req.method === "HEAD") {
         try {
+          const canonicalUrl = canonicalAppRequestUrl(url);
           const loginUrl = new URL(
             `/cdn-cgi/access/login/${encodeURIComponent(env.ACCESS_AUD)}`,
-            url,
+            canonicalUrl,
           );
-          loginUrl.searchParams.set("redirect_url", url.toString());
+          loginUrl.searchParams.set("redirect_url", canonicalUrl.toString());
           return applySecurity(Response.redirect(loginUrl.toString(), 302));
         } catch {
           // fall back to 401 below

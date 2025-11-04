@@ -1,7 +1,7 @@
 name = "gb-heat-pump-app-v1"
 main = "src/app.ts"
 # Must NOT be in the future. Use a recent date.
-compatibility_date = "2024-12-20"
+compatibility_date = "2024-10-25"
 
 workers_dev = true
 
