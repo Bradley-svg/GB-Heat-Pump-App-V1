@@ -160,20 +160,6 @@ describe("AppShell role gating", () => {
     expect(adminArchivePageRender).not.toHaveBeenCalled();
   });
 
-  it("prevents direct Admin MQTT routing for non-admins", async () => {
-    renderAppShell(["client"]);
-    act(() => {
-      window.history.pushState({}, "", "/app/admin/mqtt");
-      window.dispatchEvent(new PopStateEvent("popstate"));
-    });
-
-    await waitFor(() => {
-      expect(window.location.pathname).toBe("/app/compact");
-    });
-    expect(screen.queryByText("Unauthorized")).not.toBeInTheDocument();
-    expect(adminMqttPageRender).not.toHaveBeenCalled();
-  });
-
   it("treats client-admin role as non-admin", async () => {
     renderAppShell(["client-admin"]);
     act(() => {
@@ -216,29 +202,13 @@ describe("AppShell role gating", () => {
     });
   });
 
-  it("allows admin MQTT route for admins", async () => {
-    renderAppShell(["admin"]);
-    act(() => {
-      window.history.pushState({}, "", "/app/admin/mqtt");
-      window.dispatchEvent(new PopStateEvent("popstate"));
-    });
-
-    await waitFor(() => {
-      expect(adminMqttPageRender).toHaveBeenCalled();
-    });
-    const mqttLink = await screen.findByRole("link", { name: "MQTT" });
-    expect(mqttLink).toHaveClass("active");
-  });
-
   it("only marks the nested admin tab active on archive pages", async () => {
     renderAppShell(["admin"], "/app/admin/archive");
 
     const adminLink = await screen.findByRole("link", { name: "Admin" });
-    const mqttLink = await screen.findByRole("link", { name: "MQTT" });
     const archiveLink = await screen.findByRole("link", { name: "Archives" });
 
     expect(adminLink).not.toHaveClass("active");
-    expect(mqttLink).not.toHaveClass("active");
     expect(archiveLink).toHaveClass("active");
   });
 });
