@@ -187,7 +187,6 @@ These fields are designed to feed dashboards or alerting pipelines without addit
 
 
 
-- The list view loads 20 mappings at a time, sorted by creation timestamp (newest first). Use the **Topic contains**, **Direction**, and **Status** filters to narrow the scope; **Load more** will page through older entries using the cursor supplied by the API.
 
 ### Field reference & payload schema
 
