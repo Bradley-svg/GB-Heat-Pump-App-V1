@@ -14,12 +14,6 @@ This document captures where the system's sensitive values live, how to provisio
 | `INGEST_RATE_LIMIT_PER_MIN` | Per-device throttle for ingest + heartbeat endpoints. | Current firmware transmits at up to 120 requests/minute. Set to `120` unless hardware cadence changes. | Validate monthly against telemetry load; rotate whenever firmware cadence changes. |
 | `INGEST_SIGNATURE_TOLERANCE_SECS` | Acceptable clock skew for signed ingest requests. | Default `300` seconds (5 minutes). Tighten or relax in lockstep with firmware timestamp tolerance. | Reconfirm monthly and during any device time-sync firmware update. |
 
-## Non-Secret Runtime Bindings
-
-| Binding | Purpose | Notes |
-| --- | --- | --- |
-| `MQTT_WEBHOOK_QUEUE` | Cloudflare Queue producer used by `/api/mqtt-webhook` to enqueue inbound MQTT messages. | Defined in `wrangler.toml`. Ensure the backing queue and DLQ exist (`mqtt-webhook-events`, `mqtt-webhook-events-dlq`) before production deploys. Monitor Worker logs for `metric_key` values `mqtt_webhook.delivery.*` to gauge queue health. |
-
 The Worker code reads each secret from the runtime `env` object. No secret values should live in `wrangler.toml`, GitHub, or checked-in source files.
 
 ## Provisioning With Wrangler
@@ -57,8 +51,6 @@ Every deploy runs through a "secrets provisioning" gate:
    ```
 
 3. **Capture evidence.** After each provisioning run, execute `wrangler secret list [--env <name>]` and capture the JSON output (screenshot or artifact) in the deployment ticket. This proves the bindings exist and surfaces stale entries for cleanup.
-
-4. **Confirm queue bindings.** Run `wrangler queues list` (or review Terraform output) to verify `mqtt-webhook-events` and its DLQ exist, then check `wrangler.toml` for the `MQTT_WEBHOOK_QUEUE` producer binding before shipping. This ensures webhook traffic stays asynchronous instead of falling back to D1.
 
 > **Heads-up:** GitHub Actions enforces the shim guard (`npm run check:prod-shim`) on CI and deploy workflows. Any `ALLOW_DEV_ACCESS_SHIM` or `DEV_ALLOW_USER` binding outside the local environment will block the pipeline, so remove them before rerunning the gate.
 
