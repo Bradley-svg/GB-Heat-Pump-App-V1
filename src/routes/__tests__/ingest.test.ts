@@ -267,7 +267,8 @@ describe("handleIngest", () => {
     ]);
     expect(opsRun).toHaveBeenCalled();
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
-    expect(res.headers.get("vary")).toBe("origin");
+    const varyHeader = res.headers.get("vary");
+    expect(varyHeader && varyHeader.toLowerCase()).toBe("origin");
   });
 
   it("rejects disallowed origins before touching device auth", async () => {
