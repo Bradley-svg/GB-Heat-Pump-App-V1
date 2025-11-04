@@ -1,7 +1,7 @@
 # Data Retention & Archival Policy
 
 ## Policy Alignment
-- **Scope**: Operational telemetry, MQTT webhook payloads, and derived operations metrics collected by the Worker.
+- **Scope**: Operational telemetry and derived operations metrics collected by the Worker.
 - **Retention horizon**: 90 days of online history in D1. This aligns with product requirements for seasonal diagnostics while limiting storage growth and privacy exposure.
 - **Effective date**: Applies immediately to all production and staging environments once the cron trigger is deployed.
 - **Overrides**: Environments may tighten the window (for example, GDPR requests) via the `TELEMETRY_RETENTION_DAYS` variable but should not exceed 180 days without product approval.
@@ -10,7 +10,6 @@
 - A cron-triggered Worker job runs daily at 02:15 UTC (`TELEMETRY_RETENTION_CRON = "15 2 * * *"`).
 - The job (`src/jobs/retention.ts`) performs the following per run:
   - **telemetry**: exports batches of rows older than the cutoff to NDJSON in R2, then deletes them from D1.
-  - **mqtt_webhook_messages**: same backup-and-delete flow keyed by `inserted_at`.
   - **ops_metrics**: direct delete (no archive; metrics are transient).
 - Successful runs emit structured logs (`cron.retention.*`) and summary counts.
 
