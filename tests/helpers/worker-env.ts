@@ -21,6 +21,8 @@ const MIGRATION_FILES = [
   "0006_mqtt_webhook_messages.sql",
   "0007_alert_lifecycle.sql",
   "0008_device_key_hash_constraint.sql",
+  "0009_ingest_nonces.sql",
+  "0010_ops_metrics_device_route_index.sql",
   "schema-indexes.sql",
 ];
 

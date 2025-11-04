@@ -220,25 +220,32 @@ Override these with `[env.<name>.vars]` when staging or production diverge.
 
 > Non-local development (remote dev, staging, production) must set `INGEST_ALLOWED_ORIGINS`. For purely local `wrangler dev --local` sessions you can omit it, but ingest requests from browsers will be refused until the allowlist is populated.
 
-### 5.3 Optional queue bindings
+### 5.3 MQTT webhook queue (go-live requirement)
 
-The MQTT webhook handler (`src/routes/mqtt-webhook.ts`) can enqueue inbound payloads for asynchronous processing when a Cloudflare Queue binding is available. Provisioning the queue is optional—if `MQTT_WEBHOOK_QUEUE` is absent, the Worker stores messages synchronously in D1 and returns a `201` response. This fallback is safe for low-throughput environments but pushes storage latency onto the caller.
+Provision the `MQTT_WEBHOOK_QUEUE` producer before production traffic so webhook ingestion stays asynchronous and callers avoid D1 latency. The Worker still records an on-disk fallback, but that path should only trigger under queue failure.
 
-Bind a queue when you want ingestion to stay fast even under bursty MQTT traffic:
-
-1. Create the queue (one time per environment):
+1. **Create the primary queue and DLQ.** Use the Cloudflare Dashboard or Terraform so the bindings are tracked as infra-as-code. When using Wrangler, run once per account:
    ```bash
-   wrangler queues create mqtt-webhook-events
+   wrangler queues create mqtt-webhook-events \
+     --delivery-delay=0 \
+     --max-retry-attempts=5 \
+     --max-inflight=100 \
+     --dead-letter-queue=mqtt-webhook-events-dlq
+   wrangler queues create mqtt-webhook-events-dlq
    ```
-2. Map the queue to the Worker by adding a producer binding in `wrangler.toml`:
+   Name the resources consistently across environments (`-dev`, `-staging`, `-prod`) so Terraform state and dashboard breadcrumbs line up.
+2. **Bind the queue to the Worker.** `wrangler.toml` now includes:
    ```toml
    [[queues.producers]]
    queue = "mqtt-webhook-events"
    binding = "MQTT_WEBHOOK_QUEUE"
    ```
-3. Redeploy the Worker so the binding is available at runtime.
+   Override the `queue` value per environment if you use distinct queue names (for example, add an `[env.production]` override). Deploy after updating the binding.
+3. **Align firmware/backend senders.** Firmware and any backend relay must treat HTTP `202` without a `message_id` as success (`delivery: "queue"` in logs). Confirm retries honour the queue semantics (idempotency, QoS, retained flag) before flipping the binding live.
+4. **Stress-test queue throughput and fallback.** Push a burst load (>= the maximum daily device count) through `/api/mqtt-webhook` to verify the queue absorbs spikes. Intentionally disable the queue (pause in dashboard or mock `.send()` failure) to confirm the D1 fallback still returns `delivery: "store_fallback"` and that the DLQ receives poisoned messages.
+5. **Monitor metrics and retention.** Worker logs now emit structured metrics (`metric_key` values `mqtt_webhook.delivery.queue`, `mqtt_webhook.delivery.store_fallback`, `mqtt_webhook.delivery.queue_failed`) that roll up queue health. The fallback table (`mqtt_webhook_messages`) follows the 90-day policy in `docs/data-retention.md`; set the final retention window and verify exports before go-live.
 
-Document the decision in your deployment checklist so on-call engineers know whether webhook storage is synchronous (`delivery: "store"`) or via queue + fallback (`delivery: "queue"` / `"store_fallback"` in the logs and API response).
+Document the queue setup and test evidence in the launch checklist so on-call engineers know whether webhook storage is purely queued (`delivery: "queue"`) or actively falling back.
 
 Set secrets in each environment:
 ```bash

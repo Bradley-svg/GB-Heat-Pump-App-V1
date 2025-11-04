@@ -2,7 +2,7 @@ import "../helpers/setup";
 
 import { describe, expect, it, beforeAll, afterAll, beforeEach, vi } from "vitest";
 
-import type { User } from "../../src/env";
+import type { Env, User } from "../../src/env";
 import { createWorkerEnv } from "../helpers/worker-env";
 
 describe("MQTT webhook route", () => {
@@ -72,6 +72,92 @@ describe("MQTT webhook route", () => {
       expect(Number(row?.qos)).toBe(1);
       expect(Number(row?.retain)).toBe(0);
       expect(row?.profile_id).toBe("profile-east");
+      expect(row?.actor_email).toBe(adminUser.email);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("enqueues webhook payload when the MQTT queue binding is configured", async () => {
+    const send = vi.fn().mockResolvedValue(undefined);
+    const { env, dispose } = await createWorkerEnv({
+      MQTT_WEBHOOK_QUEUE: { send } as unknown as Env["MQTT_WEBHOOK_QUEUE"],
+    });
+    try {
+      const request = new Request("https://example.com/api/mqtt-webhook", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          topic: "greenbro/profile-west/events",
+          payload: { sensor: "temp", value: 42 },
+          qos: 0,
+          retain: false,
+          profile_id: "profile-west",
+          published_at: new Date().toISOString(),
+        }),
+      });
+
+      const response = await handleRequest(request, env);
+      expect(response.status).toBe(202);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.ok).toBe(true);
+      expect(body.delivery).toBe("queue");
+      expect(body).not.toHaveProperty("message_id");
+
+      expect(send).toHaveBeenCalledTimes(1);
+      const [payloadJson] = send.mock.calls[0] as [string];
+      const queued = JSON.parse(payloadJson) as Record<string, unknown>;
+      expect(queued.topic).toBe("greenbro/profile-west/events");
+      expect(queued.profile_id).toBe("profile-west");
+      expect(typeof queued.received_at).toBe("string");
+
+      const total = await env.DB.prepare(
+        `SELECT COUNT(*) AS cnt FROM mqtt_webhook_messages`,
+      )
+        .first<{ cnt: number | string | null }>();
+      const countValue = typeof total?.cnt === "number" ? total.cnt : Number(total?.cnt ?? 0);
+      expect(countValue).toBe(0);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("falls back to D1 storage when queue send fails", async () => {
+    const send = vi.fn().mockRejectedValue(new Error("queue offline"));
+    const { env, dispose } = await createWorkerEnv({
+      MQTT_WEBHOOK_QUEUE: { send } as unknown as Env["MQTT_WEBHOOK_QUEUE"],
+    });
+    try {
+      const request = new Request("https://example.com/api/mqtt-webhook", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          topic: "greenbro/profile-west/events",
+          payload: { sensor: "temp", value: 42 },
+          qos: 1,
+          retain: false,
+          profile_id: "profile-west",
+          published_at: new Date().toISOString(),
+        }),
+      });
+
+      const response = await handleRequest(request, env);
+      expect(response.status).toBe(202);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.ok).toBe(true);
+      expect(body.delivery).toBe("store_fallback");
+      expect(typeof body.message_id).toBe("string");
+
+      expect(send).toHaveBeenCalledTimes(1);
+
+      const row = await env.DB.prepare(
+        `SELECT topic, profile_id, actor_email FROM mqtt_webhook_messages WHERE message_id = ?1`,
+      )
+        .bind(body.message_id as string)
+        .first<{ topic: string; profile_id: string | null; actor_email: string | null }>();
+
+      expect(row?.topic).toBe("greenbro/profile-west/events");
+      expect(row?.profile_id).toBe("profile-west");
       expect(row?.actor_email).toBe(adminUser.email);
     } finally {
       dispose();

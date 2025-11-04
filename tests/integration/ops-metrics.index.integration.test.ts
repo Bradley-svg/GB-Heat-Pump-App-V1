@@ -31,7 +31,8 @@ describe("Ops metrics indexes", () => {
         (planResult.results ?? []).some(
           (row) =>
             typeof row.detail === "string" &&
-            row.detail.includes("ix_ops_metrics_route_device_ts"),
+            (row.detail.includes("ix_ops_metrics_device_route_ts") ||
+              row.detail.includes("ix_ops_metrics_route_device_ts")),
         ),
       ).toBe(true);
     } finally {

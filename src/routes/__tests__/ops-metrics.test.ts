@@ -2,7 +2,7 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 
 import type { Env } from "../../env";
 import type { Logger } from "../../utils/logging";
-import { recordOpsMetric } from "../ingest";
+import { recordOpsMetric } from "../../lib/ops-metrics";
 
 describe("recordOpsMetric", () => {
   afterEach(() => {
@@ -44,6 +44,7 @@ describe("recordOpsMetric", () => {
       route: "/api/test",
       status_code: 500,
       device_id: "dev-1",
+      duration_ms: 123,
       metric: "greenbro.ops_metrics.insert_failed",
       metric_key: "ops_metrics.insert_failed",
       count: 1,

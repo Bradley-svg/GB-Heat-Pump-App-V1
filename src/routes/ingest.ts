@@ -13,7 +13,8 @@ import { HeartbeatPayloadSchema, TelemetryPayloadSchema } from "../schemas/inges
 import type { HeartbeatPayload, TelemetryPayload } from "../schemas/ingest";
 import { deriveTelemetryMetrics } from "../telemetry";
 import { ingestDedupWindowMs } from "../utils/ingest-dedup";
-import { loggerForRequest, systemLogger, type Logger } from "../utils/logging";
+import { loggerForRequest } from "../utils/logging";
+import { recordOpsMetric } from "../lib/ops-metrics";
 
 const DEVICE_KEY_HEADER = "X-GREENBRO-DEVICE-KEY";
 const SIGNATURE_HEADER = "X-GREENBRO-SIGNATURE";
@@ -47,36 +48,6 @@ function parseSignatureTimestamp(raw: string): number | null {
   }
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? null : parsed;
-}
-
-export async function recordOpsMetric(
-  env: Env,
-  route: string,
-  statusCode: number,
-  durationMs: number,
-  deviceId: string | null,
-  logger?: Logger,
-) {
-  try {
-    await env.DB.prepare(
-      `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id) VALUES (?1, ?2, ?3, ?4, ?5)`,
-    )
-      .bind(nowISO(), route, statusCode, durationMs, deviceId)
-      .run();
-  } catch (error) {
-    const bucketMs = Math.floor(Date.now() / 60_000) * 60_000;
-    const scopedLogger = logger ?? systemLogger({ route });
-    scopedLogger.error("ops_metrics.insert_failed", {
-      route,
-      status_code: statusCode,
-      device_id: deviceId,
-      metric: "greenbro.ops_metrics.insert_failed",
-      metric_key: "ops_metrics.insert_failed",
-      count: 1,
-      bucket_minute: new Date(bucketMs).toISOString(),
-      error,
-    });
-  }
 }
 
 function parsedRateLimit(env: Env): number {

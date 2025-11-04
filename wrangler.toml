@@ -61,6 +61,10 @@ binding = "RETENTION_ARCHIVE"
 bucket_name = "greenbro-telemetry-archive"
 preview_bucket_name = "greenbro-telemetry-archive-dev"
 
+[[queues.producers]]
+binding = "MQTT_WEBHOOK_QUEUE"
+queue = "mqtt-webhook-events"
+
 [env.local]
   [env.local.vars]
   APP_BASE_URL = "http://127.0.0.1:8787/app"
