@@ -16,7 +16,6 @@ const CommissioningPage = lazy(() => import("../pages/commissioning/Commissionin
 const AdminPage = lazy(() => import("../pages/admin/AdminPage"));
 const OpsPage = lazy(() => import("../pages/ops/OpsPage"));
 const AdminArchivePage = lazy(() => import("../pages/admin/AdminArchivePage"));
-const AdminMqttMappingsPage = lazy(() => import("../pages/admin/MqttMappingsPage"));
 
 export function AppShell() {
   const config = useAppConfig();
@@ -78,16 +77,6 @@ export function AppShell() {
               element={
                 isAdmin ? (
                   <AdminArchivePage />
-                ) : (
-                  unauthorizedRedirect
-                )
-              }
-            />
-            <Route
-              path="admin/mqtt"
-              element={
-                isAdmin ? (
-                  <AdminMqttMappingsPage />
                 ) : (
                   unauthorizedRedirect
                 )
