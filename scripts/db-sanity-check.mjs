@@ -38,10 +38,6 @@ const queries = [
   {
     label: 'Latest state snapshots',
     sql: "SELECT device_id, ts, powerKW, cop, mode, updated_at FROM latest_state WHERE device_id IN ('dev-1001', 'dev-1002') ORDER BY device_id;"
-  },
-  {
-    label: 'MQTT mappings',
-    sql: "SELECT mapping_id, device_id, profile_id, topic, direction, enabled FROM mqtt_mappings WHERE mapping_id IN ('mqtt-0001', 'mqtt-0002') ORDER BY mapping_id;"
   }
 ];
 

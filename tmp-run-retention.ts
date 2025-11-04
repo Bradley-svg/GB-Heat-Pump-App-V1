@@ -20,15 +20,6 @@ async function main() {
   )
     .bind(oldMs)
     .run();
-
-  await env.DB.prepare(
-    `INSERT INTO mqtt_webhook_messages (
-        message_id, topic, payload_json, qos, retain, properties_json, mapping_id, profile_id, actor_email, received_at, inserted_at
-     ) VALUES ('msg-dry', 'topic', '{"m":1}', 0, 0, NULL, NULL, NULL, NULL, ?1, ?1)`
-  )
-    .bind(oldIso)
-    .run();
-
   await env.DB.prepare(
     `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id)
      VALUES (?1, '/dry-run', 200, 10, NULL)`

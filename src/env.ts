@@ -1,4 +1,3 @@
-import type { Queue } from "@cloudflare/workers-types";
 import { z } from "zod";
 
 export interface Env {
@@ -23,7 +22,6 @@ export interface Env {
   INGEST_RATE_LIMIT_PER_MIN: string;
   INGEST_DEDUP_WINDOW_MINUTES?: string;
   INGEST_SIGNATURE_TOLERANCE_SECS: string;
-  MQTT_WEBHOOK_QUEUE?: Queue;
   TELEMETRY_RETENTION_DAYS?: string;
   TELEMETRY_REFACTOR_MODE?: string;
   RETENTION_BACKUP_PREFIX?: string;

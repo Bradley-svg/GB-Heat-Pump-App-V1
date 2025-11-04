@@ -64,26 +64,3 @@ CREATE INDEX IF NOT EXISTS ix_audit_entity
   ON audit_trail(entity_type, entity_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS ix_audit_actor
   ON audit_trail(actor_id, created_at DESC);
-
--- Mappings between MQTT topics and device/profile payloads
-CREATE TABLE IF NOT EXISTS mqtt_mappings (
-  mapping_id     TEXT PRIMARY KEY,
-  device_id      TEXT,
-  profile_id     TEXT,
-  topic          TEXT NOT NULL,
-  direction      TEXT NOT NULL CHECK (direction IN ('ingress', 'egress')),
-  qos            INTEGER NOT NULL DEFAULT 0 CHECK (qos IN (0, 1, 2)),
-  transform_json TEXT,
-  description    TEXT,
-  enabled        INTEGER NOT NULL DEFAULT 1,
-  created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  FOREIGN KEY(device_id) REFERENCES devices(device_id)
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS uq_mqtt_topic_profile_direction
-  ON mqtt_mappings(topic, COALESCE(profile_id, ''), direction);
-CREATE INDEX IF NOT EXISTS ix_mqtt_device
-  ON mqtt_mappings(device_id);
-CREATE INDEX IF NOT EXISTS ix_mqtt_profile_enabled
-  ON mqtt_mappings(profile_id, enabled);

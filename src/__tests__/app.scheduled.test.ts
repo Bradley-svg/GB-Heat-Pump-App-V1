@@ -120,7 +120,6 @@ describe("app.scheduled", () => {
       cutoffMs: 0,
       cutoffIso: "2024-01-01T00:00:00.000Z",
       telemetry: { scanned: 0, deleted: 0, batches: 0, backups: [] },
-      mqttWebhookMessages: { scanned: 0, deleted: 0, batches: 0, backups: [] },
       opsMetricsDeleted: 0,
     });
     const { spy } = mockSystemLogger();

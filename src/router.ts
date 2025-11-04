@@ -27,13 +27,6 @@ import {
   handleCreateCommissioningRun,
   handleListCommissioningRuns,
 } from "./routes/commissioning-runs";
-import {
-  handleCreateMqttMapping,
-  handleDeleteMqttMapping,
-  handleListMqttMappings,
-  handleUpdateMqttMapping,
-} from "./routes/mqtt";
-import { handleMqttWebhook } from "./routes/mqtt-webhook";
 import { handleClientErrorReport } from "./routes/observability";
 import { bindRequestLogger, loggerForRequest, releaseRequestLogger } from "./utils/logging";
 
@@ -66,18 +59,7 @@ router
   .get("/api/commissioning/runs", (req, env) => handleListCommissioningRuns(req, env))
   .post("/api/commissioning/runs", (req, env) => handleCreateCommissioningRun(req, env))
   .get("/api/archive/offline", (req, env) => handleArchive(req, env))
-  .get("/api/mqtt/mappings", (req, env) => handleListMqttMappings(req, env))
-  .post("/api/mqtt/mappings", (req, env) => handleCreateMqttMapping(req, env))
-  .post("/api/mqtt-webhook", (req, env) => handleMqttWebhook(req, env))
   .post("/api/observability/client-errors", (req, env) => handleClientErrorReport(req, env))
-  .put(
-    "/api/mqtt/mappings/:id",
-    withParam("id", (req, env, mappingId) => handleUpdateMqttMapping(req, env, mappingId)),
-  )
-  .delete(
-    "/api/mqtt/mappings/:id",
-    withParam("id", (req, env, mappingId) => handleDeleteMqttMapping(req, env, mappingId)),
-  )
   .post(
     "/api/ingest/:profile",
     withParam("profile", (req, env, profile) => handleIngest(req, env, profile)),

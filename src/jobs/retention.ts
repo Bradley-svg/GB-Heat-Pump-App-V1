@@ -5,7 +5,6 @@ const DEFAULT_RETENTION_DAYS = 90;
 const MIN_RETENTION_DAYS = 7;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const TELEMETRY_BATCH_SIZE = 250;
-const MQTT_BATCH_SIZE = 250;
 
 export const TELEMETRY_RETENTION_CRON = "15 2 * * *";
 
@@ -23,20 +22,6 @@ type TelemetryRow = {
   faults_json: string | null;
 };
 
-type MqttRow = {
-  message_id: string;
-  topic: string;
-  payload_json: string;
-  qos: number | string;
-  retain: number | string;
-  properties_json: string | null;
-  mapping_id: string | null;
-  profile_id: string | null;
-  actor_email: string | null;
-  received_at: string;
-  inserted_at: string;
-};
-
 type RetentionTableSummary = {
   scanned: number;
   deleted: number;
@@ -49,7 +34,6 @@ export type RetentionSummary = {
   cutoffMs: number;
   cutoffIso: string;
   telemetry: RetentionTableSummary;
-  mqttWebhookMessages: RetentionTableSummary;
   opsMetricsDeleted: number;
 };
 
@@ -111,14 +95,6 @@ export async function runTelemetryRetention(env: Env, options: RetentionOptions 
     dryRun: Boolean(options.dryRun),
   });
 
-  const mqttSummary = await pruneMqttWebhookMessages(env, {
-    cutoffIso,
-    jobId,
-    log: log.with({ table: "mqtt_webhook_messages" }),
-    archive: shouldBackup ? archiveTarget : null,
-    dryRun: Boolean(options.dryRun),
-  });
-
   const opsDeleted = await pruneOpsMetrics(env, {
     cutoffIso,
     dryRun: Boolean(options.dryRun),
@@ -129,9 +105,6 @@ export async function runTelemetryRetention(env: Env, options: RetentionOptions 
     telemetry_deleted: telemetrySummary.deleted,
     telemetry_batches: telemetrySummary.batches,
     telemetry_backups: telemetrySummary.backups.length,
-    mqtt_deleted: mqttSummary.deleted,
-    mqtt_batches: mqttSummary.batches,
-    mqtt_backups: mqttSummary.backups.length,
     ops_metrics_deleted: opsDeleted,
   });
 
@@ -140,7 +113,6 @@ export async function runTelemetryRetention(env: Env, options: RetentionOptions 
     cutoffMs,
     cutoffIso,
     telemetry: telemetrySummary,
-    mqttWebhookMessages: mqttSummary,
     opsMetricsDeleted: opsDeleted,
   };
 }
@@ -250,93 +222,6 @@ async function pruneTelemetry(
           row.device_id,
           toNumber(row.ts),
         ),
-      );
-      await env.DB.batch(deletions);
-      summary.deleted += rows.length;
-    }
-  }
-
-  params.log.info("retention.table_completed", {
-    scanned: summary.scanned,
-    deleted: params.dryRun ? 0 : summary.deleted,
-    batches: summary.batches,
-  });
-
-  return summary;
-}
-
-async function pruneMqttWebhookMessages(
-  env: Env,
-  params: {
-    cutoffIso: string;
-    jobId: string;
-    archive: ArchiveTarget | null;
-    dryRun: boolean;
-    log: Logger;
-  },
-): Promise<RetentionTableSummary> {
-  const summary: RetentionTableSummary = {
-    scanned: 0,
-    deleted: 0,
-    batches: 0,
-    backups: [],
-  };
-
-  while (true) {
-    const batch = await env.DB.prepare(
-      `SELECT message_id, topic, payload_json, qos, retain, properties_json, mapping_id, profile_id, actor_email, received_at, inserted_at
-         FROM mqtt_webhook_messages
-        WHERE inserted_at < ?1
-        ORDER BY inserted_at
-        LIMIT ?2`,
-    )
-      .bind(params.cutoffIso, MQTT_BATCH_SIZE)
-      .all<MqttRow>();
-
-    const rows = batch.results ?? [];
-    if (!rows.length) break;
-
-    summary.scanned += rows.length;
-    summary.batches += 1;
-
-    if (!params.dryRun && params.archive) {
-      const key = buildArchiveKey(params.archive.prefix, params.jobId, "mqtt_webhook_messages", summary.batches);
-      const payload = rows
-        .map((row) =>
-          JSON.stringify({
-            message_id: row.message_id,
-            topic: row.topic,
-            payload_json: row.payload_json,
-            qos: toNumber(row.qos),
-            retain: toNumber(row.retain),
-            properties_json: row.properties_json ?? null,
-            mapping_id: row.mapping_id ?? null,
-            profile_id: row.profile_id ?? null,
-            actor_email: row.actor_email ?? null,
-            received_at: row.received_at,
-            inserted_at: row.inserted_at,
-            retention_cutoff_iso: params.cutoffIso,
-            retention_job_id: params.jobId,
-          }),
-        )
-        .join("\n")
-        .concat("\n");
-
-      await params.archive.bucket.put(key, payload, {
-        httpMetadata: { contentType: "application/x-ndjson" },
-        customMetadata: {
-          table: "mqtt_webhook_messages",
-          cutoff_iso: params.cutoffIso,
-          job_id: params.jobId,
-        },
-      });
-      summary.backups.push(key);
-      params.log.info("retention.batch_backed_up", { key, rows: rows.length });
-    }
-
-    if (!params.dryRun) {
-      const deletions = rows.map((row) =>
-        env.DB.prepare(`DELETE FROM mqtt_webhook_messages WHERE message_id = ?1`).bind(row.message_id),
       );
       await env.DB.batch(deletions);
       summary.deleted += rows.length;

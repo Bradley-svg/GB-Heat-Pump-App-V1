@@ -20,14 +20,8 @@ CREATE INDEX IF NOT EXISTS ix_commissioning_profile
 CREATE INDEX IF NOT EXISTS ix_commissioning_status
   ON commissioning_runs(status, updated_at DESC);
 
--- Audit + MQTT lookups
+-- Audit lookups
 CREATE INDEX IF NOT EXISTS ix_audit_entity
   ON audit_trail(entity_type, entity_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS ix_audit_actor
   ON audit_trail(actor_id, created_at DESC);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_mqtt_topic_profile_direction
-  ON mqtt_mappings(topic, COALESCE(profile_id, ''), direction);
-CREATE INDEX IF NOT EXISTS ix_mqtt_device
-  ON mqtt_mappings(device_id);
-CREATE INDEX IF NOT EXISTS ix_mqtt_profile_enabled
-  ON mqtt_mappings(profile_id, enabled);

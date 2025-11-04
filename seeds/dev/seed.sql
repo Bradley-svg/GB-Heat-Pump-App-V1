@@ -217,46 +217,4 @@ INSERT OR REPLACE INTO audit_trail (
     '2025-01-03T08:45:00.000Z'
   );
 
--- MQTT topic mappings for demo ingress/egress flows
-INSERT OR REPLACE INTO mqtt_mappings (
-  mapping_id,
-  device_id,
-  profile_id,
-  topic,
-  direction,
-  qos,
-  transform_json,
-  description,
-  enabled,
-  created_at,
-  updated_at
-) VALUES
-  (
-    'mqtt-0001',
-    'dev-1001',
-    'profile-west',
-    'greenbro/dev-1001/telemetry',
-    'egress',
-    1,
-    '{"type":"passthrough"}',
-    'Realtime telemetry publish',
-    1,
-    '2025-01-01T12:00:00.000Z',
-    '2025-01-02T12:00:00.000Z'
-  ),
-  (
-    'mqtt-0002',
-    NULL,
-    'profile-east',
-    'greenbro/profile-east/commands',
-    'ingress',
-    0,
-    '{"type":"template","fields":["setpoint","mode"]}',
-    'Profile-wide command ingress',
-    1,
-    '2025-01-04T10:00:00.000Z',
-    '2025-01-04T10:00:00.000Z'
-  );
-
 COMMIT;
-
