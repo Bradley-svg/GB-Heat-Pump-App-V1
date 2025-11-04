@@ -29,6 +29,7 @@
     "test:integration": "ROLLUP_SKIP_NODE_RESOLUTION=1 node ./node_modules/vitest/vitest.mjs run tests/integration",
     "test:smoke": "ROLLUP_SKIP_NODE_RESOLUTION=1 node ./node_modules/vitest/vitest.mjs run tests/smoke",
     "test:security": "ROLLUP_SKIP_NODE_RESOLUTION=1 node ./node_modules/vitest/vitest.mjs run tests/security",
+
     "smoke": "npm run test:smoke",
     "security": "npm run test:security",
     "test:ci": "npm run test && npm run test:integration && npm run test:smoke && npm run test:security",
