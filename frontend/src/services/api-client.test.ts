@@ -41,6 +41,12 @@ describe("createApiClient url joining", () => {
     expect(join("/api", "devices")).toBe("/api/devices");
   });
 
+  it("does not duplicate configured base segments when path already includes them", () => {
+    expect(join("https://api.example.com/api", "/api/fleet/summary")).toBe(
+      "https://api.example.com/api/fleet/summary",
+    );
+  });
+
   it("prefers absolute paths over the configured base", () => {
     const absolutePath = "https://override.example.com/resource";
     const normalizedBase = normalizeApiBase("https://api.example.com/v1");
