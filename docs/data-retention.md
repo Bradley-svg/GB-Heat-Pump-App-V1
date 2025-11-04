@@ -19,7 +19,7 @@
 | --- | --- | --- |
 | `TELEMETRY_RETENTION_DAYS` | `90` | Integer days of live history in D1. |
 | `RETENTION_BACKUP_PREFIX` | `data-retention` | R2 prefix for archived NDJSON batches. |
-| `RETENTION_BACKUP_BEFORE_DELETE` | `false` | Gate deletions on backups; production overrides to `true`. |
+| `RETENTION_BACKUP_BEFORE_DELETE` | `false` | Gate deletions on backups; set to `true` via `wrangler secret put` for production and staging before enabling the cron. |
 | `RETENTION_ARCHIVE` | n/a | Optional R2 binding dedicated to retention archives. Falls back to `GB_BUCKET` if unset. |
 
 > Recommended: Bind dedicated R2 buckets (`greenbro-telemetry-archive` for production, `greenbro-telemetry-archive-dev` for preview/dev) as `RETENTION_ARCHIVE` to isolate customer data from marketing assets.

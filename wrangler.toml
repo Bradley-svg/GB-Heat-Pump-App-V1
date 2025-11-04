@@ -21,7 +21,6 @@ APP_ASSET_BASE = "https://pub-3f14c9b10881423a97f40e12402d4b03.r2.dev/app/assets
 ALLOWED_PREFIXES = "brand/"
 TELEMETRY_RETENTION_DAYS = "90"
 RETENTION_BACKUP_PREFIX = "data-retention"
-RETENTION_BACKUP_BEFORE_DELETE = "false"
 # Ingest controls are provided via `wrangler secret put` per environment:
 #   INGEST_ALLOWED_ORIGINS
 #   INGEST_RATE_LIMIT_PER_MIN
@@ -72,5 +71,4 @@ preview_bucket_name = "greenbro-telemetry-archive-dev"
 
 [env.production]
   [env.production.vars]
-  RETENTION_BACKUP_BEFORE_DELETE = "true"
 
