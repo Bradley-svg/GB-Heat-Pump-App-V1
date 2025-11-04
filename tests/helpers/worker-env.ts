@@ -43,7 +43,7 @@ export async function createWorkerEnv(overrides: Partial<Env> = {}): Promise<Wor
   sqlite.exec(seedSql);
 
   const api = new D1DatabaseAPI(sqlite as any);
-  const boundFetch = api.fetch.bind(api);
+  const boundFetch = (api as any).fetch.bind(api as any);
 
   const rawDb = new MiniflareD1Database({
     fetch: boundFetch as any,

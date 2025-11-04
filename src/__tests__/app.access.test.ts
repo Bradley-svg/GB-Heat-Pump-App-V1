@@ -14,7 +14,7 @@ function createEnv(overrides: Partial<Env> = {}): Env {
     DB: { prepare } as unknown as Env["DB"],
     ACCESS_JWKS_URL: "https://access.example.com/cdn-cgi/access/certs",
     ACCESS_AUD: "test-aud",
-    APP_BASE_URL: "https://app.example.com/app",
+    APP_BASE_URL: "https://example.com/app",
     RETURN_DEFAULT: "/",
     CURSOR_SECRET: "cursor-secret-1234567890",
     INGEST_ALLOWED_ORIGINS: "https://devices.example.com",

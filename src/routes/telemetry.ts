@@ -65,14 +65,14 @@ export async function handleTelemetryLatestBatch(req: Request, env: Env) {
   if (body.devices.length === 0) {
     const response = json({ generated_at: nowISO(), items: [], missing: [] });
     if (shadowReq) {
-      void runLegacyShadowComparison(
-        req,
-        shadowReq,
-        env,
-        legacyHandleTelemetryLatestBatch,
-        response.clone(),
-        "/api/telemetry/latest-batch",
-      );
+        void runLegacyShadowComparison(
+          req as Request,
+          shadowReq as Request,
+          env,
+          legacyHandleTelemetryLatestBatch,
+          response.clone(),
+          "/api/telemetry/latest-batch",
+        );
     }
     return response;
   }
@@ -84,14 +84,14 @@ export async function handleTelemetryLatestBatch(req: Request, env: Env) {
       missing: [...new Set(body.devices)],
     });
     if (shadowReq) {
-      void runLegacyShadowComparison(
-        req,
-        shadowReq,
-        env,
-        legacyHandleTelemetryLatestBatch,
-        response.clone(),
-        "/api/telemetry/latest-batch",
-      );
+        void runLegacyShadowComparison(
+          req as Request,
+          shadowReq as Request,
+          env,
+          legacyHandleTelemetryLatestBatch,
+          response.clone(),
+          "/api/telemetry/latest-batch",
+        );
     }
     return response;
   }
@@ -103,14 +103,14 @@ export async function handleTelemetryLatestBatch(req: Request, env: Env) {
       missing: dedupePreserveOrder(body.devices, missingTokens),
     });
     if (shadowReq) {
-      void runLegacyShadowComparison(
-        req,
-        shadowReq,
-        env,
-        legacyHandleTelemetryLatestBatch,
-        response.clone(),
-        "/api/telemetry/latest-batch",
-      );
+        void runLegacyShadowComparison(
+          req as Request,
+          shadowReq as Request,
+          env,
+          legacyHandleTelemetryLatestBatch,
+          response.clone(),
+          "/api/telemetry/latest-batch",
+        );
     }
     return response;
   }
@@ -150,8 +150,8 @@ export async function handleTelemetryLatestBatch(req: Request, env: Env) {
 
   if (shadowReq) {
     void runLegacyShadowComparison(
-      req,
-      shadowReq,
+      req as Request,
+      shadowReq as Request,
       env,
       legacyHandleTelemetryLatestBatch,
       response.clone(),
@@ -175,7 +175,8 @@ export async function handleTelemetrySeries(req: Request, env: Env) {
 
   const url = new URL(req.url);
   const rawQuery: Record<string, string | null> = {};
-  for (const [key, value] of url.searchParams.entries()) {
+  const searchEntries = url.searchParams as any;
+  for (const [key, value] of searchEntries) {
     rawQuery[key] = value;
   }
   const parsed = TelemetrySeriesQuerySchema.safeParse(rawQuery);
@@ -224,8 +225,8 @@ export async function handleTelemetrySeries(req: Request, env: Env) {
 
   if (shadowReq) {
     void runLegacyShadowComparison(
-      req,
-      shadowReq,
+      req as Request,
+      shadowReq as Request,
       env,
       legacyHandleTelemetrySeries,
       response.clone(),

@@ -50,6 +50,9 @@ function createMockEnv(overrides?: {
     HEARTBEAT_INTERVAL_SECS: "30",
     OFFLINE_MULTIPLIER: "6",
     CURSOR_SECRET: "integration-secret-metrics",
+    INGEST_ALLOWED_ORIGINS: "https://devices.example.com",
+    INGEST_RATE_LIMIT_PER_MIN: "120",
+    INGEST_SIGNATURE_TOLERANCE_SECS: "300",
   };
 
   return { env, prepare, deviceRow, opsRows };

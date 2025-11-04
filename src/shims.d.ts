@@ -26,5 +26,10 @@ declare global {
     waitUntil(promise: Promise<any>): void;
     passThroughOnException(): void;
   }
+
+  type R2Bucket = any;
+  type R2HTTPMetadata = any;
+  type R2PutOptions = any;
 }
+
 export {};

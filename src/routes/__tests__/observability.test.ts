@@ -21,6 +21,9 @@ function createEnv(overrides: Partial<Env> = {}): Env {
     APP_BASE_URL: "https://app.example",
     RETURN_DEFAULT: "/app",
     CURSOR_SECRET: "integration-secret-observability",
+    INGEST_ALLOWED_ORIGINS: "https://devices.example.com",
+    INGEST_RATE_LIMIT_PER_MIN: "120",
+    INGEST_SIGNATURE_TOLERANCE_SECS: "300",
     ...overrides,
   };
 }

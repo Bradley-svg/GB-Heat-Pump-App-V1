@@ -14,8 +14,15 @@ const verifyDeviceKeyMock = vi.spyOn(deviceModule, "verifyDeviceKey");
 const claimDeviceIfUnownedMock = vi.spyOn(deviceModule, "claimDeviceIfUnowned");
 
 function baseEnv(overrides: Partial<Env> = {}): Env {
+  const statement = {
+    bind: vi.fn().mockReturnThis(),
+    run: vi.fn(),
+    first: vi.fn(),
+    all: vi.fn(),
+  };
+  const prepare = vi.fn().mockReturnValue(statement);
   return {
-    DB: {} as any,
+    DB: { prepare } as unknown as Env["DB"],
     ACCESS_JWKS_URL: "https://access.test/.well-known/jwks.json",
     ACCESS_AUD: "test-audience",
     APP_BASE_URL: "",
@@ -24,6 +31,8 @@ function baseEnv(overrides: Partial<Env> = {}): Env {
     OFFLINE_MULTIPLIER: "6",
     CURSOR_SECRET: "integration-secret-test",
     INGEST_ALLOWED_ORIGINS: "*",
+    INGEST_RATE_LIMIT_PER_MIN: "120",
+    INGEST_SIGNATURE_TOLERANCE_SECS: "300",
     ...overrides,
   };
 }

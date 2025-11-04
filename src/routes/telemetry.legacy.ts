@@ -185,7 +185,8 @@ export async function legacyHandleTelemetrySeries(req: Request, env: Env) {
 
   const url = new URL(req.url);
   const rawQuery: Record<string, string | null> = {};
-  for (const [key, value] of url.searchParams.entries()) {
+  const searchEntries = url.searchParams as any;
+  for (const [key, value] of searchEntries) {
     rawQuery[key] = value;
   }
   const parsed = TelemetrySeriesQuerySchema.safeParse(rawQuery);
