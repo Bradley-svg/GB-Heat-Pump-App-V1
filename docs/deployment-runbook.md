@@ -14,8 +14,6 @@ The platform now deploys a single Worker (`gb-heat-pump-app-v1`). Key bindings a
 
 > `ACCESS_AUD` values are managed in Cloudflare Access and stored only via `wrangler secret put`. Rotate/update them alongside the Access application policies described in `docs/platform-setup-guide.md`.
 
-> `MQTT_WEBHOOK_QUEUE` is an optional Cloudflare Queue binding. When present the MQTT webhook enqueues payloads (`delivery:"queue"`), otherwise it stores them synchronously in D1 (`delivery:"store"`). Decide per environment and record the choice before go-live.
-
 ---
 
 ## 1. Pre-Deployment Checklist

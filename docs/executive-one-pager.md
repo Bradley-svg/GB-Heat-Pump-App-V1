@@ -2,7 +2,7 @@
 
 ## Product Snapshot
 - **Mission:** Transform raw controller signals into live fleet visibility, device-level diagnostics, and actionable alerts for decarbonized heat-pump deployments.
-- **Experience:** Secure, role-aware single-page app from factory floor to field techs, powered by stable REST contracts and optional MQTT ingest.
+- **Experience:** Secure, role-aware single-page app from factory floor to field techs, powered by stable REST contracts.
 - **Differentiators:**
   - RBAC-backed route guarding and masked identifiers protect multi-tenant fleets.
   - Cloudflare Access front door with JWT session rotation and signed R2 assets.
@@ -29,7 +29,6 @@ RBAC RouteGuard enforces these personas at the screen and API response level.
 ## Data & Integrations
 - **Telemetry Ingest:** `POST /api/ingest/:profileId` (≤256 KB JSON, ±10 min drift, idempotent).
 - **Heartbeat:** `POST /api/heartbeat/:profileId` for liveness.
-- **Optional MQTT Webhook:** `POST /api/mqtt-webhook` for brokers.
 - **API Stability:** SPA consumes stable contracts (`/api/me`, `/api/fleet/summary`, `/api/devices`, `/api/devices/:id/latest`).
 - **Storage:** Cloudflare R2 for assets with signed GET/HEAD, gated PUT/DELETE.
 
