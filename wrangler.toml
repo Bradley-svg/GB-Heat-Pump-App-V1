@@ -13,7 +13,7 @@ database_id = "ee7ad98b-3629-4985-bd7d-a60c401953a7"
 migrations_dir = "./migrations"
 
 [vars]
-APP_BASE_URL = "https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev"
+APP_BASE_URL = "https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev/app"
 RETURN_DEFAULT = "https://www.greenbro.co.za/"
 TIMEZONE = "Africa/Johannesburg"
 APP_API_BASE = "https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev"
