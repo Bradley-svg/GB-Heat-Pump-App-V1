@@ -98,9 +98,9 @@ async function isRateLimited(
   const sinceIso = new Date(Date.now() - 60_000).toISOString();
   const row = await env.DB
     .prepare(
-      `SELECT COUNT(*) AS cnt FROM ops_metrics WHERE route = ?1 AND device_id = ?2 AND ts >= ?3`,
+      `SELECT COUNT(*) AS cnt FROM ops_metrics WHERE device_id = ?1 AND route = ?2 AND ts >= ?3`,
     )
-    .bind(route, deviceId, sinceIso)
+    .bind(deviceId, route, sinceIso)
     .first<{ cnt: number | string | null }>();
   const rawCount = row?.cnt ?? 0;
   const count = typeof rawCount === "number" ? rawCount : Number(rawCount);

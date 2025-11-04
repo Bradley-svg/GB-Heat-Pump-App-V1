@@ -36,6 +36,8 @@ The platform now deploys a single Worker (`gb-heat-pump-app-v1`). Key bindings a
 | Local developer SQLite | `npm run migrate:apply:local` | Keeps Miniflare/SQLite copy in sync. |
 | Cloudflare Worker (`gb-heat-pump-app-v1`) | `npm run migrate:apply` | Run immediately before deploying. |
 
+> **Release guard:** When `migrations/0010_ops_metrics_device_route_index.sql` is pending, do not disable the "Apply D1 migrations" option in the `Worker Deploy` GitHub Action. The ingest and heartbeat rate-limit now rely on the covering index `ix_ops_metrics_device_route_ts`, so run migrations before shifting traffic.
+
 **Verification**
 - Check migration status: `npm run migrate:list`.
 - For destructive changes, snapshot important tables beforehand via `wrangler d1 execute ... --file backup.sql`.
