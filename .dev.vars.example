@@ -1,0 +1,12 @@
+# Copy this file to .dev.vars to bootstrap local secrets for wrangler dev sessions.
+# Replace placeholder values with credentials from the password manager.
+CURSOR_SECRET=change-me-min-16-chars
+ACCESS_AUD=00000000-0000-0000-0000-000000000000
+ACCESS_JWKS_URL=https://example.cloudflareaccess.com/cdn-cgi/access/certs
+INGEST_ALLOWED_ORIGINS=http://127.0.0.1:8787
+INGEST_RATE_LIMIT_PER_MIN=120
+INGEST_SIGNATURE_TOLERANCE_SECS=300
+# ASSET_SIGNING_SECRET=only-if-testing-signed-assets
+# Local-only shim flags. Remove before deploying anywhere shared.
+ALLOW_DEV_ACCESS_SHIM=true
+DEV_ALLOW_USER={"email":"local-admin@example.com","roles":["admin"],"clientIds":["profile-west"]}

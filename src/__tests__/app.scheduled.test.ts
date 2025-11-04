@@ -59,6 +59,9 @@ function createScheduledEnv(
     APP_BASE_URL: "https://app.example.com/app",
     RETURN_DEFAULT: "/",
     CURSOR_SECRET: "cursor-secret-1234567890",
+    INGEST_ALLOWED_ORIGINS: "https://devices.example.com",
+    INGEST_RATE_LIMIT_PER_MIN: "120",
+    INGEST_SIGNATURE_TOLERANCE_SECS: "300",
     ...overrides,
   } as Env;
 

@@ -19,10 +19,10 @@ export interface Env {
   RETENTION_ARCHIVE?: R2Bucket;
   ASSET_SIGNING_SECRET?: string;
   ALLOWED_PREFIXES?: string;
-  INGEST_ALLOWED_ORIGINS?: string;
-  INGEST_RATE_LIMIT_PER_MIN?: string;
+  INGEST_ALLOWED_ORIGINS: string;
+  INGEST_RATE_LIMIT_PER_MIN: string;
   INGEST_DEDUP_WINDOW_MINUTES?: string;
-  INGEST_SIGNATURE_TOLERANCE_SECS?: string;
+  INGEST_SIGNATURE_TOLERANCE_SECS: string;
   MQTT_WEBHOOK_QUEUE?: Queue;
   TELEMETRY_RETENTION_DAYS?: string;
   RETENTION_BACKUP_PREFIX?: string;
@@ -162,6 +162,14 @@ const EnvSchema = z
 
     const ingestOriginsRaw =
       typeof value.INGEST_ALLOWED_ORIGINS === "string" ? value.INGEST_ALLOWED_ORIGINS.trim() : "";
+    const ingestRateLimitRaw =
+      typeof value.INGEST_RATE_LIMIT_PER_MIN === "string"
+        ? value.INGEST_RATE_LIMIT_PER_MIN.trim()
+        : "";
+    const ingestToleranceRaw =
+      typeof value.INGEST_SIGNATURE_TOLERANCE_SECS === "string"
+        ? value.INGEST_SIGNATURE_TOLERANCE_SECS.trim()
+        : "";
     const normalizedAllowShim =
       typeof value.ALLOW_DEV_ACCESS_SHIM === "string"
         ? value.ALLOW_DEV_ACCESS_SHIM.trim().toLowerCase()
@@ -196,6 +204,40 @@ const EnvSchema = z
           path: ["INGEST_ALLOWED_ORIGINS"],
           code: z.ZodIssueCode.custom,
           message: "INGEST_ALLOWED_ORIGINS must be configured for non-local environments",
+        });
+      }
+    }
+
+    if (!ingestRateLimitRaw) {
+      ctx.addIssue({
+        path: ["INGEST_RATE_LIMIT_PER_MIN"],
+        code: z.ZodIssueCode.custom,
+        message: "INGEST_RATE_LIMIT_PER_MIN must be configured",
+      });
+    } else {
+      const parsed = Number.parseInt(ingestRateLimitRaw, 10);
+      if (Number.isNaN(parsed) || parsed <= 0) {
+        ctx.addIssue({
+          path: ["INGEST_RATE_LIMIT_PER_MIN"],
+          code: z.ZodIssueCode.custom,
+          message: "INGEST_RATE_LIMIT_PER_MIN must be a positive integer",
+        });
+      }
+    }
+
+    if (!ingestToleranceRaw) {
+      ctx.addIssue({
+        path: ["INGEST_SIGNATURE_TOLERANCE_SECS"],
+        code: z.ZodIssueCode.custom,
+        message: "INGEST_SIGNATURE_TOLERANCE_SECS must be configured",
+      });
+    } else {
+      const parsed = Number.parseInt(ingestToleranceRaw, 10);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        ctx.addIssue({
+          path: ["INGEST_SIGNATURE_TOLERANCE_SECS"],
+          code: z.ZodIssueCode.custom,
+          message: "INGEST_SIGNATURE_TOLERANCE_SECS must be zero or a positive integer",
         });
       }
     }

@@ -22,6 +22,8 @@ function createEnv(overrides: Partial<Env> = {}): Env {
     RETURN_DEFAULT: "https://example.com/",
     CURSOR_SECRET: "integration-secret-12345",
     INGEST_ALLOWED_ORIGINS: "https://devices.example.com",
+    INGEST_RATE_LIMIT_PER_MIN: "120",
+    INGEST_SIGNATURE_TOLERANCE_SECS: "300",
   } satisfies Partial<Env>;
   return { ...base, ...overrides } as Env;
 }
@@ -97,5 +99,23 @@ describe("validateEnv", () => {
       DEV_ALLOW_USER: JSON.stringify({ email: "local@example.com", roles: ["admin"] }),
     });
     expect(() => validateEnv(env)).not.toThrow();
+  });
+
+  it("fails when INGEST_RATE_LIMIT_PER_MIN is missing or invalid", () => {
+    const missing = createEnv();
+    delete (missing as any).INGEST_RATE_LIMIT_PER_MIN;
+    expect(() => validateEnv(missing)).toThrowError(/INGEST_RATE_LIMIT_PER_MIN/);
+
+    const invalid = createEnv({ INGEST_RATE_LIMIT_PER_MIN: "0" });
+    expect(() => validateEnv(invalid)).toThrowError(/INGEST_RATE_LIMIT_PER_MIN/);
+  });
+
+  it("fails when INGEST_SIGNATURE_TOLERANCE_SECS is missing or invalid", () => {
+    const missing = createEnv();
+    delete (missing as any).INGEST_SIGNATURE_TOLERANCE_SECS;
+    expect(() => validateEnv(missing)).toThrowError(/INGEST_SIGNATURE_TOLERANCE_SECS/);
+
+    const invalid = createEnv({ INGEST_SIGNATURE_TOLERANCE_SECS: "-10" });
+    expect(() => validateEnv(invalid)).toThrowError(/INGEST_SIGNATURE_TOLERANCE_SECS/);
   });
 });
