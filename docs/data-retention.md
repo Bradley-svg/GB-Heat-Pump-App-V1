@@ -1,4 +1,4 @@
-# Data Retention & Archival Policy
+﻿# Data Retention & Archival Policy
 
 ## Policy Alignment
 - **Scope**: Operational telemetry and derived operations metrics collected by the Worker.
@@ -57,12 +57,8 @@
 
 ## Covered Tables
 - `telemetry` (device history; batched export then delete).
-- `mqtt_webhook_messages` (webhook payload audit trail; batched export then delete).
 - `ops_metrics` (operational counters; delete only).
 
-### MQTT webhook fallback considerations
-- The default 90-day `TELEMETRY_RETENTION_DAYS` window also applies to `mqtt_webhook_messages`. Decide on the final production window (shorter if payloads are sensitive) and update the variable before enabling the cron.
-- Worker logs now emit `metric_key` values `mqtt_webhook.delivery.store_fallback` and `mqtt_webhook.delivery.queue_failed`. Alert on sustained non-zero values—they indicate the queue is down and D1 will accumulate extra load.
 - Include the fallback table when exporting retention evidence so ops crews can reconcile queue outages with D1 growth.
 
 Any new high-churn tables should be added to `src/jobs/retention.ts` and documented here.
