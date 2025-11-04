@@ -4,12 +4,17 @@ import type { Env } from "../env";
 import { safeDecode } from "../utils";
 import { json } from "../utils/responses";
 
-export type AppRouter = RouterType<Request, [Env], Response>;
-export type RouteHandler = (req: Request, env: Env) => Promise<Response> | Response;
+export type AppRouter = RouterType<Request, [Env, ExecutionContext], Response>;
+export type RouteHandler = (
+  req: Request,
+  env: Env,
+  ctx?: ExecutionContext,
+) => Promise<Response> | Response;
 export type ParamHandler = (
   req: Request,
   env: Env,
   value: string,
+  ctx?: ExecutionContext,
 ) => Promise<Response> | Response;
 export type WithParam = (param: string, handler: ParamHandler) => RouteHandler;
 
@@ -23,11 +28,11 @@ function decodeParam(req: RoutedRequest, key: string): string | null {
 }
 
 export const withParam: WithParam = (param, handler) => {
-  return (req, env) => {
+  return (req, env, ctx) => {
     const value = decodeParam(req as RoutedRequest, param);
     if (!value) {
       return json({ error: `Invalid ${param}` }, { status: 400 });
     }
-    return handler(req, env, value);
+    return handler(req, env, value, ctx);
   };
 };

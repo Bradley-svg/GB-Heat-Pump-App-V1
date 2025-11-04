@@ -35,7 +35,7 @@ const METRICS_WITH_EXTENTS = new Set<Readonly<typeof TELEMETRY_ALLOWED_METRICS>[
   "cop",
 ]);
 
-export async function handleTelemetryLatestBatch(req: Request, env: Env) {
+export async function handleTelemetryLatestBatch(req: Request, env: Env, ctx?: ExecutionContext) {
   const mode = getTelemetryFeatureMode(env);
   if (mode === "legacy") {
     return legacyHandleTelemetryLatestBatch(req, env);
@@ -65,14 +65,17 @@ export async function handleTelemetryLatestBatch(req: Request, env: Env) {
   if (body.devices.length === 0) {
     const response = json({ generated_at: nowISO(), items: [], missing: [] });
     if (shadowReq) {
-        void runLegacyShadowComparison(
+      scheduleShadowComparison(
+        ctx,
+        runLegacyShadowComparison(
           req as Request,
           shadowReq as Request,
           env,
           legacyHandleTelemetryLatestBatch,
           response.clone(),
           "/api/telemetry/latest-batch",
-        );
+        ),
+      );
     }
     return response;
   }
@@ -84,14 +87,17 @@ export async function handleTelemetryLatestBatch(req: Request, env: Env) {
       missing: [...new Set(body.devices)],
     });
     if (shadowReq) {
-        void runLegacyShadowComparison(
+      scheduleShadowComparison(
+        ctx,
+        runLegacyShadowComparison(
           req as Request,
           shadowReq as Request,
           env,
           legacyHandleTelemetryLatestBatch,
           response.clone(),
           "/api/telemetry/latest-batch",
-        );
+        ),
+      );
     }
     return response;
   }
@@ -103,14 +109,17 @@ export async function handleTelemetryLatestBatch(req: Request, env: Env) {
       missing: dedupePreserveOrder(body.devices, missingTokens),
     });
     if (shadowReq) {
-        void runLegacyShadowComparison(
+      scheduleShadowComparison(
+        ctx,
+        runLegacyShadowComparison(
           req as Request,
           shadowReq as Request,
           env,
           legacyHandleTelemetryLatestBatch,
           response.clone(),
           "/api/telemetry/latest-batch",
-        );
+        ),
+      );
     }
     return response;
   }
@@ -149,20 +158,23 @@ export async function handleTelemetryLatestBatch(req: Request, env: Env) {
   });
 
   if (shadowReq) {
-    void runLegacyShadowComparison(
-      req as Request,
-      shadowReq as Request,
-      env,
-      legacyHandleTelemetryLatestBatch,
-      response.clone(),
-      "/api/telemetry/latest-batch",
+    scheduleShadowComparison(
+      ctx,
+      runLegacyShadowComparison(
+        req as Request,
+        shadowReq as Request,
+        env,
+        legacyHandleTelemetryLatestBatch,
+        response.clone(),
+        "/api/telemetry/latest-batch",
+      ),
     );
   }
 
   return response;
 }
 
-export async function handleTelemetrySeries(req: Request, env: Env) {
+export async function handleTelemetrySeries(req: Request, env: Env, ctx?: ExecutionContext) {
   const mode = getTelemetryFeatureMode(env);
   if (mode === "legacy") {
     return legacyHandleTelemetrySeries(req, env);
@@ -224,13 +236,16 @@ export async function handleTelemetrySeries(req: Request, env: Env) {
   });
 
   if (shadowReq) {
-    void runLegacyShadowComparison(
-      req as Request,
-      shadowReq as Request,
-      env,
-      legacyHandleTelemetrySeries,
-      response.clone(),
-      "/api/telemetry/series",
+    scheduleShadowComparison(
+      ctx,
+      runLegacyShadowComparison(
+        req as Request,
+        shadowReq as Request,
+        env,
+        legacyHandleTelemetrySeries,
+        response.clone(),
+        "/api/telemetry/series",
+      ),
     );
   }
 
@@ -411,6 +426,14 @@ function getTelemetryFeatureMode(env: Env): TelemetryFeatureMode {
     return "compare";
   }
   return "refactor";
+}
+
+function scheduleShadowComparison(ctx: ExecutionContext | undefined, work: Promise<void>) {
+  if (ctx) {
+    ctx.waitUntil(work);
+  } else {
+    void work;
+  }
 }
 
 async function runLegacyShadowComparison(

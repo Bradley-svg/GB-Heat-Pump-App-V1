@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import { chunk } from "../utils";
 import { systemLogger, type Logger } from "../utils/logging";
 
 const DEFAULT_RETENTION_DAYS = 90;
@@ -223,7 +224,9 @@ async function pruneTelemetry(
           toNumber(row.ts),
         ),
       );
-      await env.DB.batch(deletions);
+      for (const statements of chunk(deletions, 20)) {
+        await env.DB.batch(statements);
+      }
       summary.deleted += rows.length;
     }
   }

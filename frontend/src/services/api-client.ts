@@ -72,6 +72,15 @@ function combinePath(basePath: string, resourcePath: string): string {
   if (!resourcePath) {
     return sanitizedBase;
   }
+  const normalizedResource = resourcePath.startsWith("/") ? resourcePath : `/${resourcePath}`;
+  const comparisonBase = sanitizedBase.startsWith("/") ? sanitizedBase : `/${sanitizedBase}`;
+  if (
+    comparisonBase !== "/" &&
+    (normalizedResource === comparisonBase || normalizedResource.startsWith(`${comparisonBase}/`))
+  ) {
+    // Caller already provided a path within the configured base; reuse it without duplication.
+    return sanitizeBasePath(normalizedResource);
+  }
   const normalizedBase = sanitizedBase.endsWith("/") ? sanitizedBase : `${sanitizedBase}/`;
   const trimmedResource = resourcePath.startsWith("/") ? resourcePath.slice(1) : resourcePath;
   const combined = `${normalizedBase}${trimmedResource}`;

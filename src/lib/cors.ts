@@ -17,6 +17,22 @@ export interface CorsEvaluation {
   allowOrigin: string | null;
 }
 
+function appendVary(headers: Headers, value: string) {
+  const existing = headers.get("vary");
+  if (!existing) {
+    headers.set("vary", value);
+    return;
+  }
+  const parts = existing
+    .split(",")
+    .map((token) => token.trim())
+    .filter(Boolean);
+  if (!parts.some((token) => token.toLowerCase() === value.toLowerCase())) {
+    parts.push(value);
+    headers.set("vary", parts.join(", "));
+  }
+}
+
 function parseAllowedOrigins(env: Env): { origins: string[]; configured: boolean } {
   const raw = env.INGEST_ALLOWED_ORIGINS;
   if (typeof raw !== "string") {
@@ -80,7 +96,7 @@ export function withCors(
   }
   headers.set("access-control-allow-methods", ALLOW_METHODS);
   headers.set("access-control-allow-headers", ALLOW_HEADERS);
-  headers.set("vary", "origin");
+  appendVary(headers, "Origin");
   return new Response(res.body, {
     headers,
     status: res.status,
@@ -109,8 +125,8 @@ export function maybeHandlePreflight(req: Request, pathname: string, env: Env) {
       "access-control-allow-methods": ALLOW_METHODS,
       "access-control-allow-headers": ALLOW_HEADERS,
       "access-control-max-age": "600",
-      vary: "origin",
     });
+    appendVary(headers, "Origin");
     if (evaluation.allowOrigin) {
       headers.set("access-control-allow-origin", evaluation.allowOrigin);
     }

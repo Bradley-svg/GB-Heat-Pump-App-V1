@@ -85,14 +85,16 @@ export async function resolveLatestBatchDevices(
     return { scope, requested, resolvedIds: [], missingTokens };
   }
 
-  for (const entry of requested) {
-    const resolved = await resolveDeviceId(entry.token, env, scope.isAdmin);
+  const resolutions = await Promise.all(
+    requested.map((entry) => resolveDeviceId(entry.token, env, scope.isAdmin)),
+  );
+  resolutions.forEach((resolved, index) => {
     if (!resolved) {
-      missingTokens.push(entry.token);
-      continue;
+      missingTokens.push(requested[index]!.token);
+      return;
     }
-    entry.resolved = resolved;
-  }
+    requested[index]!.resolved = resolved;
+  });
 
   const resolvedIds = Array.from(
     new Set(requested.filter((candidate) => candidate.resolved).map((candidate) => candidate.resolved!)),
@@ -110,8 +112,9 @@ export async function presentLatestBatchRow(
   const isAdmin = userIsAdmin(user);
   const lookup = await buildDeviceLookup(row.device_id, env, isAdmin);
   const outwardId = presentDeviceId(row.device_id, isAdmin);
-  const payload = safeParseJson(row.payload_json);
   const flags: TelemetryIncludeFlags = include ?? { faults: true, metrics: true };
+  const includeMetrics = flags.metrics !== false;
+  const includeFaults = flags.faults !== false;
 
   const latest: Record<string, unknown> = {
     ts: row.ts ?? null,
@@ -120,10 +123,10 @@ export async function presentLatestBatchRow(
     mode: row.mode ?? null,
     defrost: row.defrost ?? null,
     cop_quality: row.cop_quality ?? null,
-    payload,
   };
 
-  if (flags.metrics !== false) {
+  if (includeMetrics) {
+    latest.payload = safeParseJson(row.payload_json);
     latest.supplyC = maskTelemetryNumber(row.supplyC, isAdmin);
     latest.returnC = maskTelemetryNumber(row.returnC, isAdmin);
     latest.tankC = maskTelemetryNumber(row.tankC, isAdmin);
@@ -137,7 +140,7 @@ export async function presentLatestBatchRow(
     latest.cop = maskTelemetryNumber(row.cop, isAdmin, 2);
   }
 
-  if (flags.faults !== false) {
+  if (includeFaults) {
     latest.faults = parseFaultsJson(row.faults_json);
   }
 
