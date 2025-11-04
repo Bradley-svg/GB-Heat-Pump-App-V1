@@ -1,6 +1,7 @@
-import { createRemoteJWKSet, jwtVerify, JWTPayload } from "jose";
+import { createRemoteJWKSet, decodeJwt, jwtVerify, JWTPayload } from "jose";
 import { deriveUserFromClaims, landingFor } from "../rbac";
 import type { Env, User } from "../env";
+import { loggerForRequest } from "../utils/logging";
 
 const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 const devUserCache = new WeakMap<
@@ -106,7 +107,33 @@ export async function requireAccessUser(req: Request, env: Env): Promise<User | 
     try {
       const { payload } = await jwtVerify(jwt, getJwks(env), { audience: env.ACCESS_AUD });
       return deriveUserFromClaims(payload as JWTPayload);
-    } catch {
+    } catch (error) {
+      const log = loggerForRequest(req, { scope: "access" });
+      const decoded = safeDecodeJwt(jwt);
+      const reason = error instanceof Error ? error.message : String(error);
+      const headerEmail = req.headers.get("Cf-Access-Authenticated-User-Email");
+      const payloadEmail =
+        typeof decoded?.email === "string" ? decoded.email :
+        typeof decoded?.sub === "string" ? decoded.sub :
+        undefined;
+      const sanitizedEmail = sanitizeEmailForLog(headerEmail ?? payloadEmail);
+      const cfRay = req.headers.get("cf-ray");
+      const logFields: Record<string, unknown> = {
+        reason,
+        audience: env.ACCESS_AUD,
+        cf_ray: cfRay ?? undefined,
+        metric: "greenbro.security.jwt_verify_failed",
+        metric_key: "security.jwt_verify_failed",
+        count: 1,
+      };
+      const tokenAudience = normalizeAudience(decoded?.aud);
+      if (tokenAudience) {
+        logFields.token_audience = tokenAudience;
+      }
+      if (sanitizedEmail) {
+        logFields.sanitized_email = sanitizedEmail;
+      }
+      log.warn("access.jwt_verify_failed", logFields);
       return null;
     }
   }
@@ -119,3 +146,34 @@ export function userIsAdmin(user: User) {
 }
 
 export { landingFor };
+
+function safeDecodeJwt(token: string): JWTPayload | null {
+  try {
+    return decodeJwt(token);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeAudience(aud: JWTPayload["aud"]): string | undefined {
+  if (!aud) return undefined;
+  if (typeof aud === "string") return aud;
+  if (Array.isArray(aud)) return aud.join(",");
+  return undefined;
+}
+
+function sanitizeEmailForLog(candidate: unknown): string | undefined {
+  if (typeof candidate !== "string") return undefined;
+  const trimmed = candidate.trim().toLowerCase();
+  if (!trimmed) return undefined;
+  const parts = trimmed.split("@");
+  if (parts.length !== 2) return undefined;
+  const [localPartRaw, domainRaw] = parts;
+  const domain = domainRaw.trim();
+  if (!domain) return undefined;
+  const localPart = localPartRaw.trim();
+  if (!localPart) return `*@${domain}`;
+  if (localPart.length === 1) return `*@${domain}`;
+  if (localPart.length === 2) return `${localPart[0]}*@${domain}`;
+  return `${localPart[0]}***${localPart.slice(-1)}@${domain}`;
+}

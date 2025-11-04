@@ -1,11 +1,12 @@
 import "../helpers/setup";
 
 import { createHash } from "node:crypto";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Env } from "../../src/env";
 import { hmacSha256Hex } from "../../src/utils";
 import { createWorkerEnv } from "../helpers/worker-env";
+import * as loggingModule from "../../src/utils/logging";
 
 const REAL_ALLOWED_ORIGINS = [
   "https://devices.greenbro.io",
@@ -45,6 +46,41 @@ function buildTelemetryBody(timestamp: string) {
   };
 }
 
+type LoggerMock = {
+  debug: ReturnType<typeof vi.fn>;
+  info: ReturnType<typeof vi.fn>;
+  warn: ReturnType<typeof vi.fn>;
+  error: ReturnType<typeof vi.fn>;
+  with: ReturnType<typeof vi.fn>;
+};
+
+function createLoggerStub(): LoggerMock {
+  const stub: LoggerMock = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    with: vi.fn(),
+  };
+  stub.with.mockReturnValue(stub);
+  return stub;
+}
+
+const originalLoggerForRequest = loggingModule.loggerForRequest;
+const loggerForRequestMock = vi.spyOn(loggingModule, "loggerForRequest");
+
+beforeEach(() => {
+  loggerForRequestMock.mockImplementation((req, extra) => originalLoggerForRequest(req, extra));
+});
+
+afterEach(() => {
+  loggerForRequestMock.mockClear();
+});
+
+afterAll(() => {
+  loggerForRequestMock.mockRestore();
+});
+
 describe.sequential("Worker security safeguards", () => {
   let handleFleetSummary: typeof import("../../src/routes/fleet").handleFleetSummary;
   let handleIngest: typeof import("../../src/routes/ingest").handleIngest;
@@ -57,11 +93,33 @@ describe.sequential("Worker security safeguards", () => {
   it("blocks protected APIs without a valid access token", async () => {
     const { env, dispose } = await createWorkerEnv();
     try {
-      const request = new Request("https://example.com/api/fleet/summary?hours=24&lowDeltaT=2");
+      const logger = createLoggerStub();
+      loggerForRequestMock.mockReturnValueOnce(logger as unknown as loggingModule.Logger);
+
+      const request = new Request("https://example.com/api/fleet/summary?hours=24&lowDeltaT=2", {
+        headers: {
+          "Cf-Access-Jwt-Assertion": "not-a-valid-token",
+          "Cf-Access-Authenticated-User-Email": "intruder@example.com",
+          "cf-ray": "cf-ray-id",
+        },
+      });
       const response = await handleFleetSummary(request, env);
       expect(response.status).toBe(401);
       const payload = await response.json();
       expect(payload.error).toBe("Unauthorized");
+
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      const [eventName, fields] = logger.warn.mock.calls[0] as [string, any];
+      expect(eventName).toBe("access.jwt_verify_failed");
+      expect(fields).toMatchObject({
+        audience: env.ACCESS_AUD,
+        cf_ray: "cf-ray-id",
+        metric_key: "security.jwt_verify_failed",
+        count: 1,
+      });
+      expect(typeof fields.reason).toBe("string");
+      expect(fields.reason.length).toBeGreaterThan(0);
+      expect(fields.sanitized_email).toBe("i***r@example.com");
     } finally {
       dispose();
     }

@@ -163,6 +163,27 @@
         "notify_no_data": true,
         "no_data_timeframe": 5
       }
+    },
+    {
+      "name": "GB Workers :: Access JWT verification failures",
+      "type": "query alert",
+      "query": "avg(last_5m):sum:greenbro.logs.count{env:production,msg:access.jwt_verify_failed}.rollup(count, 60) > 3",
+      "message": "Access JWT verification failures are above normal (>3/min). Investigate Cloudflare Access policy, JWKS endpoint availability, and recent deploys per docs/observability.md.",
+      "tags": [
+        "service:gb-workers",
+        "team:platform",
+        "severity:critical"
+      ],
+      "options": {
+        "thresholds": {
+          "critical": 3,
+          "warning": 1
+        },
+        "evaluation_delay": 60,
+        "notify_audit": false,
+        "notify_no_data": true,
+        "no_data_timeframe": 5
+      }
     }
   ]
 }
