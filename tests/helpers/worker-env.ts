@@ -13,7 +13,7 @@ const MIGRATIONS_DIR = path.join(ROOT_DIR, "migrations");
 const SEEDS_DIR = path.join(ROOT_DIR, "seeds", "dev");
 
 const MIGRATION_FILES = [
-  "001_init.sql",
+  "0001_init.sql",
   "0002_indexes.sql",
   "0003_operational_entities.sql",
   "0004_ops_metrics_window.sql",

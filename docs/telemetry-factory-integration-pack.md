@@ -6,7 +6,7 @@ This kit gives the factory everything it needs to run the first live telemetry t
 
 ## 1. Readiness Snapshot
 - **Worker build** - `/api/ingest/:profile` and `/api/heartbeat/:profile` are fully implemented with HMAC signing, device key enforcement, rate limiting, and ops metrics recording (`src/routes/ingest.ts`, `src/utils/index.ts`).
-- **Database schema** - D1 migrations ship tables for `devices`, `latest_state`, `telemetry`, and `ops_metrics` plus supporting indexes (`migrations/001_init.sql`, `0002_indexes.sql`, `0004_ops_metrics_window.sql`, `0005_ops_metrics_rate_limit_index.sql`, `0008_device_key_hash_constraint.sql`).
+- **Database schema** - D1 migrations ship tables for `devices`, `latest_state`, `telemetry`, and `ops_metrics` plus supporting indexes (`migrations/0001_init.sql`, `0002_indexes.sql`, `0004_ops_metrics_window.sql`, `0005_ops_metrics_rate_limit_index.sql`, `0008_device_key_hash_constraint.sql`).
 - **Secrets guardrail** - The worker refuses to boot without required secrets (`src/env.ts`). Production must have:
   - `CURSOR_SECRET`
   - `ACCESS_AUD`, `ACCESS_JWKS_URL`

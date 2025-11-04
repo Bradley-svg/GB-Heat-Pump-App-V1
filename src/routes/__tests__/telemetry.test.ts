@@ -17,7 +17,7 @@ const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, "../../..");
 
 const MIGRATIONS = [
-  "migrations/001_init.sql",
+  "migrations/0001_init.sql",
   "migrations/0002_indexes.sql",
   "migrations/0003_operational_entities.sql",
 ];
