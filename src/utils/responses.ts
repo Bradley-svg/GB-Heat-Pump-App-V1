@@ -70,12 +70,15 @@ export function withSecurityHeaders(res: Response, options: SecurityHeaderOption
 }
 
 export function json(data: unknown, init: ResponseInit = {}) {
-  return withSecurityHeaders(
-    new Response(JSON.stringify(data), {
-      headers: { "content-type": JSON_CT },
-      ...init,
-    }),
-  );
+  const headers = new Headers({ "content-type": JSON_CT });
+  if (init.headers) {
+    const initHeaders = new Headers(init.headers);
+    initHeaders.forEach((value, key) => {
+      headers.set(key, value);
+    });
+  }
+  const responseInit: ResponseInit = { ...init, headers };
+  return withSecurityHeaders(new Response(JSON.stringify(data), responseInit));
 }
 
 export function text(body: string, init: ResponseInit = {}) {

@@ -2,6 +2,7 @@
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 
 import type { Env } from "./env";
+import { json as secureJson, withSecurityHeaders } from "./utils/responses";
 
 export interface R2HandlerOptions {
   /**
@@ -11,14 +12,7 @@ export interface R2HandlerOptions {
   routePrefix?: string;
 }
 
-const JSON_CT = "application/json;charset=utf-8";
-
-function json(data: unknown, init: ResponseInit = {}) {
-  return new Response(JSON.stringify(data), {
-    headers: { "content-type": JSON_CT },
-    ...init,
-  });
-}
+const json = secureJson;
 
 function badRequest(msg = "Bad Request") {
   return json({ error: msg }, { status: 400 });
@@ -128,11 +122,13 @@ function withCors(res: Response) {
   // Allow cross-origin consumption of signed GET/HEAD assets.
   headers.set("Access-Control-Allow-Origin", "*");
   headers.set("Vary", "Origin");
-  return new Response(res.body, {
-    headers,
-    status: res.status,
-    statusText: res.statusText,
-  });
+  return withSecurityHeaders(
+    new Response(res.body, {
+      headers,
+      status: res.status,
+      statusText: res.statusText,
+    }),
+  );
 }
 
 function rewriteUrlForPrefix(original: URL, prefix: string | undefined): URL | null {
@@ -248,7 +244,7 @@ export async function handleR2Request(
       "content-type,Cf-Access-Jwt-Assertion,Cf-Access-Client-Id,Cf-Access-Client-Secret",
     );
     headers.set("Access-Control-Max-Age", "600");
-    return new Response(null, { status: 204, headers });
+    return withSecurityHeaders(new Response(null, { status: 204, headers }));
   }
 
   return json(
