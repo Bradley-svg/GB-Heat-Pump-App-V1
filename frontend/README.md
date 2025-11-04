@@ -12,8 +12,23 @@ Install dependencies at the repository root (Worker) and inside `frontend/` for 
 
 ```bash
 npm install
-npm --prefix frontend install
+npm run frontend:install
 ```
+
+If your environment requires an internal npm mirror or MITM proxy, set the following variables before running `npm run frontend:install` (or any of the `frontend:*` scripts):
+
+| Variable | Purpose |
+| --- | --- |
+| `NPM_REGISTRY_URL` | Fully qualified registry URL. Defaults to `https://registry.npmjs.org/`. |
+| `NPM_REGISTRY_TOKEN` | Auth token for private mirrors. The installer writes it to `frontend/.npmrc` for the current run only. |
+| `NPM_REGISTRY_NO_PROXY` | Comma-separated hosts that should bypass the corporate proxy (useful when the proxy returns 403 on CONNECT). |
+| `NPM_REGISTRY_DISABLE_PROXY` | Set to `true` to strip all `*_proxy` variables from the child npm process. |
+| `NPM_REGISTRY_CA_FILE` | Path to the trusted CA bundle when your mirror is re-signed. Falls back to `SSL_CERT_FILE` / `NODE_EXTRA_CA_CERTS`. |
+| `NPM_REGISTRY_STRICT_SSL` | Set to `false` to allow self-signed registries. |
+| `NPM_REGISTRY_ALWAYS_AUTH` | Force `always-auth=true` even if no token is provided. |
+| `NPM_REGISTRY_PERSIST_NPMRC` | Set to `true` to keep the generated `.npmrc` for debugging. Otherwise it is removed after install. |
+
+The installer generates `frontend/.npmrc` on each run so credentials do not leak into source control. When the registry responds with `403 Forbidden`, double-check the mirror URL and credentials: corporate MITM proxies often reject anonymous requests to `registry.npmjs.org`.
 
 ## Local development
 

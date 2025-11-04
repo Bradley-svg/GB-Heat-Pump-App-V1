@@ -16,6 +16,10 @@
 
 The dashboard expects API routes to be reachable on the same origin. When running `wrangler dev`, open both the Worker preview URL (serving `/app`) and the Vite dev server for live editing.
 
+## Installing dependencies
+
+Run `npm install` at the repository root and `npm run frontend:install` to hydrate the SPA dependencies. The installer script understands corporate proxy quirks and rewrites `frontend/.npmrc` on the fly. See [`docs/npm-registry.md`](./npm-registry.md) for the complete list of supported environment variables (mirror URL, auth token, proxy bypass, and CA bundle options).
+
 ## Build + deploy workflow
 
 1. `npm run frontend:build`
