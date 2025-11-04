@@ -104,6 +104,14 @@ describe.sequential("Worker security safeguards", () => {
       expect(response.status).toBe(401);
       const payload = await response.json();
       expect(payload.error).toBe("Invalid signature");
+
+      const metricRow = await env.DB
+        .prepare(`SELECT status_code, device_id FROM ops_metrics WHERE route = ?1 ORDER BY ts DESC LIMIT 1`)
+        .bind("/api/ingest")
+        .first<{ status_code: number | string | null; device_id?: string | null }>();
+      expect(metricRow).toBeTruthy();
+      expect(Number(metricRow!.status_code ?? NaN)).toBe(401);
+      expect(metricRow!.device_id ?? null).toBe(TEST_DEVICE_ID);
     } finally {
       dispose();
     }

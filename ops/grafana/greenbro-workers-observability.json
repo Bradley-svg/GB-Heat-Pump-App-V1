@@ -355,6 +355,56 @@
       ],
       "title": "Requests by route/status",
       "type": "timeseries"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "lineInterpolation": "smooth",
+            "showPoints": "never"
+          },
+          "unit": "req/s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 16
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(greenbro_ops_requests_total{route=\"/api/ingest\",status=~\"4..|5..\"}[$__interval]))",
+          "legendFormat": "Ingest 4xx/5xx",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(greenbro_ops_requests_total{route=\"/api/heartbeat\",status=~\"4..|5..\"}[$__interval]))",
+          "legendFormat": "Heartbeat 4xx/5xx",
+          "refId": "B"
+        }
+      ],
+      "title": "Auth & validation errors",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",
