@@ -50,7 +50,8 @@ describe("AdminPage", () => {
 
     await screen.findByText("Tenants");
     expect(getMock).toHaveBeenCalledTimes(1);
-    const [, requestOptions] = getMock.mock.calls[0] as [string, RequestOptions | undefined];
+    const [path, requestOptions] = getMock.mock.calls[0] as [string, RequestOptions | undefined];
+    expect(path).toBe("/api/fleet/admin-overview");
     expect(requestOptions?.signal).toBeInstanceOf(AbortSignal);
 
     const tables = screen.getAllByRole("table");
@@ -81,6 +82,8 @@ describe("AdminPage", () => {
 
     await screen.findByText("Unable to load admin overview");
     expect(getMock).toHaveBeenCalledTimes(1);
+    const [path] = getMock.mock.calls[0] as [string, RequestOptions | undefined];
+    expect(path).toBe("/api/fleet/admin-overview");
   });
 });
 

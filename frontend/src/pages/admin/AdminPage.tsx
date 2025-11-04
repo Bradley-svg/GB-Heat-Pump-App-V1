@@ -17,7 +17,9 @@ export default function AdminPage() {
     const controller = new AbortController();
     setState("loading");
     api
-      .get<AdminOverviewResponse>("/api/admin/overview", { signal: controller.signal })
+      .get<AdminOverviewResponse>("/api/fleet/admin-overview", {
+        signal: controller.signal,
+      })
       .then((payload) => {
         setData(payload);
         setState("ready");

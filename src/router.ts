@@ -17,6 +17,7 @@ import {
 } from "./routes/alerts";
 import { handleArchive } from "./routes/archive";
 import { handleClientCompact } from "./routes/client";
+import { handleFleetAdminOverview } from "./routes/admin";
 import { handleFleetSummary } from "./routes/fleet";
 import { handleHeartbeat, handleIngest } from "./routes/ingest";
 import { handleMe } from "./routes/me";
@@ -48,6 +49,7 @@ registerAdminRoutes(router);
 router
   .get("/api/me", (req, env) => handleMe(req, env))
   .get("/api/fleet/summary", (req, env) => handleFleetSummary(req, env))
+  .get("/api/fleet/admin-overview", (req, env) => handleFleetAdminOverview(req, env))
   .get("/api/client/compact", (req, env) => handleClientCompact(req, env))
   .get("/api/alerts", (req, env) => handleListAlertRecords(req, env))
   .post("/api/alerts", (req, env) => handleCreateAlertRecord(req, env))

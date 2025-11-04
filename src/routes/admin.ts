@@ -1,5 +1,5 @@
-import type { Env } from "../env";
-import { requireAccessUser } from "../lib/access";
+import type { Env, User } from "../env";
+import { requireAccessUser, userIsAdmin } from "../lib/access";
 import { buildDeviceLookup, buildDeviceScope, presentDeviceId } from "../lib/device";
 import { json } from "../utils/responses";
 import { andWhere, nowISO } from "../utils";
@@ -12,11 +12,13 @@ import {
   pruneOpsMetrics,
 } from "../lib/ops-metrics";
 
-export async function handleAdminOverview(req: Request, env: Env) {
-  const log = loggerForRequest(req, { route: "/api/admin/overview" });
-  const user = await requireAccessUser(req, env);
-  if (!user) return json({ error: "Unauthorized" }, { status: 401 });
-
+async function buildOverviewResponse(
+  req: Request,
+  env: Env,
+  user: User,
+  routeTag: string,
+) {
+  const log = loggerForRequest(req, { route: routeTag });
   const scope = buildDeviceScope(user);
   const url = new URL(req.url);
   const paramsResult = AdminOverviewQuerySchema.safeParse({
@@ -157,4 +159,17 @@ export async function handleAdminOverview(req: Request, env: Env) {
       days: OPS_METRICS_WINDOW_DAYS,
     },
   });
+}
+
+export async function handleAdminOverview(req: Request, env: Env) {
+  const user = await requireAccessUser(req, env);
+  if (!user) return json({ error: "Unauthorized" }, { status: 401 });
+  if (!userIsAdmin(user)) return json({ error: "Forbidden" }, { status: 403 });
+  return buildOverviewResponse(req, env, user, "/api/admin/overview");
+}
+
+export async function handleFleetAdminOverview(req: Request, env: Env) {
+  const user = await requireAccessUser(req, env);
+  if (!user) return json({ error: "Unauthorized" }, { status: 401 });
+  return buildOverviewResponse(req, env, user, "/api/fleet/admin-overview");
 }
