@@ -59,6 +59,5 @@
 - `telemetry` (device history; batched export then delete).
 - `ops_metrics` (operational counters; delete only).
 
-- Include the fallback table when exporting retention evidence so ops crews can reconcile queue outages with D1 growth.
 
 Any new high-churn tables should be added to `src/jobs/retention.ts` and documented here.
