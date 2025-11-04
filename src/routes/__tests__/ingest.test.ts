@@ -13,6 +13,15 @@ const TIMESTAMP_HEADER = "X-GREENBRO-TIMESTAMP";
 const verifyDeviceKeyMock = vi.spyOn(deviceModule, "verifyDeviceKey");
 const claimDeviceIfUnownedMock = vi.spyOn(deviceModule, "claimDeviceIfUnowned");
 
+function isRateLimitCountQuery(sql: string): boolean {
+  return (
+    sql
+      .replace(/\s+/g, " ")
+      .trim()
+      .startsWith("SELECT COUNT(*) AS cnt FROM ops_metrics")
+  );
+}
+
 function baseEnv(overrides: Partial<Env> = {}): Env {
   const statement = {
     bind: vi.fn().mockReturnThis(),
@@ -159,7 +168,7 @@ describe("handleIngest", () => {
     const opsRun = vi.fn().mockResolvedValue(undefined);
 
     const prepare = vi.fn((sql: string) => {
-      if (sql.startsWith("SELECT COUNT(*) AS cnt FROM ops_metrics")) {
+      if (isRateLimitCountQuery(sql)) {
         return {
           bind: vi.fn(() => ({
             first: countFirst,
@@ -293,7 +302,7 @@ describe("handleIngest", () => {
     );
 
     const prepare = vi.fn((sql: string) => {
-      if (sql.startsWith("SELECT COUNT(*) AS cnt FROM ops_metrics")) {
+      if (isRateLimitCountQuery(sql)) {
         return {
           bind: vi.fn(() => ({
             first: countFirst,
@@ -413,7 +422,7 @@ describe("handleIngest", () => {
     const opsRun = vi.fn().mockResolvedValue(undefined);
 
     const prepare = vi.fn((sql: string) => {
-      if (sql.startsWith("SELECT COUNT(*) AS cnt FROM ops_metrics")) {
+      if (isRateLimitCountQuery(sql)) {
         return {
           bind: vi.fn(() => ({
             first: countFirst,
