@@ -11,26 +11,28 @@ export type SchemaParseResult<T> =
   | { success: false; issues: ValidationIssue[] };
 
 export function fromZodError(error: z.ZodError): ValidationIssue[] {
-  return error.issues.map((issue) => ({
+  return error.issues.map((issue: z.ZodIssue) => ({
     path: issue.path.length ? issue.path.join(".") : "root",
     message: issue.message,
   }));
 }
 
-export function validateWithSchema<T>(schema: any, payload: unknown): SchemaParseResult<T> {
-  if (schema && typeof schema.safeParse === "function") {
-    const parsed = schema.safeParse(payload);
-    if (parsed?.success) {
-      return { success: true, data: parsed.data as T };
-    }
-    if (parsed && !parsed.success) {
-      return { success: false, issues: fromZodError(parsed.error) };
-    }
+export function validateWithSchema<T>(
+  schema: z.ZodType<T, z.ZodTypeDef, unknown> | undefined,
+  payload: unknown,
+): SchemaParseResult<T> {
+  if (!schema) {
+    return {
+      success: false,
+      issues: [{ path: "root", message: "Validation unavailable" }],
+    };
   }
-  return {
-    success: false,
-    issues: [{ path: "root", message: "Validation unavailable" }],
-  };
+
+  const parsed = schema.safeParse(payload);
+  if (parsed.success) {
+    return { success: true, data: parsed.data };
+  }
+  return { success: false, issues: fromZodError(parsed.error) };
 }
 
 export function validationErrorResponse(

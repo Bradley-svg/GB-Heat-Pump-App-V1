@@ -39,9 +39,12 @@ export type TelemetryLatestBatchInput = z.infer<typeof TelemetryLatestBatchSchem
 export const TelemetrySeriesQuerySchema = z
   .object({
     scope: optionalTrimmedString
-      .transform((value) => (value ? value.toLowerCase() : undefined))
+      .transform((value: string | undefined) =>
+        value ? value.toLowerCase() : undefined,
+      )
       .refine(
-        (value) => !value || ["device", "profile", "fleet"].includes(value),
+        (value: string | undefined) =>
+          !value || ["device", "profile", "fleet"].includes(value),
         "Invalid scope",
       )
       .default("device"),

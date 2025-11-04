@@ -68,7 +68,7 @@ const EnvSchema = z
     ACCESS_JWKS_URL: z
       .string()
       .min(1, "ACCESS_JWKS_URL must be set")
-      .refine((value) => isHttpUrl(value.trim()), {
+      .refine((value: string) => isHttpUrl(value.trim()), {
         message: "ACCESS_JWKS_URL must be an http(s) URL",
       }),
     ACCESS_AUD: z
@@ -78,7 +78,7 @@ const EnvSchema = z
     APP_BASE_URL: z
       .string()
       .min(1, "APP_BASE_URL must be set")
-      .refine((value) => isHttpUrl(value.trim()), {
+      .refine((value: string) => isHttpUrl(value.trim()), {
         message: "APP_BASE_URL must be an absolute http(s) URL",
       }),
     RETURN_DEFAULT: z.string().min(1, "RETURN_DEFAULT must be set"),
@@ -88,7 +88,7 @@ const EnvSchema = z
       .min(16, "CURSOR_SECRET must be at least 16 characters long"),
   })
   .passthrough()
-  .superRefine((value, ctx) => {
+  .superRefine((value: Record<string, unknown>, ctx: z.RefinementCtx) => {
     const binding = value.DB as unknown;
     if (
       !binding ||
@@ -253,7 +253,7 @@ export function validateEnv(env: Env): Env {
 
   const result = EnvSchema.safeParse(env);
   if (!result.success) {
-    const issues = result.error.issues.map((issue) => {
+    const issues = result.error.issues.map((issue: z.ZodIssue) => {
       const path = issue.path.length ? issue.path.join(".") : "env";
       return `${path}: ${issue.message}`;
     });

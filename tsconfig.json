@@ -9,5 +9,6 @@
     "noEmit": true,
     "typeRoots": ["./types", "./node_modules/@types"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/**/__tests__/**"]
 }

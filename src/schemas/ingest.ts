@@ -3,12 +3,16 @@ import { z } from "zod";
 const nullableNumber = z
   .union([z.number(), z.null()])
   .optional()
-  .transform((value) => (value === undefined ? null : value));
+  .transform((value: number | null | undefined) =>
+    value === undefined ? null : value,
+  );
 
 const nullableString = z
   .union([z.string().min(1), z.null()])
   .optional()
-  .transform((value) => (value === undefined ? null : value));
+  .transform((value: string | null | undefined) =>
+    value === undefined ? null : value,
+  );
 
 export const TelemetryMetricsSchema = z
   .object({

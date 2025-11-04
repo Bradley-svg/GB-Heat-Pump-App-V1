@@ -105,11 +105,23 @@ export async function legacyHandleTelemetryLatestBatch(req: Request, env: Env) {
     });
   }
 
-  const requested = body.devices.map((token, index) => ({
-    token,
-    index,
-    resolved: null as string | null,
-  }));
+  type RequestedDevice = {
+    token: string;
+    index: number;
+    resolved: string | null;
+  };
+
+  const requested: RequestedDevice[] = body.devices.map(
+    (token: string, index: number): RequestedDevice => ({
+      token,
+      index,
+      resolved: null,
+    }),
+  );
+
+  const isResolved = (
+    entry: RequestedDevice,
+  ): entry is RequestedDevice & { resolved: string } => entry.resolved !== null;
 
   const missing: string[] = [];
   for (const entry of requested) {
@@ -121,9 +133,7 @@ export async function legacyHandleTelemetryLatestBatch(req: Request, env: Env) {
     entry.resolved = resolved;
   }
 
-  const resolvedIds = Array.from(
-    new Set(requested.filter((r) => r.resolved).map((r) => r.resolved as string)),
-  );
+  const resolvedIds = Array.from(new Set(requested.filter(isResolved).map((r) => r.resolved)));
 
   if (!resolvedIds.length) {
     return json({

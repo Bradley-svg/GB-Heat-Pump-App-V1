@@ -7,7 +7,7 @@ export const MqttDirectionSchema = z.enum(MQTT_DIRECTIONS);
 
 const enabledParam = z
   .union([z.boolean(), z.literal("true"), z.literal("false")])
-  .transform((value) => {
+  .transform((value: boolean | "true" | "false") => {
     if (typeof value === "boolean") return value;
     return value === "true";
   });
@@ -59,7 +59,7 @@ export const UpdateMqttMappingSchema = z
     enabled: z.boolean().optional(),
   })
   .strict()
-  .refine((data) => Object.keys(data).length > 0, {
+  .refine((data: Record<string, unknown>) => Object.keys(data).length > 0, {
     message: "At least one property must be provided.",
   });
 
