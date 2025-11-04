@@ -72,3 +72,7 @@ preview_bucket_name = "greenbro-telemetry-archive-dev"
 [env.production]
   [env.production.vars]
 
+[[env.production.r2_buckets]]
+binding = "APP_STATIC"
+bucket_name = "greenbro-app-static"
+

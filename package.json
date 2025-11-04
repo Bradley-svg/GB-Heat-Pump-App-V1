@@ -22,6 +22,7 @@
     "build": "npm run frontend:build && wrangler deploy --dry-run --outdir ./dist",
     "test": "vitest run src",
     "publish:r2": "node ./scripts/publish-r2-assets.mjs",
+    "ops:r2:bootstrap": "node ./scripts/bootstrap-app-static.mjs",
     "test:integration": "vitest run tests/integration",
     "test:smoke": "vitest run tests/smoke",
     "test:security": "vitest run tests/security",

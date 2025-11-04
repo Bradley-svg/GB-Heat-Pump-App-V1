@@ -26,6 +26,8 @@ The platform now deploys a single Worker (`gb-heat-pump-app-v1`). Key bindings a
 - Replace any placeholder secrets (e.g. `CURSOR_SECRET`, `ACCESS_AUD`, `ASSET_SIGNING_SECRET`, `INGEST_ALLOWED_ORIGINS`, `INGEST_RATE_LIMIT_PER_MIN`, `INGEST_SIGNATURE_TOLERANCE_SECS`) with strong values stored in the password manager before the first production deploy.
 - Verify Cloudflare credentials (`npx wrangler whoami`) and select the right account.
 - Verify retention archive readiness: confirm R2 buckets (`npx wrangler r2 bucket list | rg telemetry-archive`), check the `RETENTION_ARCHIVE` binding in `wrangler.toml`, and run `npx vitest run src/jobs/__tests__/retention.test.ts --reporter verbose` to ensure backups log before deletions.
+- Bootstrap SPA assets: `npm run ops:r2:bootstrap -- --env production` (or run `npm run frontend:build && npm run publish:r2 -- --env production`). The helper writes `dist/app-static-manifest.json`; attach it to the release ticket.
+- Confirm the SPA bucket is populated: `npx wrangler r2 object list APP_STATIC/app --limit 5 --env production`. Investigate if the list is empty before shipping.
 
 ---
 
@@ -50,11 +52,11 @@ The platform now deploys a single Worker (`gb-heat-pump-app-v1`). Key bindings a
 
 ## 3. Deploy the Worker
 
-1. Build frontend assets if needed: `npm run frontend:build`.
+1. Build and upload SPA assets: `npm run frontend:build && npm run publish:r2 -- --env production`. This updates the `APP_STATIC` bucket and refreshes `dist/app-static-manifest.json` for the release artifact.
 2. Dry-run the Worker deploy: `npm run build` (writes preview bundle to `dist/`).
 3. Deploy: `npm run deploy`
 
-> **GitHub Actions**: Trigger the `Worker Deploy` workflow (`.github/workflows/worker-deploy.yml`) for repeatable rollouts. The job targets `gb-heat-pump-app-v1` automatically and will run migrations plus cron synchronization when the inputs are enabled. Store `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as repository secrets before the first run.
+> **GitHub Actions**: Trigger the `Worker Deploy` workflow (`.github/workflows/worker-deploy.yml`) for repeatable rollouts. The job now builds the frontend, publishes R2 assets (`npm run publish:r2 -- --env production`), and uploads `dist/app-static-manifest.json` as an artifact alongside the Worker bundle. It still targets `gb-heat-pump-app-v1` automatically and runs migrations plus cron synchronization when the inputs are enabled. Store `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as repository secrets before the first run. A nightly `SPA Asset Sync` workflow (`.github/workflows/spa-asset-sync.yml`) keeps `APP_STATIC` aligned with the latest build; monitor its runs for upload failures.
 
 ### Access shim guard
 

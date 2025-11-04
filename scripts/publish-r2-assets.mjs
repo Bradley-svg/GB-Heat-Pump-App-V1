@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,6 +11,7 @@ const repoRoot = path.resolve(__dirname, "..");
 const clientDist = path.join(repoRoot, "dist", "client");
 const assetDir = path.join(clientDist, "assets");
 const wranglerConfig = path.join(repoRoot, "wrangler.toml");
+const manifestOutputPath = path.join(repoRoot, "dist", "app-static-manifest.json");
 
 const LONG_CACHE = "public,max-age=31536000,immutable";
 const CONTENT_TYPES = new Map([
@@ -86,6 +88,48 @@ function parseArgs(argv) {
     }
   }
   return args;
+}
+
+function ensureManifestDir(manifestPath) {
+  const dir = path.dirname(manifestPath);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+}
+
+function fileSha256(filePath) {
+  const hash = createHash("sha256");
+  hash.update(readFileSync(filePath));
+  return hash.digest("hex");
+}
+
+function writeManifest({ uploads, bucketName, env, target, dryRun, manifestPath }) {
+  ensureManifestDir(manifestPath);
+  const entries = uploads.map((asset) => {
+    const stats = statSync(asset.file);
+    return {
+      key: asset.key,
+      file: path.relative(repoRoot, asset.file).replace(/\\/g, "/"),
+      size: stats.size,
+      sha256: fileSha256(asset.file),
+      contentType: asset.contentType,
+      cacheControl: asset.cacheControl,
+    };
+  });
+
+  const manifest = {
+    generatedAt: new Date().toISOString(),
+    bucket: bucketName,
+    env: env ?? null,
+    target,
+    dryRun,
+    totalAssets: entries.length,
+    objects: entries,
+  };
+
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  const relPath = path.relative(repoRoot, manifestPath).replace(/\\/g, "/");
+  console.log(`[publish-r2-assets] Wrote manifest to ${relPath}`);
 }
 
 function stripInlineComment(line) {
@@ -242,7 +286,19 @@ function main() {
     }
   }
 
-  console.log(`[publish-r2-assets] Uploaded ${uploads.length} assets.`);
+  writeManifest({
+    uploads,
+    bucketName,
+    env,
+    target,
+    dryRun,
+    manifestPath: manifestOutputPath,
+  });
+  if (dryRun) {
+    console.log(`[publish-r2-assets] Dry-run completed for ${uploads.length} assets.`);
+  } else {
+    console.log(`[publish-r2-assets] Uploaded ${uploads.length} assets.`);
+  }
 }
 
 function isMainModule() {

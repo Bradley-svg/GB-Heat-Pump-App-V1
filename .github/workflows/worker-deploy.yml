@@ -42,6 +42,21 @@ jobs:
       - name: Run worker test suites
         run: npm run test:ci
 
+      - name: Build frontend bundle
+        run: npm run frontend:build
+
+      - name: Publish SPA assets to R2
+        run: npm run publish:r2 -- --env production
+
+      - name: Upload SPA manifest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spa-static-manifest
+          path: |
+            dist/app-static-manifest.json
+            dist/client/manifest.json
+          if-no-files-found: error
+
       - name: Apply D1 migrations (default)
         if: ${{ fromJSON(github.event.inputs.apply_migrations) }}
         run: npm run migrate:apply

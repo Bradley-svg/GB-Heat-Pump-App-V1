@@ -52,7 +52,9 @@ The dashboard expects API routes to be reachable on the same origin. When runnin
    done
    ```
 
-   The publish script uploads every build artifact under `app/assets/`, matching the Worker routes and the CDN layout expected by `APP_ASSET_BASE` overrides.
+   The publish script uploads every build artifact under `app/assets/`, matching the Worker routes and the CDN layout expected by `APP_ASSET_BASE` overrides. Each run also emits `dist/app-static-manifest.json` with the uploaded keys and checksums for release records.
+
+   To bootstrap a fresh environment (create the bucket and upload in one step), run `npm run ops:r2:bootstrap -- --env production`.
 
 3. `npm run build` (top-level) will re-run the frontend build and produce the Worker bundle in `dist/` ready for deployment.
 
