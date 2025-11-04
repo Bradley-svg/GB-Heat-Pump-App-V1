@@ -192,14 +192,11 @@ These fields are designed to feed dashboards or alerting pipelines without addit
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `mapping_id` | `string` | Optional on create; auto-generated if omitted. |
-| `profile_id` | `string | null` | Optional tenant scope. Leave blank for global mappings. |
 | `device_id` | `string | null` | Optional device binding. Admins may enter raw device IDs. |
 | `direction` | `"ingress" | "egress"` | Ingress routes inbound commands; egress publishes telemetry. |
 | `qos` | `0 | 1 | 2` | Defaults to `0`. |
 | `transform` | `object | null` | JSON object applied by the worker before publishing. Must be valid JSON. |
 | `description` | `string | null` | Free-form operator note (<= 512 chars). |
-| `enabled` | `boolean` | Disabled mappings are ignored by the broker. Defaults to `true`. |
 
 **Create example**
 
@@ -226,9 +223,6 @@ These fields are designed to feed dashboards or alerting pipelines without addit
 
 ### Operator workflow & safety checklist
 
-1. **Review existing mappings** â€“ Filter by topic or direction and expand the list if needed. Confirm the device/profile bindings before editing.
-2. **Edit or create carefully** â€“ The form normalizes blank strings to `null` so leaving `device_id` or `profile_id` empty unbinds the mapping. Use valid JSON for `transform`; malformed payloads are rejected.
-4. **Safe deletion** â€“ Deleting a mapping removes it immediately from the worker. Use the enable toggle when you need a reversible pause; delete only once the alternative routing is confirmed.
 
 ## Next steps checklist
 

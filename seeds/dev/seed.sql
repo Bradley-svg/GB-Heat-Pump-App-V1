@@ -172,7 +172,7 @@ INSERT OR REPLACE INTO commissioning_runs (
     '2025-01-05T09:15:00.000Z',
     NULL,
     '["power-on","sensor-calibration"]',
-    'Awaiting upstream MQTT mapping before final sign-off.',
+    'Awaiting upstream integration before final sign-off.',
     'tech.john@example.com',
     NULL,
     '2025-01-05T09:15:00.000Z',
