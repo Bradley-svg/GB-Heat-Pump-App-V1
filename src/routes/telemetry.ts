@@ -1,80 +1,48 @@
-import type { Env, User } from "../env";
+import type { Env } from "../env";
 import { requireAccessUser, userIsAdmin } from "../lib/access";
-import {
-  buildDeviceLookup,
-  buildDeviceScope,
-  presentDeviceId,
-  resolveDeviceId,
-} from "../lib/device";
-import { maskTelemetryNumber } from "../telemetry";
 import {
   TelemetryLatestBatchSchema,
   TelemetrySeriesQuerySchema,
   TELEMETRY_ALLOWED_METRICS,
-  TELEMETRY_INTERVALS_MS,
   type TelemetryLatestBatchInput,
-  type TelemetrySeriesQuery,
 } from "../schemas/telemetry";
-import { andWhere, nowISO, parseFaultsJson } from "../utils";
+import { nowISO } from "../utils";
 import { json } from "../utils/responses";
 import { loggerForRequest } from "../utils/logging";
 import { validationErrorResponse, validateWithSchema } from "../utils/validation";
+import {
+  resolveLatestBatchDevices,
+  presentLatestBatchRow,
+  resolveTelemetrySeriesConfig,
+} from "../lib/telemetry-access";
+import {
+  fetchLatestTelemetryBatch,
+  fetchTelemetrySeries,
+  type TelemetrySeriesRow,
+} from "../lib/telemetry-store";
+import { maskTelemetryNumber } from "../telemetry";
+import {
+  legacyHandleTelemetryLatestBatch,
+  legacyHandleTelemetrySeries,
+} from "./telemetry.legacy";
 
 type TelemetryIncludeFlags = TelemetryLatestBatchInput["include"];
+type TelemetryFeatureMode = "refactor" | "legacy" | "compare";
 
-const LATEST_BATCH_CHUNK = 100;
 const METRICS_WITH_EXTENTS = new Set<Readonly<typeof TELEMETRY_ALLOWED_METRICS>[number]>([
   "deltaT",
   "thermalKW",
   "cop",
 ]);
 
-interface LatestStateRow {
-  device_id: string;
-  ts: number | null;
-  updated_at: string | null;
-  supplyC: number | null;
-  returnC: number | null;
-  tankC: number | null;
-  ambientC: number | null;
-  flowLps: number | null;
-  compCurrentA: number | null;
-  eevSteps: number | null;
-  powerKW: number | null;
-  deltaT: number | null;
-  thermalKW: number | null;
-  cop: number | null;
-  cop_quality: string | null;
-  mode: string | null;
-  defrost: number | null;
-  latest_online: number | null;
-  faults_json: string | null;
-  payload_json: string | null;
-  profile_id: string | null;
-  site: string | null;
-  device_online: number | null;
-  last_seen_at: string | null;
-}
-
-interface SeriesRow {
-  bucket_start_ms: number;
-  sample_count: number;
-  avg_deltaT: number | null;
-  min_deltaT: number | null;
-  max_deltaT: number | null;
-  avg_thermalKW: number | null;
-  min_thermalKW: number | null;
-  max_thermalKW: number | null;
-  avg_cop: number | null;
-  min_cop: number | null;
-  max_cop: number | null;
-  avg_supplyC: number | null;
-  avg_returnC: number | null;
-  avg_flowLps: number | null;
-  avg_powerKW: number | null;
-}
-
 export async function handleTelemetryLatestBatch(req: Request, env: Env) {
+  const mode = getTelemetryFeatureMode(env);
+  if (mode === "legacy") {
+    return legacyHandleTelemetryLatestBatch(req, env);
+  }
+
+  const shadowReq = mode === "compare" ? req.clone() : null;
+
   const user = await requireAccessUser(req, env);
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
 
@@ -91,95 +59,117 @@ export async function handleTelemetryLatestBatch(req: Request, env: Env) {
   }
 
   const body = parsed.data;
-  const scope = buildDeviceScope(user);
+  const resolution = await resolveLatestBatchDevices(env, user, body.devices);
+  const { scope, requested, resolvedIds, missingTokens } = resolution;
 
   if (body.devices.length === 0) {
-    return json({ generated_at: nowISO(), items: [], missing: [] });
+    const response = json({ generated_at: nowISO(), items: [], missing: [] });
+    if (shadowReq) {
+      void runLegacyShadowComparison(
+        req,
+        shadowReq,
+        env,
+        legacyHandleTelemetryLatestBatch,
+        response.clone(),
+        "/api/telemetry/latest-batch",
+      );
+    }
+    return response;
   }
 
   if (scope.empty && !scope.isAdmin) {
-    return json({
+    const response = json({
       generated_at: nowISO(),
       items: [],
       missing: [...new Set(body.devices)],
     });
-  }
-
-  const requested = body.devices.map((token, index) => ({
-    token,
-    index,
-    resolved: null as string | null,
-  }));
-
-  const missing: string[] = [];
-  for (const entry of requested) {
-    const resolved = await resolveDeviceId(entry.token, env, scope.isAdmin);
-    if (!resolved) {
-      missing.push(entry.token);
-      continue;
+    if (shadowReq) {
+      void runLegacyShadowComparison(
+        req,
+        shadowReq,
+        env,
+        legacyHandleTelemetryLatestBatch,
+        response.clone(),
+        "/api/telemetry/latest-batch",
+      );
     }
-    entry.resolved = resolved;
+    return response;
   }
-
-  const resolvedIds = Array.from(
-    new Set(requested.filter((r) => r.resolved).map((r) => r.resolved as string)),
-  );
 
   if (!resolvedIds.length) {
-    return json({
+    const response = json({
       generated_at: nowISO(),
       items: [],
-      missing: dedupePreserveOrder(body.devices, missing),
+      missing: dedupePreserveOrder(body.devices, missingTokens),
     });
+    if (shadowReq) {
+      void runLegacyShadowComparison(
+        req,
+        shadowReq,
+        env,
+        legacyHandleTelemetryLatestBatch,
+        response.clone(),
+        "/api/telemetry/latest-batch",
+      );
+    }
+    return response;
   }
 
-  const rows = await fetchLatestRows(env, resolvedIds, scope);
-  const rowMap = new Map<string, LatestStateRow>();
-  for (const row of rows) {
-    rowMap.set(row.device_id, row);
-  }
-
-  const items = [];
+  const rows = await fetchLatestTelemetryBatch(env, resolvedIds, scope);
+  const rowMap = new Map(rows.map((row) => [row.device_id, row]));
+  const include: TelemetryIncludeFlags = body.include ?? { faults: true, metrics: true };
+  const items: unknown[] = [];
   const seen = new Set<string>();
-  const missingTokens = new Set<string>(missing);
+  const missingSet = new Set<string>(missingTokens);
 
   for (const entry of requested) {
-    if (!entry.resolved) {
-      continue;
-    }
-    if (seen.has(entry.resolved)) {
-      continue;
-    }
+    if (!entry.resolved) continue;
+    if (seen.has(entry.resolved)) continue;
     const row = rowMap.get(entry.resolved);
     if (!row) {
-      missingTokens.add(entry.token);
+      missingSet.add(entry.token);
       continue;
     }
     seen.add(entry.resolved);
     try {
-      const formatted = await presentLatestRow(
-        row,
-        env,
-        userIsAdmin(user),
-        body.include ?? { faults: true, metrics: true },
-      );
+      const formatted = await presentLatestBatchRow(row, env, include, user);
       items.push(formatted);
     } catch (error) {
       loggerForRequest(req, { route: "/api/telemetry/latest-batch" }).error(
         "telemetry.latest_batch.present_failed",
-        { error, device_id: entry.resolved },
+        { error, device_id: entry.resolved, mode },
       );
     }
   }
 
-  return json({
+  const response = json({
     generated_at: nowISO(),
     items,
-    missing: dedupePreserveOrder(body.devices, Array.from(missingTokens)),
+    missing: dedupePreserveOrder(body.devices, Array.from(missingSet)),
   });
+
+  if (shadowReq) {
+    void runLegacyShadowComparison(
+      req,
+      shadowReq,
+      env,
+      legacyHandleTelemetryLatestBatch,
+      response.clone(),
+      "/api/telemetry/latest-batch",
+    );
+  }
+
+  return response;
 }
 
 export async function handleTelemetrySeries(req: Request, env: Env) {
+  const mode = getTelemetryFeatureMode(env);
+  if (mode === "legacy") {
+    return legacyHandleTelemetrySeries(req, env);
+  }
+
+  const shadowReq = mode === "compare" ? req.clone() : null;
+
   const user = await requireAccessUser(req, env);
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
 
@@ -193,7 +183,7 @@ export async function handleTelemetrySeries(req: Request, env: Env) {
     return validationErrorResponse(parsed.error);
   }
 
-  const result = await resolveSeriesConfig(parsed.data, env, user);
+  const result = await resolveTelemetrySeriesConfig(parsed.data, env, user);
   if (!result.ok) {
     if (result.status === 400) {
       return json({ error: result.error }, { status: 400 });
@@ -208,13 +198,9 @@ export async function handleTelemetrySeries(req: Request, env: Env) {
   }
 
   const { config } = result;
-  const query = buildSeriesSql(config.whereClause);
-  const bindings = [config.bucketMs, config.startMs, config.endMs, ...config.bindings];
+  const rows = await fetchTelemetrySeries(env, config);
 
-  const rows = await env.DB.prepare(query).bind(...bindings).all<SeriesRow>();
-  const bucketRows = rows.results ?? [];
-
-  const series = buildSeriesResponse(bucketRows, {
+  const series = buildSeriesResponse(rows, {
     startMs: config.startMs,
     endMs: config.endMs,
     bucketMs: config.bucketMs,
@@ -224,7 +210,7 @@ export async function handleTelemetrySeries(req: Request, env: Env) {
     tenantPrecision: config.tenantPrecision,
   });
 
-  return json({
+  const response = json({
     generated_at: nowISO(),
     scope: config.scopeDescriptor,
     interval_ms: config.bucketMs,
@@ -235,408 +221,21 @@ export async function handleTelemetrySeries(req: Request, env: Env) {
     metrics: config.metrics,
     series,
   });
-}
 
-interface SeriesConfig {
-  bucketMs: number;
-  startMs: number;
-  endMs: number;
-  metrics: (typeof TELEMETRY_ALLOWED_METRICS)[number][];
-  whereClause: string;
-  bindings: any[];
-  scopeDescriptor: UnifiedScopeDescriptor;
-  fillMode: "carry" | "none";
-  tenantPrecision: number;
-}
-
-type SeriesConfigResult =
-  | { ok: true; config: SeriesConfig }
-  | { ok: false; status: 400 | 403 | 404 | 500; error: string };
-
-interface DeviceScopeDescriptor {
-  type: "device";
-  device_id: string;
-  lookup: string;
-}
-
-interface ProfileScopeDescriptor {
-  type: "profile";
-  profile_ids: string[];
-}
-
-interface FleetScopeDescriptor {
-  type: "fleet";
-  profile_ids: string[] | null;
-}
-
-type UnifiedScopeDescriptor = DeviceScopeDescriptor | ProfileScopeDescriptor | FleetScopeDescriptor;
-
-async function resolveSeriesConfig(
-  params: TelemetrySeriesQuery,
-  env: Env,
-  user: User,
-): Promise<SeriesConfigResult> {
-  const metrics = resolveMetrics(params.metric);
-  if (!metrics.length) {
-    return { ok: false, status: 400, error: "Invalid metrics" };
+  if (shadowReq) {
+    void runLegacyShadowComparison(
+      req,
+      shadowReq,
+      env,
+      legacyHandleTelemetrySeries,
+      response.clone(),
+      "/api/telemetry/series",
+    );
   }
 
-  const bucketMs = resolveInterval(params.interval ?? "5m");
-  if (!bucketMs) {
-    return { ok: false, status: 400, error: "Invalid interval" };
-  }
-
-  const now = Date.now();
-  const endMs = clampTimestamp(params.end, now);
-  if (endMs === null) {
-    return { ok: false, status: 400, error: "Invalid end timestamp" };
-  }
-
-  const defaultStart = endMs - 24 * 60 * 60 * 1000;
-  let startMs = clampTimestamp(params.start, defaultStart);
-  if (startMs === null) {
-    return { ok: false, status: 400, error: "Invalid start timestamp" };
-  }
-
-  if (startMs >= endMs) {
-    return { ok: false, status: 400, error: "Start must be before end" };
-  }
-
-  const limit = params.limit ?? 288;
-  const maxWindow = limit * bucketMs;
-  if (endMs - startMs > maxWindow) {
-    startMs = endMs - maxWindow;
-  }
-
-  const scope = buildDeviceScope(user, "d");
-  const isAdmin = scope.isAdmin;
-  const fillMode = params.fill === "carry" ? "carry" : "none";
-  const tenantPrecision = isAdmin ? 4 : 2;
-
-  const conditions: string[] = ["t.ts BETWEEN params.start_ms AND params.end_ms"];
-  const bindings: any[] = [];
-  let scopeDescriptor: UnifiedScopeDescriptor;
-
-  if (params.scope === "device") {
-    if (!params.device) {
-      return { ok: false, status: 400, error: "Device parameter is required for device scope" };
-    }
-    const resolvedId = await resolveDeviceId(params.device, env, isAdmin);
-    if (!resolvedId) {
-      return { ok: false, status: 404, error: "Device not found" };
-    }
-
-    const row = await env.DB
-      .prepare(`SELECT device_id, profile_id FROM devices WHERE device_id = ?1 LIMIT 1`)
-      .bind(resolvedId)
-      .first<{ device_id: string; profile_id: string | null }>();
-    if (!row) {
-      return { ok: false, status: 404, error: "Device not found" };
-    }
-
-    if (!isAdmin) {
-      const allowed = (scope.bind as string[]) ?? [];
-      if (!allowed.includes(row.profile_id ?? "")) {
-        return { ok: false, status: 403, error: "Forbidden" };
-      }
-    }
-
-    conditions.push("t.device_id = ?");
-    bindings.push(row.device_id);
-
-    const outwardId = presentDeviceId(row.device_id, isAdmin);
-    const lookup = await buildDeviceLookup(row.device_id, env, isAdmin);
-    scopeDescriptor = { type: "device", device_id: outwardId, lookup };
-  } else if (params.scope === "profile") {
-    if (isAdmin) {
-      if (!params.profile) {
-        return { ok: false, status: 400, error: "Profile parameter is required for profile scope" };
-      }
-      const clause = buildInClause("d.profile_id", [params.profile]);
-      conditions.push(clause);
-      bindings.push(params.profile);
-      scopeDescriptor = { type: "profile", profile_ids: [params.profile] };
-    } else {
-      const allowed = (scope.bind as string[]) ?? [];
-      if (!allowed.length) {
-        conditions.push("1=0");
-        scopeDescriptor = { type: "profile", profile_ids: [] };
-      } else {
-        let selected: string[];
-        if (params.profile) {
-          if (!allowed.includes(params.profile)) {
-            return { ok: false, status: 403, error: "Forbidden" };
-          }
-          selected = [params.profile];
-        } else if (allowed.length === 1) {
-          selected = [...allowed];
-        } else {
-          return { ok: false, status: 400, error: "Profile parameter required for scoped users" };
-        }
-        const clause = buildInClause("d.profile_id", selected);
-        conditions.push(clause);
-        bindings.push(...selected);
-        scopeDescriptor = { type: "profile", profile_ids: selected };
-      }
-    }
-  } else {
-    // fleet scope
-    if (isAdmin) {
-      if (params.profile) {
-        const clause = buildInClause("d.profile_id", [params.profile]);
-        conditions.push(clause);
-        bindings.push(params.profile);
-        scopeDescriptor = { type: "fleet", profile_ids: [params.profile] };
-      } else {
-        scopeDescriptor = { type: "fleet", profile_ids: null };
-      }
-    } else {
-      const allowed = (scope.bind as string[]) ?? [];
-      if (!allowed.length) {
-        conditions.push("1=0");
-        scopeDescriptor = { type: "fleet", profile_ids: [] };
-      } else {
-        let selected = [...allowed];
-        if (params.profile) {
-          if (!allowed.includes(params.profile)) {
-            return { ok: false, status: 403, error: "Forbidden" };
-          }
-          selected = [params.profile];
-        }
-        const clause = buildInClause("d.profile_id", selected);
-        conditions.push(clause);
-        bindings.push(...selected);
-        scopeDescriptor = { type: "fleet", profile_ids: selected };
-      }
-    }
-  }
-
-  if (!isAdmin && scope.clause) {
-    conditions.push(scope.clause);
-    bindings.push(...scope.bind);
-  }
-
-  const whereClause = conditions.join(" AND ");
-
-  return {
-    ok: true,
-    config: {
-      bucketMs,
-      startMs,
-      endMs,
-      metrics,
-      whereClause,
-      bindings,
-      scopeDescriptor,
-      fillMode,
-      tenantPrecision,
-    },
-  };
+  return response;
 }
 
-function resolveMetrics(csv: string | undefined | null) {
-  if (!csv) return [...TELEMETRY_ALLOWED_METRICS];
-  const parts = csv
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean) as (typeof TELEMETRY_ALLOWED_METRICS)[number][];
-  const allowed = new Set(TELEMETRY_ALLOWED_METRICS);
-  return parts.filter((part) => allowed.has(part));
-}
-
-function resolveInterval(interval: string | undefined) {
-  if (!interval) return TELEMETRY_INTERVALS_MS["5m"];
-  return TELEMETRY_INTERVALS_MS[interval] ?? null;
-}
-
-function clampTimestamp(value: string | number | null | undefined, fallback: number): number | null {
-  if (value == null) return fallback;
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  const trimmed = String(value).trim();
-  if (!trimmed) return fallback;
-  if (/^\d+$/.test(trimmed)) {
-    const parsed = Number.parseInt(trimmed, 10);
-    return Number.isNaN(parsed) ? null : parsed;
-  }
-  const parsed = Date.parse(trimmed);
-  return Number.isNaN(parsed) ? null : parsed;
-}
-
-function buildInClause(column: string, values: string[]) {
-  if (!values.length) return "1=0";
-  const placeholders = values.map(() => "?").join(",");
-  return `${column} IN (${placeholders})`;
-}
-
-function buildSeriesSql(whereClause: string) {
-  return `
-    WITH params AS (
-      SELECT ? AS bucket_ms, ? AS start_ms, ? AS end_ms
-    ),
-    scoped AS (
-      SELECT
-        (CAST(t.ts / params.bucket_ms AS INTEGER) * params.bucket_ms) AS bucket_start_ms,
-        t.device_id,
-        t.deltaT,
-        t.thermalKW,
-        t.cop,
-        json_extract(t.metrics_json, '$.supplyC') AS supplyC,
-        json_extract(t.metrics_json, '$.returnC') AS returnC,
-        json_extract(t.metrics_json, '$.flowLps') AS flowLps,
-        json_extract(t.metrics_json, '$.powerKW') AS powerKW
-      FROM telemetry t
-      JOIN devices d ON d.device_id = t.device_id
-      JOIN params
-      WHERE ${whereClause}
-    ),
-    per_device AS (
-      SELECT
-        bucket_start_ms,
-        device_id,
-        COUNT(*) AS sample_count,
-        AVG(deltaT) AS avg_deltaT,
-        MIN(deltaT) AS min_deltaT,
-        MAX(deltaT) AS max_deltaT,
-        AVG(thermalKW) AS avg_thermalKW,
-        MIN(thermalKW) AS min_thermalKW,
-        MAX(thermalKW) AS max_thermalKW,
-        AVG(cop) AS avg_cop,
-        MIN(cop) AS min_cop,
-        MAX(cop) AS max_cop,
-        AVG(supplyC) AS avg_supplyC,
-        AVG(returnC) AS avg_returnC,
-        AVG(flowLps) AS avg_flowLps,
-        AVG(powerKW) AS avg_powerKW
-      FROM scoped
-      GROUP BY bucket_start_ms, device_id
-    ),
-    aggregated AS (
-      SELECT
-        bucket_start_ms,
-        SUM(sample_count) AS sample_count,
-        AVG(avg_deltaT) AS avg_deltaT,
-        MIN(min_deltaT) AS min_deltaT,
-        MAX(max_deltaT) AS max_deltaT,
-        AVG(avg_thermalKW) AS avg_thermalKW,
-        MIN(min_thermalKW) AS min_thermalKW,
-        MAX(max_thermalKW) AS max_thermalKW,
-        AVG(avg_cop) AS avg_cop,
-        MIN(min_cop) AS min_cop,
-        MAX(max_cop) AS max_cop,
-        AVG(avg_supplyC) AS avg_supplyC,
-        AVG(avg_returnC) AS avg_returnC,
-        AVG(avg_flowLps) AS avg_flowLps,
-        AVG(avg_powerKW) AS avg_powerKW
-      FROM per_device
-      GROUP BY bucket_start_ms
-    )
-    SELECT *
-    FROM aggregated
-    ORDER BY bucket_start_ms ASC
-  `;
-}
-
-async function fetchLatestRows(
-  env: Env,
-  deviceIds: string[],
-  scope: ReturnType<typeof buildDeviceScope>,
-) {
-  const rows: LatestStateRow[] = [];
-  for (let i = 0; i < deviceIds.length; i += LATEST_BATCH_CHUNK) {
-    const chunk = deviceIds.slice(i, i + LATEST_BATCH_CHUNK);
-    const placeholders = chunk.map(() => "?").join(",");
-    let where = `ls.device_id IN (${placeholders})`;
-    const bind: any[] = [...chunk];
-
-    if (!scope.isAdmin && scope.clause) {
-      where = andWhere(where, scope.clause.replace(/^WHERE\s+/i, ""));
-      bind.push(...scope.bind);
-    }
-
-    const query = `
-      SELECT
-        ls.device_id,
-        ls.ts,
-        ls.updated_at,
-        ls.supplyC,
-        ls.returnC,
-        ls.tankC,
-        ls.ambientC,
-        ls.flowLps,
-        ls.compCurrentA,
-        ls.eevSteps,
-        ls.powerKW,
-        ls.deltaT,
-        ls.thermalKW,
-        ls.cop,
-        ls.cop_quality,
-        ls.mode,
-        ls.defrost,
-        ls.online AS latest_online,
-        ls.faults_json,
-        ls.payload_json,
-        d.profile_id,
-        d.site,
-        d.online AS device_online,
-        d.last_seen_at
-      FROM latest_state ls
-      JOIN devices d ON d.device_id = ls.device_id
-      WHERE ${where}
-    `;
-
-    const result = await env.DB.prepare(query).bind(...bind).all<LatestStateRow>();
-    rows.push(...(result.results ?? []));
-  }
-  return rows;
-}
-
-async function presentLatestRow(
-  row: LatestStateRow,
-  env: Env,
-  isAdmin: boolean,
-  include: TelemetryIncludeFlags,
-) {
-  const lookup = await buildDeviceLookup(row.device_id, env, isAdmin);
-  const outwardId = presentDeviceId(row.device_id, isAdmin);
-  const payload = safeParseJson(row.payload_json);
-  const latest: Record<string, unknown> = {
-    ts: row.ts ?? null,
-    updated_at: row.updated_at ?? null,
-    online: row.latest_online === 1,
-    mode: row.mode ?? null,
-    defrost: row.defrost ?? null,
-    cop_quality: row.cop_quality ?? null,
-    payload,
-  };
-
-  if (include.metrics !== false) {
-    latest.supplyC = maskTelemetryNumber(row.supplyC, isAdmin);
-    latest.returnC = maskTelemetryNumber(row.returnC, isAdmin);
-    latest.tankC = maskTelemetryNumber(row.tankC, isAdmin);
-    latest.ambientC = maskTelemetryNumber(row.ambientC, isAdmin);
-    latest.flowLps = maskTelemetryNumber(row.flowLps, isAdmin, 3);
-    latest.compCurrentA = maskTelemetryNumber(row.compCurrentA, isAdmin, 2);
-    latest.eevSteps = maskTelemetryNumber(row.eevSteps, isAdmin, 0);
-    latest.powerKW = maskTelemetryNumber(row.powerKW, isAdmin, 3);
-    latest.deltaT = maskTelemetryNumber(row.deltaT, isAdmin, 2);
-    latest.thermalKW = maskTelemetryNumber(row.thermalKW, isAdmin, 3);
-    latest.cop = maskTelemetryNumber(row.cop, isAdmin, 2);
-  }
-
-  if (include.faults !== false) {
-    latest.faults = parseFaultsJson(row.faults_json);
-  }
-
-  return {
-    lookup,
-    device_id: outwardId,
-    profile_id: row.profile_id ?? null,
-    site: row.site ?? null,
-    online: row.device_online === 1,
-    last_seen_at: row.last_seen_at ?? null,
-    latest,
-  };
-}
 interface BuildSeriesOptions {
   startMs: number;
   endMs: number;
@@ -647,10 +246,10 @@ interface BuildSeriesOptions {
   tenantPrecision: number;
 }
 
-function buildSeriesResponse(rows: SeriesRow[], options: BuildSeriesOptions) {
+function buildSeriesResponse(rows: TelemetrySeriesRow[], options: BuildSeriesOptions) {
   const { startMs, endMs, bucketMs, metrics, fillMode, isAdmin, tenantPrecision } = options;
 
-  const map = new Map<number, SeriesRow>();
+  const map = new Map<number, TelemetrySeriesRow>();
   for (const row of rows) {
     map.set(row.bucket_start_ms, row);
   }
@@ -658,7 +257,7 @@ function buildSeriesResponse(rows: SeriesRow[], options: BuildSeriesOptions) {
   const startBucket = Math.floor(startMs / bucketMs) * bucketMs;
   const endBucket = Math.floor(endMs / bucketMs) * bucketMs;
 
-  const buckets: SeriesRow[] = [];
+  const buckets: TelemetrySeriesRow[] = [];
 
   if (fillMode === "carry") {
     let current = startBucket;
@@ -701,7 +300,7 @@ function buildSeriesResponse(rows: SeriesRow[], options: BuildSeriesOptions) {
   }));
 }
 
-function captureLastValues(row: SeriesRow) {
+function captureLastValues(row: TelemetrySeriesRow) {
   return {
     deltaT: row.avg_deltaT,
     thermalKW: row.avg_thermalKW,
@@ -714,7 +313,7 @@ function captureLastValues(row: SeriesRow) {
 }
 
 function buildMetricValues(
-  row: SeriesRow,
+  row: TelemetrySeriesRow,
   metrics: readonly (typeof TELEMETRY_ALLOWED_METRICS)[number][],
   isAdmin: boolean,
   tenantPrecision: number,
@@ -737,7 +336,7 @@ function buildMetricValues(
   return values;
 }
 
-function averageForMetric(row: SeriesRow, metric: typeof TELEMETRY_ALLOWED_METRICS[number]) {
+function averageForMetric(row: TelemetrySeriesRow, metric: typeof TELEMETRY_ALLOWED_METRICS[number]) {
   switch (metric) {
     case "deltaT":
       return row.avg_deltaT;
@@ -758,7 +357,7 @@ function averageForMetric(row: SeriesRow, metric: typeof TELEMETRY_ALLOWED_METRI
   }
 }
 
-function minForMetric(row: SeriesRow, metric: typeof TELEMETRY_ALLOWED_METRICS[number]) {
+function minForMetric(row: TelemetrySeriesRow, metric: typeof TELEMETRY_ALLOWED_METRICS[number]) {
   switch (metric) {
     case "deltaT":
       return row.min_deltaT;
@@ -771,7 +370,7 @@ function minForMetric(row: SeriesRow, metric: typeof TELEMETRY_ALLOWED_METRICS[n
   }
 }
 
-function maxForMetric(row: SeriesRow, metric: typeof TELEMETRY_ALLOWED_METRICS[number]) {
+function maxForMetric(row: TelemetrySeriesRow, metric: typeof TELEMETRY_ALLOWED_METRICS[number]) {
   switch (metric) {
     case "deltaT":
       return row.max_deltaT;
@@ -781,15 +380,6 @@ function maxForMetric(row: SeriesRow, metric: typeof TELEMETRY_ALLOWED_METRICS[n
       return row.max_cop;
     default:
       return null;
-  }
-}
-
-function safeParseJson(payload: string | null | undefined) {
-  if (!payload) return null;
-  try {
-    return JSON.parse(payload);
-  } catch {
-    return null;
   }
 }
 
@@ -809,4 +399,69 @@ function dedupePreserveOrder(requested: string[], extra: string[]) {
     }
   }
   return output;
+}
+
+function getTelemetryFeatureMode(env: Env): TelemetryFeatureMode {
+  const raw = String(env.TELEMETRY_REFACTOR_MODE ?? "").trim().toLowerCase();
+  if (raw === "legacy" || raw === "off") {
+    return "legacy";
+  }
+  if (raw === "compare" || raw === "shadow" || raw === "dark") {
+    return "compare";
+  }
+  return "refactor";
+}
+
+async function runLegacyShadowComparison(
+  req: Request,
+  legacyReq: Request,
+  env: Env,
+  handler: (request: Request, env: Env) => Promise<Response>,
+  refactorResponse: Response,
+  route: string,
+) {
+  try {
+    const legacyResponse = await handler(legacyReq, env);
+    await compareResponses(req, refactorResponse, legacyResponse, route);
+  } catch (error) {
+    loggerForRequest(req, { route }).warn("telemetry.refactor.shadow_failed", { error });
+  }
+}
+
+async function compareResponses(
+  req: Request,
+  refactorResponse: Response,
+  legacyResponse: Response,
+  route: string,
+) {
+  try {
+    const refactorBody = await extractBody(refactorResponse);
+    const legacyBody = await extractBody(legacyResponse);
+    const statusMismatch = refactorResponse.status !== legacyResponse.status;
+    const bodyMismatch = !deepEqual(refactorBody, legacyBody);
+    if (statusMismatch || bodyMismatch) {
+      loggerForRequest(req, { route }).warn("telemetry.refactor.shadow_mismatch", {
+        refactor_status: refactorResponse.status,
+        legacy_status: legacyResponse.status,
+        refactor_body: refactorBody,
+        legacy_body: legacyBody,
+      });
+    }
+  } catch (error) {
+    loggerForRequest(req, { route }).warn("telemetry.refactor.shadow_compare_failed", { error });
+  }
+}
+
+async function extractBody(response: Response) {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function deepEqual(lhs: unknown, rhs: unknown) {
+  return JSON.stringify(lhs) === JSON.stringify(rhs);
 }

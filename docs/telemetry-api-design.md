@@ -394,6 +394,29 @@ CREATE INDEX IF NOT EXISTS ix_bucket_cache_lookup
    - Add ops metric entries for both endpoints (reuse `recordOpsMetric` helper).
    - Consider logging bucket size + result counts for tuning.
 
+## November 2025 Architecture Update
+
+- **Layered modules:** Route logic now orchestrates two shared helpers:
+  - `src/lib/telemetry-store.ts` owns all D1 access (latest batch fetch and
+    series aggregation SQL) and encapsulates batching behaviour.
+  - `src/lib/telemetry-access.ts` centralises RBAC, device lookup/masking, and
+    the `scopeDescriptor` contract used by series responses.
+- **Feature flag:** `TELEMETRY_REFACTOR_MODE` controls rollout.
+  - `refactor` (default) serves traffic through the new modules.
+  - `compare` runs the refactored path and shadows the legacy handlers,
+    logging mismatches without changing the live response (dark launch).
+  - `legacy` routes all traffic through `src/routes/telemetry.legacy.ts` for an
+    immediate rollback.
+- **Route surface:** `src/routes/telemetry.ts` now focuses on validation +
+  orchestration, delegating to the helpers for DB and RBAC concerns.
+- **Tests:** Added unit coverage in `src/lib/__tests__/telemetry-store.test.ts`
+  and `src/lib/__tests__/telemetry-access.test.ts` exercising SQL and RBAC
+  paths. These tests share an in-memory D1 harness via
+  `src/lib/__tests__/telemetry-test-helpers.ts`.
+- **Operational notes:** Shadow comparisons rely on response cloning; ensure
+  Workers runtime stays on latest fetch implementation because legacy requests
+  are replayed during compare mode.
+
 ## Open Questions
 
 - Should the bucket cache be warmed continuously or lazily on first request?
@@ -404,4 +427,3 @@ CREATE INDEX IF NOT EXISTS ix_bucket_cache_lookup
 
 Answering these during implementation will help fine-tune the contracts without
 breaking the high-level design captured here.
-
