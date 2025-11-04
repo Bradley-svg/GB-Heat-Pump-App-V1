@@ -40,11 +40,16 @@ function normalizeKey(pathname: string): string {
 function parseAllowedPrefixes(env: Env): string[] | null {
   const raw = env.ALLOWED_PREFIXES?.trim();
   if (!raw) return null;
-  return raw
-    .split(",")
-    .map((token) => token.trim())
-    .filter(Boolean)
-    .map((token) => (token.endsWith("/") ? token : `${token}/`));
+  const prefixes = new Set<string>();
+  for (const token of raw.split(",").map((part) => part.trim()).filter(Boolean)) {
+    const normalized = token.replace(/^\/+/, "").replace(/\/+$/, "");
+    if (!normalized) {
+      // Treat a bare slash ("/" or "//") as allow-all.
+      return null;
+    }
+    prefixes.add(`${normalized}/`);
+  }
+  return prefixes.size ? [...prefixes] : null;
 }
 
 function withinAllowedPrefixes(key: string, prefixes: string[] | null) {
