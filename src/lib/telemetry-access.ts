@@ -17,6 +17,7 @@ import { userIsAdmin } from "./access";
 import type { TelemetryLatestRow } from "./telemetry-store";
 
 type TelemetryIncludeFlags = TelemetryLatestBatchInput["include"];
+const SENSITIVE_PAYLOAD_KEYS = ["secret", "token", "password", "key", "signature", "auth"];
 
 export interface LatestBatchRequestedDevice {
   token: string;
@@ -127,7 +128,9 @@ export async function presentLatestBatchRow(
 
   if (includeMetrics) {
     if (isAdmin) {
-      latest.payload = safeParseJson(row.payload_json);
+      const parsedPayload = safeParseJson(row.payload_json);
+      const sanitized = parsedPayload === null ? null : sanitizeTelemetryPayload(parsedPayload);
+      latest.payload = sanitized ?? null;
     }
     latest.supplyC = maskTelemetryNumber(row.supplyC, isAdmin);
     latest.returnC = maskTelemetryNumber(row.returnC, isAdmin);
@@ -143,7 +146,10 @@ export async function presentLatestBatchRow(
   } else if (isAdmin) {
     const parsedPayload = safeParseJson(row.payload_json);
     if (parsedPayload !== null) {
-      latest.payload = parsedPayload;
+      const sanitized = sanitizeTelemetryPayload(parsedPayload);
+      if (sanitized !== undefined) {
+        latest.payload = sanitized;
+      }
     }
   }
 
@@ -356,6 +362,48 @@ function buildInClause(column: string, values: string[]) {
   if (!values.length) return "1=0";
   const placeholders = values.map(() => "?").join(",");
   return `${column} IN (${placeholders})`;
+}
+
+function sanitizeTelemetryPayload(payload: unknown, depth = 0): unknown {
+  if (payload === null) return null;
+  if (depth >= 6) return null;
+
+  if (Array.isArray(payload)) {
+    const items = payload
+      .slice(0, 50)
+      .map((item) => sanitizeTelemetryPayload(item, depth + 1))
+      .filter((item) => item !== undefined);
+    return items;
+  }
+
+  if (typeof payload === "object") {
+    const entries = Object.entries(payload as Record<string, unknown>);
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of entries) {
+      if (!key) continue;
+      const normalized = key.toLowerCase();
+      if (SENSITIVE_PAYLOAD_KEYS.some((fragment) => normalized.includes(fragment))) {
+        result[key] = "[redacted]";
+        continue;
+      }
+      const sanitized = sanitizeTelemetryPayload(value, depth + 1);
+      if (sanitized !== undefined) {
+        result[key] = sanitized;
+      }
+    }
+    return result;
+  }
+
+  if (typeof payload === "string") {
+    if (!payload.trim()) return "";
+    return payload.length > 512 ? `${payload.slice(0, 509)}...` : payload;
+  }
+
+  if (typeof payload === "number" || typeof payload === "boolean") {
+    return payload;
+  }
+
+  return undefined;
 }
 
 function safeParseJson(payload: string | null | undefined) {

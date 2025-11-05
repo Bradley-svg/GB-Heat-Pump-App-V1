@@ -57,16 +57,26 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
   return parsed;
 }
 
+function parseNonNegativeInt(raw: string | undefined, fallback: number): number {
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return parsed;
+}
+
 function parsedRateLimit(env: Env): number {
   return parsePositiveInt(env.INGEST_RATE_LIMIT_PER_MIN, 120);
 }
 
 function parsedFailureLimit(env: Env, overallLimit: number): number {
-  const fallback =
-    overallLimit > 0 ?
-      Math.max(10, Math.floor(overallLimit / 2)) :
-      parsePositiveInt(env.INGEST_FAILURE_LIMIT_PER_MIN, 0);
-  return parsePositiveInt(env.INGEST_FAILURE_LIMIT_PER_MIN, fallback);
+  const explicit = parseNonNegativeInt(env.INGEST_FAILURE_LIMIT_PER_MIN, -1);
+  if (explicit >= 0) {
+    return explicit;
+  }
+  if (overallLimit > 0) {
+    return Math.max(10, Math.floor(overallLimit / 2));
+  }
+  return 0;
 }
 
 async function isRateLimited(

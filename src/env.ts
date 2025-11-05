@@ -231,11 +231,11 @@ const EnvSchema = z
 
     if (ingestFailureLimitRaw) {
       const parsed = Number.parseInt(ingestFailureLimitRaw, 10);
-      if (Number.isNaN(parsed) || parsed <= 0) {
+      if (Number.isNaN(parsed) || parsed < 0) {
         ctx.addIssue({
           path: ["INGEST_FAILURE_LIMIT_PER_MIN"],
           code: z.ZodIssueCode.custom,
-          message: "INGEST_FAILURE_LIMIT_PER_MIN must be a positive integer",
+          message: "INGEST_FAILURE_LIMIT_PER_MIN must be a non-negative integer",
         });
       }
     }

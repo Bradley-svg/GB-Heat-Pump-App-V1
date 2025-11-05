@@ -1,4 +1,6 @@
 import type { Env } from "../env";
+import { recordOpsMetric } from "../lib/ops-metrics";
+import { clearCronCursor, readCronCursor, writeCronCursor } from "../lib/cron-cursor";
 import { systemLogger, type Logger } from "../utils/logging";
 
 const DEFAULT_RETENTION_DAYS = 90;
@@ -29,6 +31,7 @@ type RetentionTableSummary = {
   batches: number;
   backups: string[];
   hasMore: boolean;
+  resumeCursor: number | null;
 };
 
 export type RetentionSummary = {
@@ -38,6 +41,7 @@ export type RetentionSummary = {
   telemetry: RetentionTableSummary;
   opsMetricsDeleted: number;
   telemetryHasMore: boolean;
+  telemetryCursor: number | null;
 };
 
 export interface RetentionOptions {
@@ -54,8 +58,10 @@ type ArchiveTarget = {
 
 const BOOLEAN_TRUE = new Set(["1", "true", "yes", "on"]);
 const MAX_TELEMETRY_BATCHES_PER_RUN = 40;
+const TELEMETRY_CURSOR_KEY = "retention.telemetry";
 
 export async function runTelemetryRetention(env: Env, options: RetentionOptions = {}): Promise<RetentionSummary> {
+  const startedAt = Date.now();
   const now = options.now ?? new Date();
   const retentionDays = parseRetentionDays(env.TELEMETRY_RETENTION_DAYS);
   const cutoffMs = now.getTime() - retentionDays * MS_PER_DAY;
@@ -90,6 +96,12 @@ export async function runTelemetryRetention(env: Env, options: RetentionOptions 
     backup_enabled: shouldBackup,
   });
 
+  let existingCursor: number | null = null;
+  if (!options.dryRun) {
+    const rawCursor = await readCronCursor(env, TELEMETRY_CURSOR_KEY);
+    existingCursor = rawCursor ? Number(rawCursor) : null;
+  }
+
   const telemetrySummary = await pruneTelemetry(env, {
     cutoffMs,
     cutoffIso,
@@ -97,7 +109,16 @@ export async function runTelemetryRetention(env: Env, options: RetentionOptions 
     log: log.with({ table: "telemetry" }),
     archive: shouldBackup ? archiveTarget : null,
     dryRun: Boolean(options.dryRun),
+    cursor: existingCursor,
   });
+
+  if (!options.dryRun) {
+    if (telemetrySummary.resumeCursor !== null) {
+      await writeCronCursor(env, TELEMETRY_CURSOR_KEY, telemetrySummary.resumeCursor);
+    } else {
+      await clearCronCursor(env, TELEMETRY_CURSOR_KEY);
+    }
+  }
 
   const opsDeleted = await pruneOpsMetrics(env, {
     cutoffIso,
@@ -111,7 +132,11 @@ export async function runTelemetryRetention(env: Env, options: RetentionOptions 
     telemetry_backups: telemetrySummary.backups.length,
     ops_metrics_deleted: opsDeleted,
     telemetry_has_more: telemetrySummary.hasMore,
+    telemetry_resume_cursor: telemetrySummary.resumeCursor,
   });
+
+  const statusCode = telemetrySummary.hasMore ? 299 : 200;
+  await recordOpsMetric(env, "/cron/retention", statusCode, Date.now() - startedAt, null, log);
 
   return {
     retentionDays,
@@ -120,6 +145,7 @@ export async function runTelemetryRetention(env: Env, options: RetentionOptions 
     telemetry: telemetrySummary,
     opsMetricsDeleted: opsDeleted,
     telemetryHasMore: telemetrySummary.hasMore,
+    telemetryCursor: telemetrySummary.resumeCursor,
   };
 }
 
@@ -163,6 +189,7 @@ async function pruneTelemetry(
     archive: ArchiveTarget | null;
     dryRun: boolean;
     log: Logger;
+    cursor: number | null;
   },
 ): Promise<RetentionTableSummary> {
   const summary: RetentionTableSummary = {
@@ -171,25 +198,34 @@ async function pruneTelemetry(
     batches: 0,
     backups: [],
     hasMore: false,
+    resumeCursor: params.cursor ?? null,
   };
 
+  let cursor = params.cursor ?? 0;
+
   while (true) {
-    const batch = await env.DB.prepare(
-      `SELECT rowid, device_id, ts, metrics_json, deltaT, thermalKW, cop, cop_quality, status_json, faults_json
-         FROM telemetry
-        WHERE ts < ?1
-        ORDER BY ts
-        LIMIT ?2`,
-    )
-      .bind(params.cutoffMs, TELEMETRY_BATCH_SIZE)
+    const batch = await env.DB
+      .prepare(
+        `SELECT rowid, device_id, ts, metrics_json, deltaT, thermalKW, cop, cop_quality, status_json, faults_json
+           FROM telemetry
+          WHERE ts < ?1
+            AND rowid > ?2
+          ORDER BY rowid
+          LIMIT ?3`,
+      )
+      .bind(params.cutoffMs, cursor, TELEMETRY_BATCH_SIZE)
       .all<TelemetryRow>();
 
     const rows = batch.results ?? [];
-    if (!rows.length) break;
+    if (!rows.length) {
+      summary.resumeCursor = null;
+      break;
+    }
 
     summary.scanned += rows.length;
     summary.batches += 1;
     const rowIds = rows.map((row) => row.rowid).filter((value) => typeof value === "number");
+    const lastRowId = rowIds[rowIds.length - 1] ?? cursor;
 
     if (!params.dryRun && params.archive) {
       const key = buildArchiveKey(params.archive.prefix, params.jobId, "telemetry", summary.batches);
@@ -232,12 +268,21 @@ async function pruneTelemetry(
       summary.deleted += rowIds.length;
     }
 
+    cursor = lastRowId;
+    summary.resumeCursor = lastRowId;
+
     if (summary.batches >= MAX_TELEMETRY_BATCHES_PER_RUN) {
       summary.hasMore = true;
       params.log.warn("retention.batch_limit_reached", {
         batches: summary.batches,
         deleted: params.dryRun ? 0 : summary.deleted,
       });
+      break;
+    }
+
+    if (rows.length < TELEMETRY_BATCH_SIZE) {
+      summary.hasMore = false;
+      summary.resumeCursor = null;
       break;
     }
   }
@@ -247,6 +292,7 @@ async function pruneTelemetry(
     deleted: params.dryRun ? 0 : summary.deleted,
     batches: summary.batches,
     has_more: summary.hasMore,
+    resume_cursor: summary.resumeCursor,
   });
 
   return summary;

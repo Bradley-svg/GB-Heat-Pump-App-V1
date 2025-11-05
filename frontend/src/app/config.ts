@@ -12,11 +12,17 @@ const DEFAULT_APP_CONFIG: AppConfig = {
 
 const HTTP_SCHEMES = new Set(["http:", "https:"]);
 const ABSOLUTE_SCHEME = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
+const DEFAULT_BASE_ORIGIN_FALLBACK = "http://localhost";
 
 declare global {
   interface Window {
     __APP_CONFIG__?: Partial<AppConfig>;
   }
+}
+
+interface SanitizeReturnOptions {
+  baseOrigin?: string | null;
+  allowedOrigins?: string[];
 }
 
 export function readAppConfig(): AppConfig {
@@ -37,36 +43,71 @@ function isSafeRelativePath(candidate: string): boolean {
   return candidate.startsWith("/") && !candidate.startsWith("//");
 }
 
-function sanitizeConfiguredReturnDefault(raw: string): string {
-  if (typeof window === "undefined") {
-    return DEFAULT_APP_CONFIG.returnDefault;
+function resolveWindowOrigin(): string | null {
+  if (typeof window === "undefined" || !window.location) {
+    return null;
   }
-  return sanitizeReturnValue(raw, DEFAULT_APP_CONFIG.returnDefault);
+  try {
+    return window.location.origin;
+  } catch {
+    return null;
+  }
 }
 
-function sanitizeReturnValue(raw: string | null | undefined, fallback: string): string {
+function sanitizeConfiguredReturnDefault(raw: string): string {
+  const baseOrigin = resolveWindowOrigin();
+  if (!baseOrigin) {
+    return DEFAULT_APP_CONFIG.returnDefault;
+  }
+  return sanitizeReturnValue(raw, DEFAULT_APP_CONFIG.returnDefault, {
+    baseOrigin,
+    allowedOrigins: [DEFAULT_APP_CONFIG.returnDefault],
+  });
+}
+
+function sanitizeReturnValue(
+  raw: string | null | undefined,
+  fallback: string,
+  options: SanitizeReturnOptions = {},
+): string {
   const candidate = raw?.trim();
   if (!candidate) return fallback;
   if (isSafeRelativePath(candidate)) {
     return candidate;
   }
-  if (candidate.startsWith("//") || typeof window === "undefined") {
+  if (candidate.startsWith("//")) {
+    return fallback;
+  }
+
+  const baseOrigin = options.baseOrigin ?? resolveWindowOrigin();
+  const allowedOrigins = new Set(
+    (options.allowedOrigins ?? []).filter((origin): origin is string => Boolean(origin)),
+  );
+  if (baseOrigin) {
+    allowedOrigins.add(baseOrigin);
+  }
+
+  let fallbackOrigin: string | null = null;
+  if (fallback) {
+    try {
+      fallbackOrigin = new URL(fallback, baseOrigin ?? DEFAULT_BASE_ORIGIN_FALLBACK).origin;
+      allowedOrigins.add(fallbackOrigin);
+    } catch {
+      fallbackOrigin = null;
+    }
+  }
+
+  const anchorOrigin = baseOrigin ?? fallbackOrigin;
+  if (!anchorOrigin) {
     return fallback;
   }
 
   try {
-    const allowedOrigins = new Set<string>([window.location.origin]);
-    try {
-      const fallbackUrl = new URL(fallback, window.location.origin);
-      allowedOrigins.add(fallbackUrl.origin);
-    } catch {
-      // ignore parse issues with fallback value
-    }
-    const parsed = new URL(candidate, window.location.origin);
+    const parsed = new URL(candidate, anchorOrigin);
     if (!HTTP_SCHEMES.has(parsed.protocol)) {
       return fallback;
     }
-    if (!allowedOrigins.has(parsed.origin)) {
+    if (allowedOrigins.size && !allowedOrigins.has(parsed.origin)) {
       return fallback;
     }
     if (ABSOLUTE_SCHEME.test(candidate)) {
@@ -79,7 +120,10 @@ function sanitizeReturnValue(raw: string | null | undefined, fallback: string): 
 }
 
 function sanitizeReturnCandidate(raw: string | null, config: AppConfig): string {
-  return sanitizeReturnValue(raw, config.returnDefault);
+  return sanitizeReturnValue(raw, config.returnDefault, {
+    baseOrigin: resolveWindowOrigin(),
+    allowedOrigins: [config.returnDefault],
+  });
 }
 
 export function resolveReturnUrl(config: AppConfig): string {
@@ -89,3 +133,4 @@ export function resolveReturnUrl(config: AppConfig): string {
   const search = new URLSearchParams(window.location.search);
   return sanitizeReturnCandidate(search.get("return"), config);
 }
+

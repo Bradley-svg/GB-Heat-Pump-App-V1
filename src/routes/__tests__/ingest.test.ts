@@ -527,4 +527,66 @@ describe("handleIngest", () => {
     expect(verifyDeviceKeyMock).not.toHaveBeenCalled();
     expect(failureFirst).toHaveBeenCalled();
   });
+
+  it("skips failure rate checks when the limit is disabled", async () => {
+    verifyDeviceKeyMock.mockResolvedValue({ ok: true, deviceKeyHash: DEVICE_KEY_HASH });
+    const selectDevice = vi.fn().mockResolvedValue({ profile_id: "demo" });
+    const totalFirst = vi.fn().mockResolvedValue({ cnt: 0 });
+
+    const env = baseEnv({
+      INGEST_RATE_LIMIT_PER_MIN: "0",
+      INGEST_FAILURE_LIMIT_PER_MIN: "0",
+    });
+    const defaultPrepare = env.DB.prepare as any;
+
+    env.DB.prepare = vi.fn((sql: string) => {
+      if (isFailureRateLimitQuery(sql)) {
+        return {
+          bind: vi.fn(() => {
+            throw new Error("failure limit query should not run when disabled");
+          }),
+        } as any;
+      }
+
+      if (isRateLimitCountQuery(sql)) {
+        return {
+          bind: vi.fn(() => ({
+            first: totalFirst,
+          })),
+        } as any;
+      }
+
+      if (sql.includes("SELECT profile_id FROM devices")) {
+        return {
+          bind: vi.fn(() => ({
+            first: selectDevice,
+          })),
+        } as any;
+      }
+
+      if (sql.startsWith("INSERT INTO ops_metrics")) {
+        return {
+          bind: vi.fn(() => ({
+            run: vi.fn(),
+          })),
+        } as any;
+      }
+
+      return defaultPrepare(sql);
+    });
+
+    (env.DB as any).batch = vi.fn();
+
+    const payload = {
+      device_id: "dev-disabled",
+      metrics: { supplyC: 20 },
+    };
+
+    const req = await buildSignedRequest("demo", payload);
+    const res = await handleIngest(req, env, "demo");
+
+    expect(res.status).not.toBe(429);
+    expect(selectDevice).toHaveBeenCalled();
+    expect(totalFirst).toHaveBeenCalled();
+  });
 });

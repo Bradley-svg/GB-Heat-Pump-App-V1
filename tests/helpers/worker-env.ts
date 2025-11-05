@@ -22,6 +22,7 @@ const MIGRATION_FILES = [
   "0008_device_key_hash_constraint.sql",
   "0009_ingest_nonces.sql",
   "0010_ops_metrics_device_route_index.sql",
+  "0011_cron_cursors.sql",
   "schema-indexes.sql",
 ];
 
@@ -73,3 +74,4 @@ export async function createWorkerEnv(overrides: Partial<Env> = {}): Promise<Wor
     },
   };
 }
+

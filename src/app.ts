@@ -10,7 +10,6 @@ import {
   withSecurityHeaders,
   type SecurityHeaderOptions,
 } from "./utils/responses";
-import { chunk } from "./utils";
 import { handleRequest } from "./router";
 import { systemLogger } from "./utils/logging";
 import { resolveAppConfig, serializeAppConfig } from "./app-config";
@@ -19,6 +18,8 @@ import { expandAssetBase } from "./utils/asset-base";
 import { resolveLogoutReturn } from "./utils/return-url";
 import { handleR2Request } from "./r2";
 import { runTelemetryRetention, TELEMETRY_RETENTION_CRON } from "./jobs/retention";
+import { clearCronCursor, readCronCursor, writeCronCursor } from "./lib/cron-cursor";
+import { recordOpsMetric } from "./lib/ops-metrics";
 export { resolveAppConfig, serializeAppConfig } from "./app-config";
 
 const STATIC_CONTENT_TYPES: Record<string, string> = {
@@ -31,6 +32,7 @@ const DEFAULT_HEARTBEAT_INTERVAL_SECS = 30;
 const DEFAULT_OFFLINE_MULTIPLIER = 6;
 const OFFLINE_BATCH_SIZE = 100;
 const OFFLINE_MAX_BATCHES_PER_RUN = 40;
+const OFFLINE_CURSOR_KEY = "offline.devices";
 
 function extname(path: string): string {
   const idx = path.lastIndexOf(".");
@@ -318,32 +320,62 @@ export default {
     const thresholdSecs = Math.max(60, hbInterval * multiplier);
     const days = thresholdSecs / 86400;
 
-    const stale = await env.DB.prepare(
-      `SELECT device_id FROM devices
-        WHERE online = 1
-          AND (last_seen_at IS NULL OR (julianday('now') - julianday(last_seen_at)) > ?1)`,
-    )
-      .bind(days)
-      .all<{ device_id: string }>();
+    const offlineStartedAt = Date.now();
 
-    const ids = stale.results?.map((r) => r.device_id) ?? [];
-    if (!ids.length) {
+    const totalRow = await env.DB
+      .prepare(
+        `SELECT COUNT(*) AS cnt
+           FROM devices
+          WHERE online = 1
+            AND (last_seen_at IS NULL OR (julianday('now') - julianday(last_seen_at)) > ?1)`,
+      )
+      .bind(days)
+      .first<{ cnt: number | string | null }>();
+    const totalStale = Number(totalRow?.cnt ?? 0);
+
+    if (!Number.isFinite(totalStale) || totalStale <= 0) {
+      await clearCronCursor(env, OFFLINE_CURSOR_KEY);
       log.debug("cron.offline_check.noop", { stale_count: 0, threshold_secs: thresholdSecs });
+      await recordOpsMetric(env, "/cron/offline", 200, Date.now() - offlineStartedAt, null, log);
       return;
     }
 
     log.info("cron.offline_check.start", {
-      stale_count: ids.length,
+      stale_count: totalStale,
       threshold_secs: thresholdSecs,
     });
 
     const ts = new Date().toISOString();
+    const existingCursorRaw = await readCronCursor(env, OFFLINE_CURSOR_KEY);
+    let cursor = existingCursorRaw ? Number(existingCursorRaw) : 0;
+    let resumeCursor: number | null = existingCursorRaw ? Number(existingCursorRaw) : null;
     let processed = 0;
     let batches = 0;
     let truncated = false;
 
-    for (const batchIds of chunk(ids, OFFLINE_BATCH_SIZE)) {
+    while (true) {
+      const rowsResult = await env.DB
+        .prepare(
+          `SELECT rowid, device_id
+             FROM devices
+            WHERE online = 1
+              AND (last_seen_at IS NULL OR (julianday('now') - julianday(last_seen_at)) > ?1)
+              AND rowid > ?2
+            ORDER BY rowid
+            LIMIT ?3`,
+        )
+        .bind(days, cursor, OFFLINE_BATCH_SIZE)
+        .all<{ rowid: number; device_id: string }>();
+
+      const rows = rowsResult.results ?? [];
+      if (!rows.length) {
+        resumeCursor = null;
+        break;
+      }
+
+      const batchIds = rows.map((row) => row.device_id);
       batches += 1;
+
       const devicePlaceholders = batchIds.map(() => "?").join(",");
       await env.DB.prepare(
         `UPDATE devices SET online=0 WHERE online=1 AND device_id IN (${devicePlaceholders})`,
@@ -370,17 +402,35 @@ export default {
         .run();
 
       processed += batchIds.length;
+      const lastRowId = rows[rows.length - 1]?.rowid ?? cursor;
+      cursor = lastRowId;
+      resumeCursor = lastRowId;
+
       if (batches >= OFFLINE_MAX_BATCHES_PER_RUN) {
         truncated = true;
         break;
       }
+
+      if (rows.length < OFFLINE_BATCH_SIZE) {
+        resumeCursor = null;
+        break;
+      }
+    }
+
+    if (resumeCursor !== null) {
+      await writeCronCursor(env, OFFLINE_CURSOR_KEY, resumeCursor);
+    } else {
+      await clearCronCursor(env, OFFLINE_CURSOR_KEY);
     }
 
     log.info("cron.offline_check.completed", {
-      stale_count: ids.length,
+      stale_count: totalStale,
       processed,
       batches,
       truncated,
+      resume_cursor: resumeCursor,
     });
+
+    await recordOpsMetric(env, "/cron/offline", truncated ? 299 : 200, Date.now() - offlineStartedAt, null, log);
   },
 };

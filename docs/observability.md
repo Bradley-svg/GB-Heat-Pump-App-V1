@@ -60,6 +60,11 @@ Current thresholds baked into `src/telemetry/index.ts`:
 | Consecutive ingest failures | 3 | 5 | Consecutive DB/validation failures by device. |
 | Ops metrics insert failures per min | 3 | 6 | Derived from log-based metric; indicates D1 writes rejecting ops metrics. |
 
+In addition, scheduled jobs emit synthetic ops metrics:
+
+- `/cron/retention` records a single entry per run with status `299` when the job exits early and needs to resume later.
+- `/cron/offline` records status `299` when the offline sweep truncates due to batch limits. Alert if either route reports status `299` more than once for the same minute.
+
 The JSON payload also surfaces real time indicators:
 
 - `devices.offline_ratio`

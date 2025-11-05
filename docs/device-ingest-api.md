@@ -1,4 +1,4 @@
-﻿# Device Telemetry Ingest & Heartbeat API
+# Device Telemetry Ingest & Heartbeat API
 
 This runbook describes how firmware and gateway clients should build requests for the telemetry ingest and heartbeat endpoints, how the backend validates them, and which responses warrant retries.
 
@@ -75,7 +75,7 @@ Signature generation steps:
 ## Timestamp Handling
 
 - Payload timestamps must parse as valid dates and fall within **+5 minutes ahead** and **1 year behind** the server clock. Requests outside this window fail with `400 Timestamp too far in future/too old`.
-- Signature freshness uses `X-GREENBRO-TIMESTAMP`. The default tolerance is **Â±300 seconds** (5 minutes). Set `INGEST_SIGNATURE_TOLERANCE_SECS` to adjust.
+- Signature freshness uses `X-GREENBRO-TIMESTAMP`. The default tolerance is **+/- 300 seconds** (5 minutes). Set `INGEST_SIGNATURE_TOLERANCE_SECS` to adjust.
 - The heartbeat response returns `{ "ok": true, "server_time": "<ISO timestamp>" }` so clients can realign their local clocks.
 
 ## Replay Protection
@@ -87,7 +87,7 @@ Signature generation steps:
 ## Rate Limiting
 
 - Telemetry and heartbeat endpoints share a per-device success counter. The default ceiling is **120 requests per minute** per route (`INGEST_RATE_LIMIT_PER_MIN`).
-- Repeated authentication/validation failures now trip a separate guardrail controlled by `INGEST_FAILURE_LIMIT_PER_MIN` (default **60**). The Worker blocks further requests with `429` until the failure rate falls below the threshold.
+- Repeated authentication/validation failures trip a separate guardrail controlled by `INGEST_FAILURE_LIMIT_PER_MIN` (defaults to half of the success ceiling, minimum **10**; set to `0` to disable). The worker blocks further requests with `429` until the failure rate falls below the threshold.
 - All throttles are enforced before device-lookup work is done; firmware should back off after any `429 Rate limit exceeded` response (see below).
 
 ## Response Codes
@@ -100,7 +100,7 @@ Signature generation steps:
 | `403` | Origin blocked by CORS policy. | Same. | Fix configuration; no automatic retry. |
 | `409` | Profile mismatch, duplicate payload hit dedupe window. | Profile mismatch. | Update profile mapping; skip retries for duplicate responses. |
 | `413` | Payload over 256 KB. | N/A. | Reduce payload size. |
-| `429` | Per-device success limit exceeded or repeated failures breached `INGEST_FAILURE_LIMIT_PER_MIN`. | Same. | Retry with exponential backoff after ~1 minute; honor both ingest limit variables and correct validation/auth issues before resending. |
+| `429` | Per-device success limit exceeded or repeated failures breached `INGEST_FAILURE_LIMIT_PER_MIN`. | Same. | Retry with exponential backoff after ~1 minute; honour both ingest limit variables, correct validation/auth issues, or set the failure limit to `0` if the guardrail should be disabled. |
 | `500` | Database or worker failure. | Same. | Retry with capped exponential backoff and jitter. Alert if sustained. |
 
 All error responses include an `error` string and, for validation failures, a `details` array enumerating field-level issues.
@@ -118,3 +118,4 @@ To re-send rejected telemetry after correcting a transient fault, assign a new p
 - The backend records per-request metrics in `ops_metrics`. Confirm device counters there when diagnosing rate limits.
 - Expired replay nonces are pruned continuously; no client action is required.
 - Firmware should monitor `server_time` from heartbeat responses to detect clock drift and ensure the signature timestamp remains within tolerance.
+
