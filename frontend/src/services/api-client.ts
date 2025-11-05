@@ -161,9 +161,7 @@ async function requestJson<T>(
   }
 
   const requestInit: RequestInit = { ...init, headers, signal };
-  if (requestInit.credentials === undefined) {
-    requestInit.credentials = "include";
-  }
+  requestInit.credentials ??= "include";
 
   const response = await fetch(url, requestInit);
   const text = await response.text();

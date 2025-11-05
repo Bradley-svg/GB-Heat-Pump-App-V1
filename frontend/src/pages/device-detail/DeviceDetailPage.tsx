@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { useApiClient, useCurrentUserState } from "../../app/contexts";
+import { useApiRequest } from "../../app/hooks/use-api-request";
 import { Page } from "../../components";
 import { Sparkline } from "../../components/Sparkline";
 import { formatDate, formatNumber, formatRelative } from "../../utils/format";
 import type {
-  DeviceListItem,
   DeviceListResponse,
   TelemetryLatestBatchItem,
   TelemetryLatestBatchResponse,
@@ -16,8 +16,62 @@ import type {
   TelemetrySeriesResponse,
 } from "../../types/api";
 
-export default function DeviceDetailPage() {
+interface DeviceTelemetryData {
+  latest: TelemetryLatestBatchItem | null;
+  series: TelemetrySeriesResponse | null;
+}
+
+function useDeviceRoster(scopeMine: boolean) {
   const api = useApiClient();
+
+  const fetchRoster = useCallback(
+    ({ signal }: { signal: AbortSignal }) => {
+      const params = new URLSearchParams({
+        limit: "50",
+        mine: scopeMine ? "1" : "0",
+      });
+      return api.get<DeviceListResponse>(`/api/devices?${params.toString()}`, { signal });
+    },
+    [api, scopeMine],
+  );
+
+  return useApiRequest(fetchRoster, { enableAutoRetry: true });
+}
+
+function useDeviceTelemetry(lookup: string | null) {
+  const api = useApiClient();
+
+  const fetchTelemetry = useCallback(
+    async ({ signal }: { signal: AbortSignal }): Promise<DeviceTelemetryData> => {
+      if (!lookup) {
+        return { latest: null, series: null };
+      }
+
+      const params = new URLSearchParams({
+        scope: "device",
+        device: lookup,
+        interval: "5m",
+        limit: "120",
+        fill: "carry",
+      });
+
+      const [latestBatch, series] = await Promise.all([
+        api.post<TelemetryLatestBatchResponse>("/api/telemetry/latest-batch", { devices: [lookup] }, { signal }),
+        api.get<TelemetrySeriesResponse>(`/api/telemetry/series?${params.toString()}`, { signal }),
+      ]);
+
+      return {
+        latest: latestBatch.items?.[0] ?? null,
+        series,
+      };
+    },
+    [api, lookup],
+  );
+
+  return useApiRequest<DeviceTelemetryData>(fetchTelemetry, { enableAutoRetry: true });
+}
+
+export default function DeviceDetailPage() {
   const currentUser = useCurrentUserState();
   const user = currentUser.user;
   const isAdmin = useMemo(
@@ -26,29 +80,9 @@ export default function DeviceDetailPage() {
   );
   const [mineOnly, setMineOnly] = useState<boolean>(() => !isAdmin);
   const [searchParams, setSearchParams] = useSearchParams();
-  const queryDevice = searchParams.get("device") ?? "";
-
-  const [devices, setDevices] = useState<DeviceListItem[]>([]);
-  const [selected, setSelected] = useState<string>(queryDevice);
-  const [latest, setLatest] = useState<TelemetryLatestBatchItem | null>(null);
-  const [series, setSeries] = useState<TelemetrySeriesResponse | null>(null);
-  const [selectedDisplay, setSelectedDisplay] = useState<string>("");
-  const [loading, setLoading] = useState(false);
-  const [telemetryError, setTelemetryError] = useState(false);
-  const [deviceLoadError, setDeviceLoadError] = useState(false);
-  const scopeMine = isAdmin ? mineOnly : true;
-  const requestIdRef = useRef(0);
+  const initialDevice = searchParams.get("device") ?? "";
+  const [selected, setSelected] = useState<string>(initialDevice);
   const previousIsAdminRef = useRef(isAdmin);
-  const hasLoadedDevicesRef = useRef(false);
-  const telemetryControllerRef = useRef<AbortController | null>(null);
-  const isMountedRef = useRef(true);
-
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false;
-      telemetryControllerRef.current?.abort();
-    };
-  }, []);
 
   useEffect(() => {
     if (!previousIsAdminRef.current && isAdmin) {
@@ -57,108 +91,39 @@ export default function DeviceDetailPage() {
     previousIsAdminRef.current = isAdmin;
   }, [isAdmin]);
 
+  const scopeMine = isAdmin ? mineOnly : true;
+  const roster = useDeviceRoster(scopeMine);
+  const devices = useMemo(() => roster.data?.items ?? [], [roster.data]);
+  const deviceLoadError = roster.error !== null;
+
   useEffect(() => {
-    if (!queryDevice) return;
-    if (!hasLoadedDevicesRef.current || devices.some((device) => device.lookup === queryDevice)) {
-      setSelected((prev) => (prev === queryDevice ? prev : queryDevice));
+    if (!initialDevice) {
+      return;
     }
-  }, [devices, queryDevice]);
+    setSelected((prev) => (prev === initialDevice ? prev : initialDevice));
+  }, [initialDevice]);
 
   useEffect(() => {
-    let cancelled = false;
-    const controller = new AbortController();
-
-    async function loadDevices() {
-      try {
-        const params = new URLSearchParams({
-          limit: "50",
-          mine: scopeMine ? "1" : "0",
-        });
-        const payload = await api.get<DeviceListResponse>(`/api/devices?${params.toString()}`, {
-          signal: controller.signal,
-        });
-        if (cancelled) return;
-        const items = payload.items ?? [];
-        setDevices(items);
-        hasLoadedDevicesRef.current = true;
-        setSelected((prev) => {
-          if (prev && items.some((device) => device.lookup === prev)) {
-            return prev;
-          }
-          return items[0]?.lookup ?? "";
-        });
-        setDeviceLoadError(false);
-      } catch {
-        if (cancelled || controller.signal.aborted) {
-          return;
-        }
-        setDevices([]);
-        hasLoadedDevicesRef.current = true;
+    if (!devices.length) {
+      if (roster.phase === "loading" || roster.isFetching) {
+        return;
+      }
+      if (selected !== "") {
         setSelected("");
-        setLatest(null);
-        setSeries(null);
-        setSelectedDisplay("");
-        setDeviceLoadError(true);
       }
+      return;
     }
 
-    void loadDevices();
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [api, scopeMine]);
+    if (selected && devices.some((device) => device.lookup === selected)) {
+      return;
+    }
 
-  const load = useCallback(
-    async (lookup: string) => {
-      if (!lookup) return;
-      const requestId = requestIdRef.current + 1;
-      requestIdRef.current = requestId;
-      setLoading(true);
-      setTelemetryError(false);
-      telemetryControllerRef.current?.abort();
-      const controller = new AbortController();
-      telemetryControllerRef.current = controller;
-      try {
-        const params = new URLSearchParams({
-          scope: "device",
-          device: lookup,
-          interval: "5m",
-          limit: "120",
-          fill: "carry",
-        });
-        const [latestRes, seriesRes] = await Promise.all([
-          api.post<TelemetryLatestBatchResponse>(
-            "/api/telemetry/latest-batch",
-            { devices: [lookup] },
-            { signal: controller.signal },
-          ),
-          api.get<TelemetrySeriesResponse>(`/api/telemetry/series?${params.toString()}`, {
-            signal: controller.signal,
-          }),
-        ]);
-        if (!isMountedRef.current || requestIdRef.current !== requestId || controller.signal.aborted) {
-          return;
-        }
-        const batchItem = latestRes.items?.[0] ?? null;
-        setLatest(batchItem);
-        setSeries(seriesRes);
-        setSelectedDisplay(batchItem?.device_id ?? "");
-        setLoading(false);
-      } catch (error) {
-        if (!isMountedRef.current || controller.signal.aborted || requestIdRef.current !== requestId) {
-          return;
-        }
-        setTelemetryError(true);
-        setLoading(false);
-      } finally {
-        if (telemetryControllerRef.current === controller) {
-          telemetryControllerRef.current = null;
-        }
-      }
-    },
-    [api],
-  );
+    const fallback =
+      initialDevice && devices.some((device) => device.lookup === initialDevice) ?
+        initialDevice :
+        devices[0].lookup;
+    setSelected(fallback);
+  }, [devices, initialDevice, roster.isFetching, roster.phase, selected]);
 
   useEffect(() => {
     setSearchParams((prev) => {
@@ -171,20 +136,20 @@ export default function DeviceDetailPage() {
         next.set("device", selected);
         return next;
       }
-      if (!prev.has("device")) {
+      if (!current) {
         return prev;
       }
       const next = new URLSearchParams(prev);
       next.delete("device");
       return next;
     });
+  }, [selected, setSearchParams]);
 
-    if (!selected) {
-      return;
-    }
-
-    void load(selected);
-  }, [load, selected, setSearchParams]);
+  const telemetry = useDeviceTelemetry(selected || null);
+  const latest = telemetry.data?.latest ?? null;
+  const series = telemetry.data?.series ?? null;
+  const loading = telemetry.phase === "loading" || telemetry.isFetching;
+  const telemetryError = telemetry.error !== null;
 
   const metrics: TelemetryLatestSnapshot = useMemo(() => latest?.latest ?? {}, [latest]);
   const selectedDevice = useMemo(
@@ -208,10 +173,12 @@ export default function DeviceDetailPage() {
   }, [series]);
 
   const displayId = useMemo(() => {
-    const trimmed = selectedDisplay.trim();
-    if (trimmed.length > 0) return trimmed;
-    return latest?.device_id ?? "-";
-  }, [selectedDisplay, latest]);
+    const telemetryId = latest?.device_id?.trim();
+    if (telemetryId) return telemetryId;
+    const rosterId = selectedDevice?.device_id?.trim();
+    if (rosterId) return rosterId;
+    return "-";
+  }, [latest, selectedDevice]);
 
   const updateLabel = (() => {
     if (metrics.updated_at != null) {
@@ -298,9 +265,7 @@ export default function DeviceDetailPage() {
             type="button"
             className="btn align-self-end"
             onClick={() => {
-              if (selected) {
-                void load(selected);
-              }
+              telemetry.retry();
             }}
             disabled={!selected || loading}
           >
@@ -359,28 +324,44 @@ export default function DeviceDetailPage() {
             <div className="grid auto mt-1">
               <div className="card tight">
                 <div className="muted">Supply trend</div>
-                <Sparkline values={historySeries.supply} color="#52ff99" />
+                <Sparkline
+                  values={historySeries.supply}
+                  color="#52ff99"
+                  label="Supply temperature trend"
+                />
                 <div className="subdued">
                   Latest {formatNumber(lastValue(historySeries.supply), 1)} \u00B0C
                 </div>
               </div>
               <div className="card tight">
                 <div className="muted">Return trend</div>
-                <Sparkline values={historySeries.return} color="#86a5ff" />
+                <Sparkline
+                  values={historySeries.return}
+                  color="#86a5ff"
+                  label="Return temperature trend"
+                />
                 <div className="subdued">
                   Latest {formatNumber(lastValue(historySeries.return), 1)} \u00B0C
                 </div>
               </div>
               <div className="card tight">
                 <div className="muted">Thermal output</div>
-                <Sparkline values={historySeries.thermal} color="#ffcc66" />
+                <Sparkline
+                  values={historySeries.thermal}
+                  color="#ffcc66"
+                  label="Thermal output trend"
+                />
                 <div className="subdued">
                   Latest {formatNumber(lastValue(historySeries.thermal), 2)} kW
                 </div>
               </div>
               <div className="card tight">
                 <div className="muted">COP trend</div>
-                <Sparkline values={historySeries.cop} color="#52ff99" />
+                <Sparkline
+                  values={historySeries.cop}
+                  color="#52ff99"
+                  label="COP trend"
+                />
                 <div className="subdued">Latest {formatNumber(lastValue(historySeries.cop), 2)}</div>
               </div>
             </div>
@@ -392,15 +373,15 @@ export default function DeviceDetailPage() {
                   <div className="subdued">{displayHistory.length} buckets</div>
                 </div>
                 <div className="min-table">
-                  <table className="table">
+                  <table className="table" aria-label="Recent telemetry buckets">
                     <thead>
                       <tr>
-                        <th>Timestamp</th>
-                        <th>Samples</th>
-                        <th>Supply</th>
-                        <th>Return</th>
-                        <th>Thermal kW</th>
-                        <th>COP</th>
+                        <th scope="col">Timestamp</th>
+                        <th scope="col">Samples</th>
+                        <th scope="col">Supply</th>
+                        <th scope="col">Return</th>
+                        <th scope="col">Thermal kW</th>
+                        <th scope="col">COP</th>
                       </tr>
                     </thead>
                     <tbody>

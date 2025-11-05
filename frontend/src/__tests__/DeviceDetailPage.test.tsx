@@ -264,7 +264,7 @@ describe("DeviceDetailPage telemetry integration", () => {
       status: "ready",
       user: { email: "admin@example.com", roles: ["admin"], clientIds: [] },
       error: null,
-      refresh: () => {},
+      refresh: vi.fn(),
     };
 
     const router = createMemoryRouter(
@@ -368,7 +368,7 @@ describe("DeviceDetailPage telemetry integration", () => {
       status: "ready",
       user: { email: "admin@example.com", roles: ["admin"], clientIds: [] },
       error: null,
-      refresh: () => {},
+      refresh: vi.fn(),
     };
 
     const router = createMemoryRouter(
@@ -421,8 +421,8 @@ describe("DeviceDetailPage telemetry integration", () => {
   it("aborts in-flight telemetry requests when the component unmounts", async () => {
     const telemetrySeriesDeferred = createDeferred<TelemetrySeriesResponse>();
     const latestBatchDeferred = createDeferred<TelemetryLatestBatchResponse>();
-    void latestBatchDeferred.promise.catch(() => {});
-    void telemetrySeriesDeferred.promise.catch(() => {});
+    void latestBatchDeferred.promise.catch(() => undefined);
+    void telemetrySeriesDeferred.promise.catch(() => undefined);
     let latestBatchSignal: AbortSignal | undefined;
     let seriesSignal: AbortSignal | undefined;
 
@@ -453,11 +453,11 @@ describe("DeviceDetailPage telemetry integration", () => {
       post: mockApiPost(postMock),
     });
 
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const renderResult = renderWithApi(<DeviceDetailPage />, apiClient, "/app/device?device=token-1001");
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const view = renderWithApi(<DeviceDetailPage />, apiClient, "/app/device?device=token-1001");
 
     await screen.findByText("Cape Town Plant");
-    renderResult.unmount();
+    view.unmount();
 
     expect(latestBatchSignal?.aborted).toBe(true);
     expect(seriesSignal?.aborted).toBe(true);

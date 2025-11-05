@@ -2,12 +2,14 @@ interface SparklineProps {
   values?: (number | null | undefined)[];
   color?: string;
   emptyLabel?: string;
+  label?: string;
 }
 
 export function Sparkline({
   values = [],
   color = "#52ff99",
   emptyLabel = "No data",
+  label,
 }: SparklineProps) {
   const data = values.filter((value): value is number => typeof value === "number" && !Number.isNaN(value));
   if (data.length === 0) {
@@ -26,7 +28,12 @@ export function Sparkline({
     .join(" ");
 
   return (
-    <svg className="sparkline" viewBox="0 0 100 100" role="img" aria-label="sparkline chart">
+    <svg
+      className="sparkline"
+      viewBox="0 0 100 100"
+      role="img"
+      aria-label={label ?? "Sparkline chart"}
+    >
       <polyline
         points={points}
         fill="none"

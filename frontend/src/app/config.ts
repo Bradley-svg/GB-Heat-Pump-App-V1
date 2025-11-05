@@ -57,10 +57,10 @@ function sanitizeReturnValue(raw: string | null | undefined, fallback: string): 
   try {
     const allowedOrigins = new Set<string>([window.location.origin]);
     try {
-      const fallbackUrl = new URL(config.returnDefault, window.location.origin);
+      const fallbackUrl = new URL(fallback, window.location.origin);
       allowedOrigins.add(fallbackUrl.origin);
     } catch {
-      // ignore parse issues
+      // ignore parse issues with fallback value
     }
     const parsed = new URL(candidate, window.location.origin);
     if (!HTTP_SCHEMES.has(parsed.protocol)) {

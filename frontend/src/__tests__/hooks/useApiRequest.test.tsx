@@ -5,7 +5,7 @@ import { useApiRequest } from "../../app/hooks/use-api-request";
 
 describe("useApiRequest initial data handling", () => {
   it("treats falsy initial data as ready", async () => {
-    const request = vi.fn(async () => 42);
+    const request = vi.fn(() => Promise.resolve(42));
     const { result } = renderHook(() =>
       useApiRequest<number>((_ctx) => request(), { initialData: 0 }),
     );
@@ -14,15 +14,13 @@ describe("useApiRequest initial data handling", () => {
     expect(result.current.data).toBe(0);
     expect(result.current.lastUpdatedAt).not.toBeNull();
 
-    await waitFor(() => {
-      expect(request).toHaveBeenCalledTimes(1);
-      expect(result.current.data).toBe(42);
-    });
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.data).toBe(42));
     expect(result.current.phase).toBe("ready");
   });
 
   it("preserves ready state for empty string initial data", async () => {
-    const request = vi.fn(async () => "next");
+    const request = vi.fn(() => Promise.resolve("next"));
     const { result } = renderHook(() =>
       useApiRequest<string>((_ctx) => request(), { initialData: "" }),
     );
@@ -31,10 +29,8 @@ describe("useApiRequest initial data handling", () => {
     expect(result.current.data).toBe("");
     expect(result.current.lastUpdatedAt).not.toBeNull();
 
-    await waitFor(() => {
-      expect(request).toHaveBeenCalledTimes(1);
-      expect(result.current.data).toBe("next");
-    });
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.data).toBe("next"));
     expect(result.current.phase).toBe("ready");
   });
 });

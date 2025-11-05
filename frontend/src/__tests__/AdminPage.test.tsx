@@ -79,7 +79,7 @@ describe("AdminPage", () => {
     const deviceLink = within(opsRows[1]).getByRole("link", { name: "dev-1001" });
     expect(deviceLink).toHaveAttribute("href", "/app/device?device=token-1001");
     expect(within(opsRows[2]).getByText("dev-2002")).toBeInTheDocument();
-    expect(within(opsRows[2]).queryByRole("link", { name: "dev-2002" })).toBeNull();
+    expect(within(opsRows[2]).queryByRole("link", { name: "dev-2002" })).not.toBeInTheDocument();
 
     expect(screen.getByText(/Status mix: 200: 3/)).toBeInTheDocument();
     expect(screen.getByText(/Window: last 30 days/i)).toBeInTheDocument();

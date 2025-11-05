@@ -62,12 +62,12 @@ export default function AdminPage() {
         </div>
         {data.tenants?.length ? (
           <div className="min-table">
-            <table className="table">
+            <table className="table" aria-label="Tenant inventory">
               <thead>
                 <tr>
-                  <th>Profile</th>
-                  <th>Devices</th>
-                  <th>Online</th>
+                  <th scope="col">Profile</th>
+                  <th scope="col">Devices</th>
+                  <th scope="col">Online</th>
                 </tr>
               </thead>
               <tbody>
@@ -93,14 +93,14 @@ export default function AdminPage() {
         </div>
         {data.ops?.length ? (
           <div className="min-table">
-            <table className="table">
+            <table className="table" aria-label="Recent operations">
               <thead>
                 <tr>
-                  <th>Timestamp</th>
-                  <th>Route</th>
-                  <th>Status</th>
-                  <th>Duration ms</th>
-                  <th>Device</th>
+                  <th scope="col">Timestamp</th>
+                  <th scope="col">Route</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Duration ms</th>
+                  <th scope="col">Device</th>
                 </tr>
               </thead>
               <tbody>

@@ -80,7 +80,7 @@ export default function DevicesPage() {
         if (controllerRef.current === controller) {
           controllerRef.current = null;
         }
-      } catch (error) {
+      } catch {
         if (!mountedRef.current || controller.signal.aborted) {
           if (controllerRef.current === controller) {
             controllerRef.current = null;
@@ -132,14 +132,14 @@ export default function DevicesPage() {
         </div>
         {items.length ? (
           <div className="min-table">
-            <table className="table">
+            <table className="table" aria-label="Devices in scope">
               <thead>
                 <tr>
-                  <th>Device</th>
-                  <th>Site</th>
-                  <th>Status</th>
-                  <th>Last seen</th>
-                  <th>Profile</th>
+                  <th scope="col">Device</th>
+                  <th scope="col">Site</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Last seen</th>
+                  <th scope="col">Profile</th>
                 </tr>
               </thead>
               <tbody>

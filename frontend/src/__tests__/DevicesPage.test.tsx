@@ -75,9 +75,7 @@ describe("DevicesPage", () => {
       status: "ready",
       user: { email: "admin@example.com", roles: ["admin"], clientIds: [] },
       error: null,
-      refresh: () => {
-        // no-op for tests
-      },
+      refresh: vi.fn(),
     };
     const router = createMemoryRouter(
       [
@@ -120,7 +118,7 @@ describe("DevicesPage", () => {
 
   it("aborts list requests when the component unmounts mid-fetch", async () => {
     const listDeferred = createDeferred<DeviceListResponse>();
-    void listDeferred.promise.catch(() => {});
+    void listDeferred.promise.catch(() => undefined);
     let capturedSignal: AbortSignal | undefined;
 
     const getMock = vi.fn().mockImplementation((path: string, options?: { signal?: AbortSignal }) => {
@@ -135,7 +133,7 @@ describe("DevicesPage", () => {
       get: mockApiGet(getMock),
     });
 
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { unmount } = renderWithApi(<DevicesPage />, apiClient, "/app/devices");
 
     await waitFor(() => expect(getMock).toHaveBeenCalled());

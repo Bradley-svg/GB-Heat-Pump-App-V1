@@ -165,6 +165,7 @@ export default function CompactDashboardPage() {
           <Sparkline
             values={trendValues}
             color={trendKey === "cop" ? "#52ff99" : trendKey === "thermalKW" ? "#7d96ff" : "#ffcc66"}
+            label={`Performance trend: ${trendSubtitle}`}
           />
         </div>
       </div>
@@ -211,14 +212,14 @@ export default function CompactDashboardPage() {
         </div>
         {devices.length ? (
           <div className="min-table">
-            <table className="table">
+            <table className="table" aria-label="Device roster summary">
               <thead>
                 <tr>
-                  <th>Device</th>
-                  <th>Site</th>
-                  <th>Online</th>
-                  <th>Last heartbeat</th>
-                  <th>Firmware</th>
+                  <th scope="col">Device</th>
+                  <th scope="col">Site</th>
+                  <th scope="col">Online</th>
+                  <th scope="col">Last heartbeat</th>
+                  <th scope="col">Firmware</th>
                 </tr>
               </thead>
               <tbody>
