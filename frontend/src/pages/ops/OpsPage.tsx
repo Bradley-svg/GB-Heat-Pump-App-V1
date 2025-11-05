@@ -122,7 +122,7 @@ export default function OpsPage() {
                 <ul style={{ listStyle: "none", padding: 0, margin: "0.25rem 0 0" }}>
                   {summary.slow_routes.map((route) => (
                     <li key={`${route.route}-${route.status_code}`}>
-                      {route.route} ({route.status_code}) · {formatNumber(route.avg_duration_ms, 1)} ms avg ·{" "}
+                      {route.route} ({route.status_code}) - {formatNumber(route.avg_duration_ms, 1)} ms avg -{" "}
                       {formatNumber(route.count, 0)} calls
                     </li>
                   ))}
@@ -135,7 +135,7 @@ export default function OpsPage() {
                 <ul style={{ listStyle: "none", padding: 0, margin: "0.25rem 0 0" }}>
                   {summary.top_server_error_routes.map((route) => (
                     <li key={`${route.route}-${route.status_code}`}>
-                      {route.route} ({route.status_code}) · {formatNumber(route.count, 0)} errors
+                      {route.route} ({route.status_code}) - {formatNumber(route.count, 0)} errors
                     </li>
                   ))}
                 </ul>

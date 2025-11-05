@@ -1,5 +1,6 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { Outlet, RouterProvider, createMemoryRouter } from "react-router-dom";
 
 import DeviceDetailPage from "../pages/device-detail/DeviceDetailPage";
 import type { ApiClient } from "../services/api-client";
@@ -9,6 +10,8 @@ import type {
   TelemetryLatestBatchResponse,
   TelemetrySeriesResponse,
 } from "../types/api";
+import { ApiClientContext, CurrentUserContext } from "../app/contexts";
+import type { CurrentUserState } from "../app/hooks/use-current-user";
 
 describe("DeviceDetailPage telemetry integration", () => {
   const deviceList: DeviceListResponse = {
@@ -162,6 +165,151 @@ describe("DeviceDetailPage telemetry integration", () => {
       return typeof path === "string" && path.startsWith("/api/devices");
     });
     expect(devicesCall?.[0]).toContain("mine=0");
+  });
+
+  it("updates selected device when the URL query parameter changes", async () => {
+    const listResponse: DeviceListResponse = {
+      items: [
+        {
+          device_id: "GB-1001",
+          lookup: "token-1001",
+          profile_id: "profile-west",
+          online: true,
+          last_seen_at: "2025-01-02T08:55:00.000Z",
+          site: "Cape Town Plant",
+          firmware: "1.0.3",
+          map_version: "gb-map-v1",
+        },
+        {
+          device_id: "GB-2002",
+          lookup: "token-2002",
+          profile_id: "profile-east",
+          online: true,
+          last_seen_at: "2025-01-02T08:45:00.000Z",
+          site: "Johannesburg Plant",
+          firmware: "1.0.4",
+          map_version: "gb-map-v1",
+        },
+      ],
+      next: null,
+    };
+
+    const latestByDevice: Record<string, TelemetryLatestBatchResponse> = {
+      "token-1001": latestBatch,
+      "token-2002": {
+        ...latestBatch,
+        items: latestBatch.items.map((item) => ({
+          ...item,
+          lookup: "token-2002",
+          device_id: "GB-2002",
+          latest: {
+            ...item.latest,
+            supplyC: 46.1,
+            returnC: 39.2,
+            deltaT: 6.9,
+            thermalKW: 4.9,
+            cop: 3.4,
+            powerKW: 1.6,
+          },
+        })),
+      },
+    };
+
+    const seriesByDevice: Record<string, TelemetrySeriesResponse> = {
+      "token-1001": seriesResponse,
+      "token-2002": {
+        ...seriesResponse,
+        scope: { type: "device", device_id: "GB-2002", lookup: "token-2002" },
+        series: seriesResponse.series.map((entry) => ({
+          ...entry,
+          values: {
+            ...entry.values,
+            thermalKW: entry.values?.thermalKW ? { avg: (entry.values.thermalKW.avg ?? 0) + 0.3 } : undefined,
+          },
+        })),
+      },
+    };
+
+    const getMock = vi.fn<ApiClient["get"]>().mockImplementation((path: string) => {
+      if (path.startsWith("/api/devices?")) {
+        return Promise.resolve(listResponse);
+      }
+      if (path.startsWith("/api/telemetry/series")) {
+        const url = new URL(path, "https://example.test");
+        const lookup = url.searchParams.get("device") ?? "";
+        return Promise.resolve(seriesByDevice[lookup] ?? seriesResponse);
+      }
+      return Promise.reject(new Error(`Unexpected GET ${path}`));
+    });
+
+    const postMock = vi.fn<ApiClient["post"]>().mockImplementation(
+      (path: string, body: unknown, _options?: { signal?: AbortSignal }) => {
+        if (path === "/api/telemetry/latest-batch") {
+          const lookup = Array.isArray((body as { devices?: string[] }).devices) ?
+            (body as { devices?: string[] }).devices?.[0] :
+            undefined;
+          return Promise.resolve(latestByDevice[lookup ?? "token-1001"] ?? latestBatch);
+        }
+        return Promise.reject(new Error(`Unexpected POST ${path}`));
+      },
+    );
+
+    const apiClient = createApiClientMock({
+      get: mockApiGet(getMock),
+      post: mockApiPost(postMock),
+    });
+
+    const userState: CurrentUserState = {
+      status: "ready",
+      user: { email: "admin@example.com", roles: ["admin"], clientIds: [] },
+      error: null,
+      refresh: () => {},
+    };
+
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/",
+          element: (
+            <ApiClientContext.Provider value={apiClient}>
+              <CurrentUserContext.Provider value={userState}>
+                <Outlet />
+              </CurrentUserContext.Provider>
+            </ApiClientContext.Provider>
+          ),
+          children: [{ path: "device", element: <DeviceDetailPage /> }],
+        },
+      ],
+      {
+        initialEntries: ["/app/device?device=token-1001"],
+        basename: "/app",
+        future: { v7_relativeSplatPath: true, v7_startTransition: true },
+      },
+    );
+
+    render(<RouterProvider router={router} />);
+
+    const select = await screen.findByLabelText("Device");
+    expect(select).toHaveValue("token-1001");
+
+    await waitFor(() =>
+      expect(postMock).toHaveBeenCalledWith(
+        "/api/telemetry/latest-batch",
+        { devices: ["token-1001"] },
+        expect.anything(),
+      ),
+    );
+
+    await act(async () => {
+      await router.navigate("/device?device=token-2002");
+    });
+
+    await screen.findByDisplayValue("GB-2002");
+    expect(postMock).toHaveBeenLastCalledWith(
+      "/api/telemetry/latest-batch",
+      { devices: ["token-2002"] },
+      expect.anything(),
+    );
   });
 
   it("aborts in-flight telemetry requests when the component unmounts", async () => {

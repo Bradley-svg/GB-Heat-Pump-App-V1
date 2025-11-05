@@ -29,6 +29,14 @@ describe("AdminPage", () => {
           route: "/api/ingest/:profile",
           status_code: 500,
           duration_ms: 320,
+          device_id: "dev-2002",
+          lookup: null,
+        },
+        {
+          ts: "2025-01-02T09:53:00.000Z",
+          route: "/api/ops/health",
+          status_code: 404,
+          duration_ms: 82,
           device_id: null,
           lookup: null,
         },
@@ -36,6 +44,7 @@ describe("AdminPage", () => {
       ops_summary: {
         200: 3,
         500: 1,
+        404: 1,
       },
       ops_window: {
         start: "2024-12-03T10:00:00.000Z",
@@ -64,11 +73,13 @@ describe("AdminPage", () => {
     expect(within(tenantRows[2]).getByText("profile-east")).toBeInTheDocument();
 
     const opsRows = within(opsTable).getAllByRole("row");
-    expect(opsRows).toHaveLength(3);
+    expect(opsRows).toHaveLength(4);
     expect(within(opsRows[1]).getByText("/api/telemetry/latest-batch")).toBeInTheDocument();
     expect(within(opsRows[2]).getByText("/api/ingest/:profile")).toBeInTheDocument();
     const deviceLink = within(opsRows[1]).getByRole("link", { name: "dev-1001" });
     expect(deviceLink).toHaveAttribute("href", "/app/device?device=token-1001");
+    expect(within(opsRows[2]).getByText("dev-2002")).toBeInTheDocument();
+    expect(within(opsRows[2]).queryByRole("link", { name: "dev-2002" })).toBeNull();
 
     expect(screen.getByText(/Status mix: 200: 3/)).toBeInTheDocument();
     expect(screen.getByText(/Window: last 30 days/i)).toBeInTheDocument();

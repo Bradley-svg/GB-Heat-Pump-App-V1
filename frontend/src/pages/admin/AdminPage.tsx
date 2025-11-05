@@ -111,11 +111,11 @@ export default function AdminPage() {
                     <td>{row.status_code}</td>
                     <td>{row.duration_ms}</td>
                     <td>
-                      {row.device_id ? (
-                        <Link className="link" to={`/device?device=${encodeURIComponent(row.lookup ?? "")}`}>
+                      {row.device_id && row.lookup ? (
+                        <Link className="link" to={`/device?device=${encodeURIComponent(row.lookup)}`}>
                           {row.device_id}
                         </Link>
-                      ) : (
+                      ) : row.device_id ?? (
                         "-"
                       )}
                     </td>

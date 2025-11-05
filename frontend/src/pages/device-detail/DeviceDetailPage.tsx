@@ -57,6 +57,11 @@ export default function DeviceDetailPage() {
   }, [isAdmin]);
 
   useEffect(() => {
+    if (!queryDevice) return;
+    setSelected((prev) => (prev === queryDevice ? prev : queryDevice));
+  }, [queryDevice]);
+
+  useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
 
