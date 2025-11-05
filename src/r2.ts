@@ -33,7 +33,9 @@ function notFound() {
 function normalizeKey(pathname: string): string {
   let key = pathname.replace(/^\/+/, "");
   if (!key) throw new Error("empty_key");
-  if (key.includes("..")) throw new Error("invalid_key");
+  if (key.split("/").some((segment) => segment === "..")) {
+    throw new Error("invalid_key");
+  }
   return key;
 }
 

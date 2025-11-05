@@ -807,8 +807,9 @@ function safeParseJson(payload: string | null | undefined) {
 function dedupePreserveOrder(requested: string[], extra: string[]) {
   const seen = new Set<string>();
   const output: string[] = [];
+  const extraSet = new Set(extra);
   for (const token of requested) {
-    if (extra.includes(token) && !seen.has(token)) {
+    if (extraSet.has(token) && !seen.has(token)) {
       seen.add(token);
       output.push(token);
     }
