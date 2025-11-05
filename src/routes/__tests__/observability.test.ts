@@ -160,5 +160,52 @@ describe("handleClientErrorReport", () => {
       reporter_user: payload.user,
     });
     expect(typeof fields.report.timestamp).toBe("string");
+    expect(fields.truncated_fields ?? []).toEqual([]);
+  });
+
+  it("rejects payloads that exceed configured byte limit", async () => {
+    requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
+    loggerForRequestMock.mockReturnValue(createLoggerStub() as unknown as loggingModule.Logger);
+
+    const env = createEnv({ OBSERVABILITY_MAX_BYTES: "20" });
+    const payload = { message: "A".repeat(50) };
+    const req = new Request("https://app.example/api/observability/client-errors", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const res = await handleClientErrorReport(req, env);
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ error: "Payload too large" });
+  });
+
+  it("truncates oversized extras while logging a truncation marker", async () => {
+    requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
+    const logger = createLoggerStub();
+    loggerForRequestMock.mockReturnValueOnce(logger as unknown as loggingModule.Logger);
+
+    const env = createEnv();
+    const payload = {
+      message: "Something broke",
+      extras: { blob: "x".repeat(6000) },
+    };
+
+    const req = new Request("https://app.example/api/observability/client-errors", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const res = await handleClientErrorReport(req, env);
+    expect(res.status).toBe(202);
+
+    const [, fields] = logger.error.mock.calls[0] as [string, any];
+    expect(fields.truncated_fields).toContain("extras");
+    expect(fields.report.extras).toMatchObject({
+      truncated: true,
+      note: expect.stringContaining("extras truncated"),
+    });
+    expect(typeof fields.report.extras.bytes).toBe("number");
   });
 });

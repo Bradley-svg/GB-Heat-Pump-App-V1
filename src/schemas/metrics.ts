@@ -9,7 +9,7 @@ export const MetricsQuerySchema = z
         const trimmed = input.trim().toLowerCase();
         return trimmed === "" ? undefined : trimmed;
       },
-      z.enum(["json", "prom"]).optional(),
+      z.enum(["json", "prom", "dashboard"]).optional(),
     ),
   })
   .strict();

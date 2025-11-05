@@ -29,6 +29,11 @@ import {
 } from "./routes/commissioning-runs";
 import { handleClientErrorReport } from "./routes/observability";
 import { bindRequestLogger, loggerForRequest, releaseRequestLogger } from "./utils/logging";
+import { recordOpsMetric } from "./lib/ops-metrics";
+import {
+  initializeRequestMetrics,
+  requestMetricsRecorded,
+} from "./lib/request-metrics";
 
 const router: AppRouter = Router();
 
@@ -73,24 +78,58 @@ router.all("*", () => json({ error: "Not found" }, { status: 404 }));
 
 export function handleRequest(req: Request, env: Env, ctx?: ExecutionContext) {
   const start = Date.now();
+  initializeRequestMetrics(req);
   const logger = bindRequestLogger(req, env);
   logger.debug("request.received");
+  const pathname = safePath(req.url);
+  let statusCode: number | null = null;
   return Promise.resolve(router.fetch(req, env, ctx))
     .then((res) => {
+      statusCode = res?.status ?? 0;
       logger.info("request.completed", {
-        status: res?.status ?? 0,
+        status: statusCode,
         duration_ms: Date.now() - start,
       });
       return res;
     })
     .catch((err) => {
+      statusCode = 500;
       loggerForRequest(req).error("request.failed", {
         duration_ms: Date.now() - start,
         error: err,
       });
       throw err;
     })
-    .finally(() => {
-      releaseRequestLogger(req);
+    .finally(async () => {
+      try {
+        if (!requestMetricsRecorded(req)) {
+          const route = normalizeRoute(pathname);
+          await recordOpsMetric(env, route, statusCode ?? 0, Date.now() - start, null, logger);
+        }
+      } catch (error) {
+        logger.warn("request.metrics_failed", { error });
+      } finally {
+        releaseRequestLogger(req);
+      }
     });
+}
+
+function safePath(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url;
+  }
+}
+
+function normalizeRoute(pathname: string): string {
+  if (pathname.startsWith("/api/ingest/")) return "/api/ingest";
+  if (pathname.startsWith("/api/heartbeat/")) return "/api/heartbeat";
+  if (pathname.startsWith("/api/alerts/") && pathname.split("/").length === 4) {
+    return "/api/alerts/:id";
+  }
+  if (pathname.startsWith("/api/commissioning/runs")) {
+    return "/api/commissioning/runs";
+  }
+  return pathname;
 }

@@ -2,6 +2,39 @@ import type { Env } from "../env";
 
 type LogLevel = "debug" | "info" | "warn" | "error";
 
+type RedactionOptions = {
+  clientIp: boolean;
+  userAgent: boolean;
+  cfRay: boolean;
+};
+
+type LoggingConfig = {
+  level: LogLevel;
+  debugSampleRate: number;
+  redaction: RedactionOptions;
+};
+
+const LEVEL_PRIORITY: Record<LogLevel, number> = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  error: 40,
+};
+
+const DEFAULT_REDACTION: RedactionOptions = {
+  clientIp: false,
+  userAgent: false,
+  cfRay: false,
+};
+
+let loggingConfig: LoggingConfig = {
+  level: "debug",
+  debugSampleRate: 1,
+  redaction: DEFAULT_REDACTION,
+};
+
+let configuredFromEnv = false;
+
 export type LogFields = Record<string, unknown>;
 
 export interface Logger {
@@ -26,18 +59,22 @@ class JsonLogger implements Logger {
   }
 
   debug(message: string, fields?: LogFields) {
+    if (!shouldLog("debug")) return;
     this.emit("debug", message, fields);
   }
 
   info(message: string, fields?: LogFields) {
+    if (!shouldLog("info")) return;
     this.emit("info", message, fields);
   }
 
   warn(message: string, fields?: LogFields) {
+    if (!shouldLog("warn")) return;
     this.emit("warn", message, fields);
   }
 
   error(message: string, fields?: LogFields) {
+    if (!shouldLog("error")) return;
     this.emit("error", message, fields);
   }
 
@@ -61,13 +98,14 @@ class JsonLogger implements Logger {
       entry.error = normalizeErrorLike(entry.error as Record<string, unknown>);
     }
 
-    writeLog(entry);
+    writeLog(applyRedaction(entry));
   }
 }
 
 const requestLoggers = new WeakMap<Request, Logger>();
 
-export function bindRequestLogger(req: Request, _env: Env, extra?: LogFields): Logger {
+export function bindRequestLogger(req: Request, env: Env, extra?: LogFields): Logger {
+  configureLoggingFromEnv(env);
   const base: LogFields = {
     request_id: deriveRequestId(req),
     method: req.method,
@@ -210,4 +248,97 @@ function replacer(_key: string, value: unknown) {
     return { status: value.status };
   }
   return value;
+}
+
+function shouldLog(level: LogLevel): boolean {
+  if (LEVEL_PRIORITY[level] < LEVEL_PRIORITY[loggingConfig.level]) {
+    return false;
+  }
+  if (level === "debug" && loggingConfig.debugSampleRate < 1) {
+    return Math.random() < loggingConfig.debugSampleRate;
+  }
+  return true;
+}
+
+function applyRedaction(entry: LogEntry): LogEntry {
+  const { redaction } = loggingConfig;
+  if (!redaction.clientIp && !redaction.userAgent && !redaction.cfRay) {
+    return entry;
+  }
+  const clone: LogEntry = { ...entry };
+  if (redaction.clientIp && "client_ip" in clone) {
+    clone.client_ip = "[redacted]";
+  }
+  if (redaction.userAgent && "user_agent" in clone) {
+    clone.user_agent = "[redacted]";
+  }
+  if (redaction.cfRay && "cf_ray" in clone) {
+    clone.cf_ray = "[redacted]";
+  }
+  return clone;
+}
+
+export function configureLogging(options: Partial<LoggingConfig>) {
+  if (options.level) loggingConfig.level = options.level;
+  if (typeof options.debugSampleRate === "number" && options.debugSampleRate > 0) {
+    loggingConfig.debugSampleRate = Math.min(options.debugSampleRate, 1);
+  }
+  if (options.redaction) {
+    loggingConfig.redaction = {
+      ...loggingConfig.redaction,
+      ...options.redaction,
+    };
+  }
+}
+
+function parseLogLevel(candidate: string | undefined): LogLevel | null {
+  if (!candidate) return null;
+  const normalized = candidate.trim().toLowerCase();
+  if (normalized === "debug" || normalized === "info" || normalized === "warn" || normalized === "error") {
+    return normalized;
+  }
+  return null;
+}
+
+function parseSampleRate(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return null;
+  if (parsed <= 0) return null;
+  return parsed > 1 ? 1 : parsed;
+}
+
+export function configureLoggingFromEnv(env: Env) {
+  if (configuredFromEnv) return;
+  configuredFromEnv = true;
+  const level = parseLogLevel((env as Record<string, unknown>).LOG_LEVEL as string | undefined);
+  const sampleRate = parseSampleRate(
+    (env as Record<string, unknown>).LOG_DEBUG_SAMPLE_RATE as string | undefined,
+  );
+  configureLogging({
+    level: level ?? loggingConfig.level,
+    debugSampleRate: sampleRate ?? loggingConfig.debugSampleRate,
+    redaction: {
+      clientIp: flagEnabled((env as Record<string, unknown>).LOG_REDACT_CLIENT_IP),
+      userAgent: flagEnabled((env as Record<string, unknown>).LOG_REDACT_USER_AGENT),
+      cfRay: flagEnabled((env as Record<string, unknown>).LOG_REDACT_CF_RAY),
+    },
+  });
+}
+
+/** @internal Use only in tests to reset logging configuration */
+export function __resetLoggingConfigForTests() {
+  loggingConfig = {
+    level: "debug",
+    debugSampleRate: 1,
+    redaction: DEFAULT_REDACTION,
+  };
+  configuredFromEnv = false;
+}
+
+function flagEnabled(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return false;
+  return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
 }

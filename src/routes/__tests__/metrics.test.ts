@@ -119,6 +119,31 @@ describe("handleMetrics", () => {
     });
   });
 
+  it("returns dashboard payload with derived statuses", async () => {
+    requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
+    const opsRows = [
+      { route: "/api/ingest", status_code: 200, count: 50 },
+      { route: "/api/ingest", status_code: 500, count: 10 },
+    ];
+    const { env } = createMockEnv({
+      device: { total: 10, online: 5 },
+      ops: opsRows,
+    });
+    const req = new Request("https://example.com/metrics?format=dashboard");
+    const res = await handleMetrics(req, env);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/application\/json/);
+    const body = (await res.json()) as any;
+    expect(body.devices.status).toMatch(/ok|warn|critical/);
+    expect(body.ops.status).toMatch(/ok|warn|critical/);
+    expect(body.ops.metrics.server_error_rate.value).toBeGreaterThan(0);
+    expect(Array.isArray(body.ops.slow_routes)).toBe(true);
+    expect(body.ops_window).toMatchObject({
+      start: expect.any(String),
+      days: expect.any(Number),
+    });
+  });
+
   it("returns Prometheus metrics text by default", async () => {
     requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
     const { env } = createMockEnv();

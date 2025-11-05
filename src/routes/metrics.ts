@@ -24,7 +24,7 @@ export async function handleMetrics(req: Request, env: Env) {
   if (!paramsResult.success) {
     return validationErrorResponse(paramsResult.error);
   }
-  const format = pickMetricsFormat(paramsResult.data.format, req.headers.get("accept") ?? "");
+  const formatParam = paramsResult.data.format;
 
   const now = Date.now();
   const windowStart = opsMetricsWindowStart(now);
@@ -66,10 +66,27 @@ export async function handleMetrics(req: Request, env: Env) {
     online: deviceStats?.online ?? null,
   };
 
-  if (format === "json") {
-    const payload = formatMetricsJson(deviceSummary, opsRows);
+  const metricsPayload = formatMetricsJson(deviceSummary, opsRows);
+
+  if (formatParam === "dashboard") {
+    const dashboard = buildDashboardPayload(metricsPayload);
     return json({
-      ...payload,
+      ...dashboard,
+      ops_window: {
+        start: windowStart,
+        days: OPS_METRICS_WINDOW_DAYS,
+      },
+    });
+  }
+
+  const format = pickMetricsFormat(
+    formatParam === "dashboard" ? undefined : formatParam,
+    req.headers.get("accept") ?? "",
+  );
+
+  if (format === "json") {
+    return json({
+      ...metricsPayload,
       ops_window: {
         start: windowStart,
         days: OPS_METRICS_WINDOW_DAYS,
@@ -83,4 +100,86 @@ export async function handleMetrics(req: Request, env: Env) {
       "content-type": "text/plain; charset=utf-8",
     },
   });
+}
+
+type MetricsJsonPayload = ReturnType<typeof formatMetricsJson>;
+type SeverityLevel = "ok" | "warn" | "critical";
+
+function buildDashboardPayload(payload: MetricsJsonPayload) {
+  const offlineStatus = deriveSeverity(
+    payload.devices.offline_ratio,
+    payload.thresholds.devices.offline_ratio,
+  );
+
+  const serverSeverity = deriveSeverity(
+    payload.ops_summary.server_error_rate,
+    payload.thresholds.ops.error_rate,
+  );
+  const clientSeverity = deriveSeverity(
+    payload.ops_summary.client_error_rate,
+    payload.thresholds.ops.client_error_rate,
+  );
+  const maxAvgDuration = payload.ops_summary.slow_routes[0]?.avg_duration_ms ?? 0;
+  const latencySeverity = deriveSeverity(
+    maxAvgDuration,
+    payload.thresholds.ops.avg_duration_ms,
+  );
+
+  const overallOpsSeverity = [serverSeverity, clientSeverity, latencySeverity].reduce(
+    (acc, current) => (severityWeight(current) > severityWeight(acc) ? current : acc),
+    "ok" as SeverityLevel,
+  );
+
+  return {
+    generated_at: payload.generated_at,
+    devices: {
+      ...payload.devices,
+      status: offlineStatus,
+      thresholds: payload.thresholds.devices,
+    },
+    ops: {
+      summary: payload.ops_summary,
+      status: overallOpsSeverity,
+      metrics: {
+        server_error_rate: {
+          value: payload.ops_summary.server_error_rate,
+          status: serverSeverity,
+          thresholds: payload.thresholds.ops.error_rate,
+        },
+        client_error_rate: {
+          value: payload.ops_summary.client_error_rate,
+          status: clientSeverity,
+          thresholds: payload.thresholds.ops.client_error_rate,
+        },
+        max_avg_duration_ms: {
+          value: maxAvgDuration,
+          status: latencySeverity,
+          thresholds: payload.thresholds.ops.avg_duration_ms,
+        },
+      },
+      slow_routes: payload.ops_summary.slow_routes,
+      top_server_error_routes: payload.ops_summary.top_server_error_routes,
+    },
+    thresholds: payload.thresholds,
+  };
+}
+
+function deriveSeverity(
+  value: number,
+  thresholds: { warn: number; critical: number },
+): SeverityLevel {
+  if (value >= thresholds.critical) return "critical";
+  if (value >= thresholds.warn) return "warn";
+  return "ok";
+}
+
+function severityWeight(level: SeverityLevel): number {
+  switch (level) {
+    case "critical":
+      return 3;
+    case "warn":
+      return 2;
+    default:
+      return 1;
+  }
 }

@@ -15,6 +15,7 @@ import { deriveTelemetryMetrics } from "../telemetry";
 import { ingestDedupWindowMs } from "../utils/ingest-dedup";
 import { loggerForRequest, type Logger } from "../utils/logging";
 import { recordOpsMetric } from "../lib/ops-metrics";
+import { markRequestMetricsRecorded } from "../lib/request-metrics";
 import { withTransaction } from "../lib/db";
 
 const DEVICE_KEY_HEADER = "X-GREENBRO-DEVICE-KEY";
@@ -195,6 +196,7 @@ function payloadSizeOk(raw: string) {
 type EarlyExitLevel = "info" | "warn" | "error";
 
 async function logAndRecordEarlyExit(
+  req: Request,
   env: Env,
   route: string,
   statusCode: number,
@@ -210,6 +212,7 @@ async function logAndRecordEarlyExit(
   const { deviceId = null, level, fields } = options;
   const scopedLog = deviceId ? log.with({ device_id: deviceId }) : log;
   await recordOpsMetric(env, route, statusCode, Date.now() - t0, deviceId, scopedLog);
+  markRequestMetricsRecorded(req);
   const severity: EarlyExitLevel =
     level ?? (statusCode >= 500 ? "error" : statusCode >= 400 ? "warn" : "info");
   const payload = { status_code: statusCode, ...(fields ?? {}) };
@@ -227,7 +230,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
   const log = loggerForRequest(req, { route: `${INGEST_ROUTE}/:profile`, profile_id: profileId });
   const cors = evaluateCors(req, env);
   if (!cors.allowed) {
-    await logAndRecordEarlyExit(env, INGEST_ROUTE, 403, t0, log, "ingest.cors_blocked", {
+    await logAndRecordEarlyExit(req, env, INGEST_ROUTE, 403, t0, log, "ingest.cors_blocked", {
       fields: { reason: "origin_not_allowed", origin: cors.origin },
       level: "warn",
     });
@@ -238,7 +241,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
   try {
     rawBodyText = await req.text();
   } catch (error) {
-    await logAndRecordEarlyExit(env, INGEST_ROUTE, 400, t0, log, "ingest.body_read_failed", {
+    await logAndRecordEarlyExit(req, env, INGEST_ROUTE, 400, t0, log, "ingest.body_read_failed", {
       fields: { reason: "invalid_json", error },
       level: "warn",
     });
@@ -246,7 +249,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
   }
 
   if (!payloadSizeOk(rawBodyText)) {
-    await logAndRecordEarlyExit(env, INGEST_ROUTE, 413, t0, log, "ingest.payload_too_large", {
+    await logAndRecordEarlyExit(req, env, INGEST_ROUTE, 413, t0, log, "ingest.payload_too_large", {
       fields: { reason: "payload_too_large" },
     });
     return withCors(req, env, json({ error: "Payload too large" }, { status: 413 }), cors);
@@ -256,7 +259,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
   try {
     rawBody = readRawBody(rawBodyText);
   } catch (error) {
-    await logAndRecordEarlyExit(env, INGEST_ROUTE, 400, t0, log, "ingest.invalid_json", {
+    await logAndRecordEarlyExit(req, env, INGEST_ROUTE, 400, t0, log, "ingest.invalid_json", {
       fields: { reason: "invalid_json", error },
       level: "warn",
     });
@@ -265,7 +268,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
 
   const parsedBody = TelemetryPayloadSchema.safeParse(rawBody);
   if (!parsedBody.success) {
-    await logAndRecordEarlyExit(env, INGEST_ROUTE, 400, t0, log, "ingest.validation_failed", {
+    await logAndRecordEarlyExit(req, env, INGEST_ROUTE, 400, t0, log, "ingest.validation_failed", {
       fields: {
         reason: "validation_failed",
         issue_count: parsedBody.error.issues.length,
@@ -277,7 +280,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
 
   const tsCheck = parseAndCheckTs(body.ts);
   if (!tsCheck.ok) {
-    await logAndRecordEarlyExit(env, INGEST_ROUTE, 400, t0, log, "ingest.invalid_timestamp", {
+    await logAndRecordEarlyExit(req, env, INGEST_ROUTE, 400, t0, log, "ingest.invalid_timestamp", {
       deviceId: body.device_id,
       fields: { reason: tsCheck.reason },
     });
@@ -291,7 +294,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
   if (
     await isFailureRateLimited(env, INGEST_ROUTE, body.device_id, failureLimitPerMinute)
   ) {
-    await logAndRecordEarlyExit(env, INGEST_ROUTE, 429, t0, log, "ingest.failure_rate_limited", {
+    await logAndRecordEarlyExit(req, env, INGEST_ROUTE, 429, t0, log, "ingest.failure_rate_limited", {
       deviceId: body.device_id,
       fields: {
         reason: "failure_rate_limited",
@@ -302,7 +305,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
   }
 
   if (await isRateLimited(env, INGEST_ROUTE, body.device_id, limitPerMinute)) {
-    await logAndRecordEarlyExit(env, INGEST_ROUTE, 429, t0, log, "ingest.rate_limited", {
+    await logAndRecordEarlyExit(req, env, INGEST_ROUTE, 429, t0, log, "ingest.rate_limited", {
       deviceId: body.device_id,
       fields: { reason: "rate_limited", limit_per_minute: limitPerMinute },
     });
@@ -312,7 +315,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
   const keyHeader = req.headers.get(DEVICE_KEY_HEADER);
   const keyVerification = await verifyDeviceKey(env, body.device_id, keyHeader);
   if (!keyVerification.ok || !keyVerification.deviceKeyHash) {
-    await logAndRecordEarlyExit(env, INGEST_ROUTE, 401, t0, log, "ingest.unauthorized_device_key", {
+    await logAndRecordEarlyExit(req, env, INGEST_ROUTE, 401, t0, log, "ingest.unauthorized_device_key", {
       deviceId: body.device_id,
       fields: { reason: "invalid_device_key" },
     });
@@ -322,6 +325,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
   const signatureCheck = await ensureSignature(req, env, rawBodyText, keyVerification.deviceKeyHash);
   if (!signatureCheck.ok) {
     await logAndRecordEarlyExit(
+      req,
       env,
       INGEST_ROUTE,
       signatureCheck.status,
@@ -347,7 +351,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
     .first<{ profile_id?: string | null }>();
 
   if (!devRow) {
-    await logAndRecordEarlyExit(env, INGEST_ROUTE, 401, t0, log, "ingest.unknown_device", {
+    await logAndRecordEarlyExit(req, env, INGEST_ROUTE, 401, t0, log, "ingest.unknown_device", {
       deviceId: body.device_id,
       fields: { reason: "unknown_device" },
     });
@@ -360,7 +364,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
   }
 
   if (devRow.profile_id && devRow.profile_id !== profileId) {
-    await logAndRecordEarlyExit(env, INGEST_ROUTE, 409, t0, log, "ingest.profile_mismatch", {
+    await logAndRecordEarlyExit(req, env, INGEST_ROUTE, 409, t0, log, "ingest.profile_mismatch", {
       deviceId: body.device_id,
       fields: {
         reason: "profile_mismatch",
@@ -379,7 +383,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
   if (!devRow.profile_id) {
     const claim = await claimDeviceIfUnowned(env, body.device_id, profileId);
     if (!claim.ok && claim.reason === "claimed_by_other") {
-      await logAndRecordEarlyExit(env, INGEST_ROUTE, 409, t0, log, "ingest.claim_conflict", {
+      await logAndRecordEarlyExit(req, env, INGEST_ROUTE, 409, t0, log, "ingest.claim_conflict", {
         deviceId: body.device_id,
         fields: { reason: "claim_conflict" },
       });
@@ -497,6 +501,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
 
     const deviceLog = log.with({ device_id: body.device_id });
     await recordOpsMetric(env, INGEST_ROUTE, 200, Date.now() - t0, body.device_id, deviceLog);
+    markRequestMetricsRecorded(req);
     deviceLog.info("ingest.telemetry_stored", {
       payload_ts: new Date(tsMs).toISOString(),
       faults_count: body.faults?.length ?? 0,
@@ -507,7 +512,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
     return withCors(req, env, json({ ok: true }), cors);
   } catch (e: any) {
     if (isNonceConflict(e)) {
-      await logAndRecordEarlyExit(env, INGEST_ROUTE, 409, t0, log, "ingest.duplicate_payload", {
+      await logAndRecordEarlyExit(req, env, INGEST_ROUTE, 409, t0, log, "ingest.duplicate_payload", {
         deviceId: body.device_id,
         fields: {
           reason: "duplicate_payload",
@@ -523,7 +528,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
       );
     }
 
-    await logAndRecordEarlyExit(env, INGEST_ROUTE, 500, t0, log, "ingest.db_error", {
+    await logAndRecordEarlyExit(req, env, INGEST_ROUTE, 500, t0, log, "ingest.db_error", {
       deviceId: body.device_id,
       level: "error",
       fields: { reason: "db_error", error: e },
@@ -542,7 +547,7 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
   const log = loggerForRequest(req, { route: `${HEARTBEAT_ROUTE}/:profile`, profile_id: profileId });
   const cors = evaluateCors(req, env);
   if (!cors.allowed) {
-    await logAndRecordEarlyExit(env, HEARTBEAT_ROUTE, 403, t0, log, "heartbeat.cors_blocked", {
+    await logAndRecordEarlyExit(req, env, HEARTBEAT_ROUTE, 403, t0, log, "heartbeat.cors_blocked", {
       fields: { reason: "origin_not_allowed", origin: cors.origin },
       level: "warn",
     });
@@ -553,7 +558,7 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
   try {
     rawBodyText = await req.text();
   } catch (error) {
-    await logAndRecordEarlyExit(env, HEARTBEAT_ROUTE, 400, t0, log, "heartbeat.body_read_failed", {
+    await logAndRecordEarlyExit(req, env, HEARTBEAT_ROUTE, 400, t0, log, "heartbeat.body_read_failed", {
       fields: { reason: "invalid_json", error },
       level: "warn",
     });
@@ -561,7 +566,7 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
   }
 
   if (!payloadSizeOk(rawBodyText)) {
-    await logAndRecordEarlyExit(env, HEARTBEAT_ROUTE, 413, t0, log, "heartbeat.payload_too_large", {
+    await logAndRecordEarlyExit(req, env, HEARTBEAT_ROUTE, 413, t0, log, "heartbeat.payload_too_large", {
       fields: { reason: "payload_too_large" },
     });
     return withCors(req, env, json({ error: "Payload too large" }, { status: 413 }), cors);
@@ -571,7 +576,7 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
   try {
     rawBody = readRawBody(rawBodyText);
   } catch (error) {
-    await logAndRecordEarlyExit(env, HEARTBEAT_ROUTE, 400, t0, log, "heartbeat.invalid_json", {
+    await logAndRecordEarlyExit(req, env, HEARTBEAT_ROUTE, 400, t0, log, "heartbeat.invalid_json", {
       fields: { reason: "invalid_json", error },
       level: "warn",
     });
@@ -580,7 +585,7 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
 
   const parsedBody = HeartbeatPayloadSchema.safeParse(rawBody);
   if (!parsedBody.success) {
-    await logAndRecordEarlyExit(env, HEARTBEAT_ROUTE, 400, t0, log, "heartbeat.validation_failed", {
+    await logAndRecordEarlyExit(req, env, HEARTBEAT_ROUTE, 400, t0, log, "heartbeat.validation_failed", {
       fields: {
         reason: "validation_failed",
         issue_count: parsedBody.error.issues.length,
@@ -593,7 +598,7 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
   const tsStr = body.ts ?? new Date().toISOString();
   const tsCheck = parseAndCheckTs(tsStr);
   if (!tsCheck.ok) {
-    await logAndRecordEarlyExit(env, HEARTBEAT_ROUTE, 400, t0, log, "heartbeat.invalid_timestamp", {
+    await logAndRecordEarlyExit(req, env, HEARTBEAT_ROUTE, 400, t0, log, "heartbeat.invalid_timestamp", {
       deviceId: body.device_id,
       fields: { reason: tsCheck.reason },
     });
@@ -606,7 +611,7 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
   if (
     await isFailureRateLimited(env, HEARTBEAT_ROUTE, body.device_id, heartFailureLimit)
   ) {
-    await logAndRecordEarlyExit(env, HEARTBEAT_ROUTE, 429, t0, log, "heartbeat.failure_rate_limited", {
+    await logAndRecordEarlyExit(req, env, HEARTBEAT_ROUTE, 429, t0, log, "heartbeat.failure_rate_limited", {
       deviceId: body.device_id,
       fields: {
         reason: "failure_rate_limited",
@@ -617,7 +622,7 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
   }
 
   if (await isRateLimited(env, HEARTBEAT_ROUTE, body.device_id, heartRateLimit)) {
-    await logAndRecordEarlyExit(env, HEARTBEAT_ROUTE, 429, t0, log, "heartbeat.rate_limited", {
+    await logAndRecordEarlyExit(req, env, HEARTBEAT_ROUTE, 429, t0, log, "heartbeat.rate_limited", {
       deviceId: body.device_id,
       fields: { reason: "rate_limited", limit_per_minute: heartRateLimit },
     });
@@ -627,7 +632,7 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
   const keyHeader = req.headers.get(DEVICE_KEY_HEADER);
   const keyVerification = await verifyDeviceKey(env, body.device_id, keyHeader);
   if (!keyVerification.ok || !keyVerification.deviceKeyHash) {
-    await logAndRecordEarlyExit(env, HEARTBEAT_ROUTE, 401, t0, log, "heartbeat.unauthorized_device_key", {
+    await logAndRecordEarlyExit(req, env, HEARTBEAT_ROUTE, 401, t0, log, "heartbeat.unauthorized_device_key", {
       deviceId: body.device_id,
       fields: { reason: "invalid_device_key" },
     });
@@ -637,6 +642,7 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
   const signatureCheck = await ensureSignature(req, env, rawBodyText, keyVerification.deviceKeyHash);
   if (!signatureCheck.ok) {
     await logAndRecordEarlyExit(
+      req,
       env,
       HEARTBEAT_ROUTE,
       signatureCheck.status,
@@ -662,7 +668,7 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
     .first<{ profile_id?: string | null }>();
 
   if (!devRow) {
-    await logAndRecordEarlyExit(env, HEARTBEAT_ROUTE, 401, t0, log, "heartbeat.unknown_device", {
+    await logAndRecordEarlyExit(req, env, HEARTBEAT_ROUTE, 401, t0, log, "heartbeat.unknown_device", {
       deviceId: body.device_id,
       fields: { reason: "unknown_device" },
     });
@@ -675,7 +681,7 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
   }
 
   if (devRow.profile_id && devRow.profile_id !== profileId) {
-    await logAndRecordEarlyExit(env, HEARTBEAT_ROUTE, 409, t0, log, "heartbeat.profile_mismatch", {
+    await logAndRecordEarlyExit(req, env, HEARTBEAT_ROUTE, 409, t0, log, "heartbeat.profile_mismatch", {
       deviceId: body.device_id,
       fields: {
         reason: "profile_mismatch",
@@ -694,7 +700,7 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
   if (!devRow.profile_id) {
     const claim = await claimDeviceIfUnowned(env, body.device_id, profileId);
     if (!claim.ok && claim.reason === "claimed_by_other") {
-      await logAndRecordEarlyExit(env, HEARTBEAT_ROUTE, 409, t0, log, "heartbeat.claim_conflict", {
+      await logAndRecordEarlyExit(req, env, HEARTBEAT_ROUTE, 409, t0, log, "heartbeat.claim_conflict", {
         deviceId: body.device_id,
         fields: { reason: "claim_conflict" },
       });
@@ -709,7 +715,7 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
 
   const limitPerMinute = parsedRateLimit(env);
   if (await isRateLimited(env, HEARTBEAT_ROUTE, body.device_id, limitPerMinute)) {
-    await logAndRecordEarlyExit(env, HEARTBEAT_ROUTE, 429, t0, log, "heartbeat.rate_limited", {
+    await logAndRecordEarlyExit(req, env, HEARTBEAT_ROUTE, 429, t0, log, "heartbeat.rate_limited", {
       deviceId: body.device_id,
       fields: { reason: "rate_limited", limit_per_minute: limitPerMinute },
     });
@@ -738,10 +744,11 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
 
     const deviceLog = log.with({ device_id: body.device_id });
     await recordOpsMetric(env, HEARTBEAT_ROUTE, 200, Date.now() - t0, body.device_id, deviceLog);
+    markRequestMetricsRecorded(req);
     deviceLog.info("heartbeat.accepted", { payload_ts: new Date(tsMs).toISOString() });
     return withCors(req, env, json({ ok: true, server_time: new Date().toISOString() }), cors);
   } catch (e) {
-    await logAndRecordEarlyExit(env, HEARTBEAT_ROUTE, 500, t0, log, "heartbeat.db_error", {
+    await logAndRecordEarlyExit(req, env, HEARTBEAT_ROUTE, 500, t0, log, "heartbeat.db_error", {
       deviceId: body.device_id,
       level: "error",
       fields: { reason: "db_error", error: e },

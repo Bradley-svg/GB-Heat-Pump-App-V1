@@ -7,6 +7,12 @@ import { json } from "../utils/responses";
 import { validationErrorResponse, validateWithSchema } from "../utils/validation";
 
 const ROUTE_PATH = "/api/observability/client-errors";
+const DEFAULT_MAX_PAYLOAD_BYTES = 16_384;
+const STACK_MAX_CHARS = 4_096;
+const COMPONENT_STACK_MAX_CHARS = 4_096;
+const MESSAGE_MAX_CHARS = 2_048;
+const EXTRAS_MAX_BYTES = 4_096;
+const encoder = new TextEncoder();
 
 export async function handleClientErrorReport(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
@@ -14,9 +20,21 @@ export async function handleClientErrorReport(req: Request, env: Env) {
     return json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  let rawBody = "";
+  try {
+    rawBody = await req.text();
+  } catch {
+    return json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const maxBytes = resolveMaxPayloadBytes(env);
+  if (encoder.encode(rawBody).length > maxBytes) {
+    return json({ error: "Payload too large" }, { status: 413 });
+  }
+
   let payload: unknown;
   try {
-    payload = await req.json();
+    payload = rawBody ? JSON.parse(rawBody) : {};
   } catch {
     return json({ error: "Invalid JSON" }, { status: 400 });
   }
@@ -29,31 +47,92 @@ export async function handleClientErrorReport(req: Request, env: Env) {
   const body = parsed.data;
   const log = loggerForRequest(req, { route: ROUTE_PATH });
 
+  const sanitized = sanitizeClientErrorReport(body);
+
   const userContext = {
     email: user.email,
     roles: user.roles,
     client_ids: user.clientIds,
   };
 
+  const logPayload: Record<string, unknown> = {
+    source: "frontend",
+    report: sanitized.report,
+    user: userContext,
+  };
+
+  if (sanitized.truncatedFields.length) {
+    logPayload.truncated_fields = sanitized.truncatedFields;
+  }
+
+  log.error("ui.error_boundary", logPayload);
+
+  return json({ ok: true }, { status: 202 });
+}
+
+function resolveMaxPayloadBytes(env: Env): number {
+  const raw = env.OBSERVABILITY_MAX_BYTES?.trim();
+  if (!raw) return DEFAULT_MAX_PAYLOAD_BYTES;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : DEFAULT_MAX_PAYLOAD_BYTES;
+}
+
+function sanitizeClientErrorReport(body: ClientErrorReport) {
+  const truncatedFields: string[] = [];
+
   const report = {
-    name: body.name,
-    message: body.message,
-    stack: body.stack,
-    component_stack: body.componentStack,
-    user_agent: body.userAgent,
-    url: body.url,
+    name: body.name ?? null,
+    message: truncateString(body.message, MESSAGE_MAX_CHARS, truncatedFields, "message"),
+    stack: truncateString(body.stack, STACK_MAX_CHARS, truncatedFields, "stack"),
+    component_stack: truncateString(
+      body.componentStack,
+      COMPONENT_STACK_MAX_CHARS,
+      truncatedFields,
+      "component_stack",
+    ),
+    user_agent: body.userAgent ?? null,
+    url: body.url ?? null,
     timestamp: body.timestamp ?? new Date().toISOString(),
-    release: body.release,
-    tags: body.tags,
-    extras: body.extras,
+    release: body.release ?? null,
+    tags: body.tags ?? null,
+    extras: sanitizeExtras(body.extras, truncatedFields),
     reporter_user: body.user ?? null,
   };
 
-  log.error("ui.error_boundary", {
-    source: "frontend",
-    report,
-    user: userContext,
-  });
+  return { report, truncatedFields };
+}
 
-  return json({ ok: true }, { status: 202 });
+function truncateString(
+  value: string | null | undefined,
+  maxLength: number,
+  truncatedFields: string[],
+  fieldName: string,
+): string | null {
+  if (typeof value !== "string") return value ?? null;
+  if (value.length <= maxLength) return value;
+  truncatedFields.push(fieldName);
+  return `${value.slice(0, maxLength)}...`;
+}
+
+function sanitizeExtras(extras: unknown, truncatedFields: string[]) {
+  if (extras === undefined) return undefined;
+  if (extras === null) return null;
+  try {
+    const serialized = JSON.stringify(extras);
+    if (encoder.encode(serialized).length <= EXTRAS_MAX_BYTES) {
+      return extras;
+    }
+    truncatedFields.push("extras");
+    return {
+      truncated: true,
+      bytes: encoder.encode(serialized).length,
+      note: `extras truncated above ${EXTRAS_MAX_BYTES} bytes`,
+    };
+  } catch {
+    truncatedFields.push("extras");
+    return {
+      truncated: true,
+      note: "extras could not be serialized",
+    };
+  }
 }

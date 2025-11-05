@@ -27,6 +27,12 @@ export interface Env {
   TELEMETRY_REFACTOR_MODE?: string;
   RETENTION_BACKUP_PREFIX?: string;
   RETENTION_BACKUP_BEFORE_DELETE?: string;
+  LOG_LEVEL?: string;
+  LOG_DEBUG_SAMPLE_RATE?: string;
+  LOG_REDACT_CLIENT_IP?: string;
+  LOG_REDACT_USER_AGENT?: string;
+  LOG_REDACT_CF_RAY?: string;
+  OBSERVABILITY_MAX_BYTES?: string;
 }
 
 export type User = {
@@ -253,6 +259,41 @@ const EnvSchema = z
           path: ["INGEST_SIGNATURE_TOLERANCE_SECS"],
           code: z.ZodIssueCode.custom,
           message: "INGEST_SIGNATURE_TOLERANCE_SECS must be zero or a positive integer",
+        });
+      }
+    }
+
+    const logLevelRaw = typeof value.LOG_LEVEL === "string" ? value.LOG_LEVEL.trim().toLowerCase() : "";
+    if (logLevelRaw && !["debug", "info", "warn", "error"].includes(logLevelRaw)) {
+      ctx.addIssue({
+        path: ["LOG_LEVEL"],
+        code: z.ZodIssueCode.custom,
+        message: "LOG_LEVEL must be one of debug, info, warn, error",
+      });
+    }
+
+    const logSampleRaw =
+      typeof value.LOG_DEBUG_SAMPLE_RATE === "string" ? value.LOG_DEBUG_SAMPLE_RATE.trim() : "";
+    if (logSampleRaw) {
+      const parsed = Number(logSampleRaw);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        ctx.addIssue({
+          path: ["LOG_DEBUG_SAMPLE_RATE"],
+          code: z.ZodIssueCode.custom,
+          message: "LOG_DEBUG_SAMPLE_RATE must be a positive number",
+        });
+      }
+    }
+
+    const observabilityMaxRaw =
+      typeof value.OBSERVABILITY_MAX_BYTES === "string" ? value.OBSERVABILITY_MAX_BYTES.trim() : "";
+    if (observabilityMaxRaw) {
+      const parsed = Number(observabilityMaxRaw);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        ctx.addIssue({
+          path: ["OBSERVABILITY_MAX_BYTES"],
+          code: z.ZodIssueCode.custom,
+          message: "OBSERVABILITY_MAX_BYTES must be a positive integer",
         });
       }
     }
