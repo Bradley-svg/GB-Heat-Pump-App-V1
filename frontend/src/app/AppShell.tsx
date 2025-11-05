@@ -104,7 +104,7 @@ export function AppShell() {
               path="unauthorized"
               element={<UnauthorizedScreen returnUrl={config.returnDefault} />}
             />
-            <Route path="*" element={<Navigate to="overview" replace />} />
+            <Route path="*" element={<Navigate to={landingPath} replace />} />
           </Routes>
         </Suspense>
       </AppLayout>

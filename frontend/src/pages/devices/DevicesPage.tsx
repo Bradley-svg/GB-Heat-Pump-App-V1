@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useApiClient, useCurrentUserState } from "../../app/contexts";
@@ -32,9 +32,21 @@ export default function DevicesPage() {
   const [state, setState] = useState<ListState>(INITIAL_STATE);
 
   const scopeMine = isAdmin ? mineOnly : true;
+  const mountedRef = useRef(true);
+  const controllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      controllerRef.current?.abort();
+    };
+  }, []);
 
   const load = useCallback(
     async (nextCursor: string | null, reset = false) => {
+      controllerRef.current?.abort();
+      const controller = new AbortController();
+      controllerRef.current = controller;
       setState((prev) => ({
         items: reset ? [] : prev.items,
         cursor: reset ? null : prev.cursor,
@@ -49,16 +61,36 @@ export default function DevicesPage() {
         if (nextCursor) {
           params.set("cursor", nextCursor);
         }
-        const payload = await api.get<DeviceListResponse>(`/api/devices?${params.toString()}`);
+        const payload = await api.get<DeviceListResponse>(`/api/devices?${params.toString()}`, {
+          signal: controller.signal,
+        });
         const items = payload.items ?? [];
+        if (!mountedRef.current || controller.signal.aborted) {
+          if (controllerRef.current === controller) {
+            controllerRef.current = null;
+          }
+          return;
+        }
         setState((prev) => ({
           items: nextCursor && !reset ? prev.items.concat(items) : items,
           cursor: payload.next ?? null,
           loading: false,
           error: false,
         }));
-      } catch {
+        if (controllerRef.current === controller) {
+          controllerRef.current = null;
+        }
+      } catch (error) {
+        if (!mountedRef.current || controller.signal.aborted) {
+          if (controllerRef.current === controller) {
+            controllerRef.current = null;
+          }
+          return;
+        }
         setState((prev) => ({ ...prev, loading: false, error: true }));
+        if (controllerRef.current === controller) {
+          controllerRef.current = null;
+        }
       }
     },
     [api, scopeMine],

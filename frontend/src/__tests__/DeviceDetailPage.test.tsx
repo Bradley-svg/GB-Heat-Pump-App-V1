@@ -110,20 +110,26 @@ describe("DeviceDetailPage telemetry integration", () => {
     await screen.findByText("Cape Town Plant");
     await waitFor(() => expect(postMock).toHaveBeenCalled());
 
-    expect(postMock).toHaveBeenCalledWith(
-      "/api/telemetry/latest-batch",
-      { devices: ["token-1001"] },
-      undefined,
-    );
-    const hasSeriesCall = getMock.mock.calls.some((call) => {
+    const [postPath, postBody, postOptions] = postMock.mock.calls[0] as [
+      string,
+      unknown,
+      { signal?: AbortSignal } | undefined,
+    ];
+    expect(postPath).toBe("/api/telemetry/latest-batch");
+    expect(postBody).toEqual({ devices: ["token-1001"] });
+    expect(postOptions?.signal).toBeInstanceOf(AbortSignal);
+
+    const seriesCall = getMock.mock.calls.find((call) => {
       const [path] = call;
-      return typeof path === "string" && path.includes("device=token-1001");
+      return typeof path === "string" && path.includes("/api/telemetry/series");
     });
-    expect(hasSeriesCall).toBe(true);
+    expect(seriesCall).toBeDefined();
+    expect(seriesCall?.[1]?.signal).toBeInstanceOf(AbortSignal);
     const devicesCall = getMock.mock.calls.find((call) => {
       const [path] = call;
       return typeof path === "string" && path.startsWith("/api/devices");
     });
+    expect(devicesCall?.[1]?.signal).toBeInstanceOf(AbortSignal);
     expect(devicesCall?.[0]).toContain("mine=0");
     expect(screen.getByText(/Latest 4\.4 kW/)).toBeInTheDocument();
 
@@ -157,7 +163,71 @@ describe("DeviceDetailPage telemetry integration", () => {
     });
     expect(devicesCall?.[0]).toContain("mine=0");
   });
+
+  it("aborts in-flight telemetry requests when the component unmounts", async () => {
+    const telemetrySeriesDeferred = createDeferred<TelemetrySeriesResponse>();
+    const latestBatchDeferred = createDeferred<TelemetryLatestBatchResponse>();
+    void latestBatchDeferred.promise.catch(() => {});
+    void telemetrySeriesDeferred.promise.catch(() => {});
+    let latestBatchSignal: AbortSignal | undefined;
+    let seriesSignal: AbortSignal | undefined;
+
+    const getImplementation: ApiClient["get"] = <T,>(path: string, options?: { signal?: AbortSignal }) => {
+      if (path.startsWith("/api/devices?")) return Promise.resolve(deviceList as T);
+      if (path.startsWith("/api/telemetry/series")) {
+        seriesSignal = options?.signal;
+        return telemetrySeriesDeferred.promise as Promise<T>;
+      }
+      return Promise.reject<T>(new Error(`Unexpected GET ${path}`));
+    };
+    const postImplementation: ApiClient["post"] = <T,>(
+      path: string,
+      _body: unknown,
+      options?: { signal?: AbortSignal },
+    ) => {
+      if (path === "/api/telemetry/latest-batch") {
+        latestBatchSignal = options?.signal;
+        return latestBatchDeferred.promise as Promise<T>;
+      }
+      return Promise.reject<T>(new Error(`Unexpected POST ${path}`));
+    };
+
+    const getMock = vi.fn(getImplementation);
+    const postMock = vi.fn(postImplementation);
+    const apiClient = createApiClientMock({
+      get: mockApiGet(getMock),
+      post: mockApiPost(postMock),
+    });
+
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const renderResult = renderWithApi(<DeviceDetailPage />, apiClient, "/app/device?device=token-1001");
+
+    await screen.findByText("Cape Town Plant");
+    renderResult.unmount();
+
+    expect(latestBatchSignal?.aborted).toBe(true);
+    expect(seriesSignal?.aborted).toBe(true);
+
+    latestBatchDeferred.reject(new DOMException("Aborted", "AbortError"));
+    telemetrySeriesDeferred.reject(new DOMException("Aborted", "AbortError"));
+
+    await waitFor(() => {
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    consoleErrorSpy.mockRestore();
+  });
 });
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
 
 
 

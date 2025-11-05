@@ -39,6 +39,15 @@ export default function DeviceDetailPage() {
   const scopeMine = isAdmin ? mineOnly : true;
   const requestIdRef = useRef(0);
   const previousIsAdminRef = useRef(isAdmin);
+  const telemetryControllerRef = useRef<AbortController | null>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      telemetryControllerRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     if (!previousIsAdminRef.current && isAdmin) {
@@ -49,6 +58,7 @@ export default function DeviceDetailPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
 
     async function loadDevices() {
       try {
@@ -56,7 +66,9 @@ export default function DeviceDetailPage() {
           limit: "50",
           mine: scopeMine ? "1" : "0",
         });
-        const payload = await api.get<DeviceListResponse>(`/api/devices?${params.toString()}`);
+        const payload = await api.get<DeviceListResponse>(`/api/devices?${params.toString()}`, {
+          signal: controller.signal,
+        });
         if (cancelled) return;
         const items = payload.items ?? [];
         setDevices(items);
@@ -68,20 +80,22 @@ export default function DeviceDetailPage() {
         });
         setDeviceLoadError(false);
       } catch {
-        if (!cancelled) {
-          setDevices([]);
-          setSelected("");
-          setLatest(null);
-          setSeries(null);
-          setSelectedDisplay("");
-          setDeviceLoadError(true);
+        if (cancelled || controller.signal.aborted) {
+          return;
         }
+        setDevices([]);
+        setSelected("");
+        setLatest(null);
+        setSeries(null);
+        setSelectedDisplay("");
+        setDeviceLoadError(true);
       }
     }
 
     void loadDevices();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [api, scopeMine]);
 
@@ -92,6 +106,9 @@ export default function DeviceDetailPage() {
       requestIdRef.current = requestId;
       setLoading(true);
       setTelemetryError(false);
+      telemetryControllerRef.current?.abort();
+      const controller = new AbortController();
+      telemetryControllerRef.current = controller;
       try {
         const params = new URLSearchParams({
           scope: "device",
@@ -101,10 +118,16 @@ export default function DeviceDetailPage() {
           fill: "carry",
         });
         const [latestRes, seriesRes] = await Promise.all([
-          api.post<TelemetryLatestBatchResponse>("/api/telemetry/latest-batch", { devices: [lookup] }),
-          api.get<TelemetrySeriesResponse>(`/api/telemetry/series?${params.toString()}`),
+          api.post<TelemetryLatestBatchResponse>(
+            "/api/telemetry/latest-batch",
+            { devices: [lookup] },
+            { signal: controller.signal },
+          ),
+          api.get<TelemetrySeriesResponse>(`/api/telemetry/series?${params.toString()}`, {
+            signal: controller.signal,
+          }),
         ]);
-        if (requestIdRef.current !== requestId) {
+        if (!isMountedRef.current || requestIdRef.current !== requestId || controller.signal.aborted) {
           return;
         }
         const batchItem = latestRes.items?.[0] ?? null;
@@ -112,12 +135,16 @@ export default function DeviceDetailPage() {
         setSeries(seriesRes);
         setSelectedDisplay(batchItem?.device_id ?? "");
         setLoading(false);
-      } catch {
-        if (requestIdRef.current !== requestId) {
+      } catch (error) {
+        if (!isMountedRef.current || controller.signal.aborted || requestIdRef.current !== requestId) {
           return;
         }
         setTelemetryError(true);
         setLoading(false);
+      } finally {
+        if (telemetryControllerRef.current === controller) {
+          telemetryControllerRef.current = null;
+        }
       }
     },
     [api],

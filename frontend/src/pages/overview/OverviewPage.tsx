@@ -71,10 +71,12 @@ export default function OverviewPage() {
           <div className="subdued">Window start {formatRelative(data.window_start_ms)}</div>
         </div>
         <div className="card tight">
-          <div className="muted">Low ?T events</div>
+          <div className="muted">Low \u0394T events</div>
           <div className="large-number">{formatNumber(data.low_deltaT_count_24h ?? 0, 0)}</div>
           <div className="subdued">
-            Oldest heartbeat {formatNumber((data.max_heartbeat_age_sec ?? 0) / 60, 1)}m
+            {typeof data.max_heartbeat_age_sec === "number" && Number.isFinite(data.max_heartbeat_age_sec) ?
+              `Oldest heartbeat ${formatNumber(data.max_heartbeat_age_sec / 60, 1)}m` :
+              "Oldest heartbeat unknown"}
           </div>
         </div>
       </div>

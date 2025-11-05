@@ -117,4 +117,46 @@ describe("DevicesPage", () => {
       ),
     );
   });
+
+  it("aborts list requests when the component unmounts mid-fetch", async () => {
+    const listDeferred = createDeferred<DeviceListResponse>();
+    void listDeferred.promise.catch(() => {});
+    let capturedSignal: AbortSignal | undefined;
+
+    const getMock = vi.fn().mockImplementation((path: string, options?: { signal?: AbortSignal }) => {
+      if (path.startsWith("/api/devices")) {
+        capturedSignal = options?.signal;
+        return listDeferred.promise;
+      }
+      return Promise.reject(new Error(`Unexpected GET ${path}`));
+    });
+
+    const apiClient = createApiClientMock({
+      get: mockApiGet(getMock),
+    });
+
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { unmount } = renderWithApi(<DevicesPage />, apiClient, "/app/devices");
+
+    await waitFor(() => expect(getMock).toHaveBeenCalled());
+
+    unmount();
+
+    expect(capturedSignal?.aborted).toBe(true);
+
+    listDeferred.reject(new DOMException("Aborted", "AbortError"));
+    await Promise.resolve();
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
 });
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}

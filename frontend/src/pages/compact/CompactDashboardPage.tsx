@@ -74,7 +74,7 @@ export default function CompactDashboardPage() {
       case "thermalKW":
         return "Thermal output (kW)";
       case "deltaT":
-        return "?T average (°C)";
+        return "\u0394T average (\u00B0C)";
       default:
         return "";
     }
@@ -121,7 +121,7 @@ export default function CompactDashboardPage() {
           <div className="subdued">Window start {formatRelative(summary.window_start_ms)}</div>
         </div>
         <div className="card tight">
-          <div className="muted">Low ?T (24h)</div>
+          <div className="muted">Low \u0394T (24h)</div>
           <div className="large-number">{formatNumber(kpis.low_deltaT_count ?? 0, 0)}</div>
           <div className="subdued">
             {kpis.max_heartbeat_age_sec
@@ -157,7 +157,7 @@ export default function CompactDashboardPage() {
               className={`btn ghost${trendKey === "deltaT" ? " active" : ""}`}
               onClick={() => setTrendKey("deltaT")}
             >
-              ?T
+              \u0394T
             </button>
           </div>
         </div>

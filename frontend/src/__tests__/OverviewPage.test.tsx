@@ -90,5 +90,25 @@ describe("OverviewPage", () => {
     expect(screen.queryByRole("button", { name: /retry now/i })).not.toBeInTheDocument();
     expect(getMock).toHaveBeenCalledTimes(2);
   });
+
+  it("shows an unknown heartbeat message when no heartbeat age is available", async () => {
+    const summary: FleetSummaryResponse = {
+      devices_total: 2,
+      devices_online: 2,
+      online_pct: 100,
+      avg_cop_24h: 3.2,
+      low_deltaT_count_24h: 0,
+      max_heartbeat_age_sec: null,
+      window_start_ms: Date.now(),
+      generated_at: new Date().toISOString(),
+    };
+    const getMock = vi.fn<ApiClient["get"]>().mockResolvedValue(summary);
+    const apiClient = createApiClientMock({ get: mockApiGet(getMock) });
+
+    renderWithApi(<OverviewPage />, apiClient, "/app/overview");
+
+    await screen.findByText("100%");
+    expect(screen.getByText("Oldest heartbeat unknown")).toBeInTheDocument();
+  });
 });
 

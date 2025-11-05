@@ -160,6 +160,19 @@ describe("AppShell role gating", () => {
     expect(adminArchivePageRender).not.toHaveBeenCalled();
   });
 
+  it("redirects clients hitting unknown routes back to their landing page", async () => {
+    renderAppShell(["client"]);
+    act(() => {
+      window.history.pushState({}, "", "/app/unknown");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/app/compact");
+    });
+    expect(screen.queryByRole("heading", { name: "Unauthorized" })).not.toBeInTheDocument();
+  });
+
   it("treats client-admin role as non-admin", async () => {
     renderAppShell(["client-admin"]);
     act(() => {
