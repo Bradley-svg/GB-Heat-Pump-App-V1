@@ -6,6 +6,8 @@ import type { CurrentUser } from "./hooks/use-current-user";
 import { AppLayout } from "./components/AppLayout";
 import { LoadingScreen } from "./components/LoadingScreen";
 import { UnauthorizedScreen } from "./components/UnauthorizedScreen";
+import { RequestErrorScreen } from "./components/RequestErrorScreen";
+import { ApiError } from "../services/api-client";
 
 const OverviewPage = lazy(() => import("../pages/overview/OverviewPage"));
 const CompactDashboardPage = lazy(() => import("../pages/compact/CompactDashboardPage"));
@@ -25,7 +27,23 @@ export function AppShell() {
     return <LoadingScreen message="Loading dashboard..." />;
   }
 
-  if (currentUser.status === "error" || !currentUser.user) {
+  if (currentUser.status === "error") {
+    const error = currentUser.error;
+    if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+      return <UnauthorizedScreen returnUrl={config.returnDefault} />;
+    }
+
+    const message =
+      error instanceof ApiError
+        ? error.status >= 500
+          ? "The server is temporarily unavailable. Please try again in a moment."
+          : "We couldn't complete the request. Please try again."
+        : error?.message ?? "An unexpected error occurred. Please try again.";
+
+    return <RequestErrorScreen message={message} onRetry={currentUser.refresh} />;
+  }
+
+  if (!currentUser.user) {
     return <UnauthorizedScreen returnUrl={config.returnDefault} />;
   }
 

@@ -100,8 +100,8 @@ function applyLifecycleOptimistic(
       break;
     }
     case "assign": {
-      const assigneeInput = payload.assignee;
-      const assignee = optionalString(assigneeInput) ?? assigneeInput.trim();
+      const assigneeInput = payload.assignee ?? "";
+      const assignee = optionalString(assigneeInput) ?? assigneeInput;
       copy.assigned_to = assignee;
       const commentBody = optionalString(payload.comment);
       const metadata = assignee ? { assignee } : null;
