@@ -63,7 +63,9 @@ function parsedRateLimit(env: Env): number {
 
 function parsedFailureLimit(env: Env, overallLimit: number): number {
   const fallback =
-    overallLimit > 0 ? Math.max(10, Math.floor(overallLimit / 2)) : 60;
+    overallLimit > 0 ?
+      Math.max(10, Math.floor(overallLimit / 2)) :
+      parsePositiveInt(env.INGEST_FAILURE_LIMIT_PER_MIN, 0);
   return parsePositiveInt(env.INGEST_FAILURE_LIMIT_PER_MIN, fallback);
 }
 

@@ -29,6 +29,7 @@ Every request handled by the worker is logged with a JSON payload that includes 
 - Route handlers use `loggerForRequest(req)` and `logger.with({ ... })` to append context (`device_id`, `profile_id`, tenant, etc.).
 - Long running jobs (for example the offline cron) log via `systemLogger({ task: "..." })`.
 - Errors always appear with a normalized `{ name, message, stack }` envelope so downstream processors can parse them safely.
+- Offline cron logs now include `batches`, `processed`, and `truncated`; retention cron logs include `telemetry_has_more`. Add alerts on `truncated=true` or `telemetry_has_more=true` if these appear in production logs.
 
 ### Adding logs in new code
 
@@ -72,6 +73,7 @@ These fields are designed to feed dashboards or alerting pipelines without addit
 
 - Prometheus: `greenbro_ops_server_error_rate > 0.02` (warn), `> 0.05` (critical).
 - JSON: `curl https://.../metrics?format=json | jq '.ops_summary.server_error_rate'`.
+- Cron state: `wrangler tail --format=json --sampling-rate 1 | jq 'select(.msg=="cron.offline_check.completed") | .truncated'` to watch for truncated batches; similarly, `jq '.telemetry_has_more'` on `cron.retention.completed`.
 
 ## Workers Analytics & Logpush integration
 
