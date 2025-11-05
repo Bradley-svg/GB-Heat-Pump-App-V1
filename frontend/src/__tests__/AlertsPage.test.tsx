@@ -53,7 +53,7 @@ describe("AlertsPage", () => {
     expect(getMock).toHaveBeenCalledWith("/api/alerts?limit=50", undefined);
 
     expect(screen.getByText("Total")).toBeInTheDocument();
-    expect(screen.getByText("Open")).toBeInTheDocument();
+    expect(screen.getByText("Open", { selector: "div.muted" })).toBeInTheDocument();
     expect(screen.getByText("Acknowledged")).toBeInTheDocument();
 
     expect(screen.getByRole("button", { name: "Acknowledge" })).toBeEnabled();

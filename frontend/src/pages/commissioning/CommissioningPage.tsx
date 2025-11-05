@@ -210,14 +210,14 @@ function ReportsCard({ runsState, runs }: ReportsCardProps) {
                 <div>
                   <div className="card-title">{run.device_id}</div>
                   <div className="subdued">
-                    Completed {formatRelative(run.completed_at ?? run.updated_at)} · Run {run.run_id}
+                    Completed {formatRelative(run.completed_at ?? run.updated_at)} - Run {run.run_id}
                   </div>
                   {run.site ? <div className="subdued">{run.site}</div> : null}
                 </div>
                 <span className="pill">{run.status}</span>
               </div>
               {run.report_url ? (
-                <a className="link" href={run.report_url} target="_blank" rel="noreferrer">
+                <a className="link" href={run.report_url} target="_blank" rel="noreferrer noopener">
                   Download PDF
                 </a>
               ) : (

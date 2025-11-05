@@ -184,8 +184,30 @@ export default function AlertsPage() {
   const [alerts, setAlerts] = useState<AlertRecord[]>([]);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [pendingAlertId, setPendingAlertId] = useState<string | null>(null);
+  const [pendingAlerts, setPendingAlerts] = useState<Set<string>>(() => new Set());
   const [dialog, setDialog] = useState<ActionDialogState | null>(null);
+
+  function markAlertPending(alertId: string) {
+    setPendingAlerts((current) => {
+      if (current.has(alertId)) return current;
+      const next = new Set(current);
+      next.add(alertId);
+      return next;
+    });
+  }
+
+  function clearAlertPending(alertId: string) {
+    setPendingAlerts((current) => {
+      if (!current.has(alertId)) return current;
+      const next = new Set(current);
+      next.delete(alertId);
+      return next;
+    });
+  }
+
+  function isAlertPending(alertId: string) {
+    return pendingAlerts.has(alertId);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -224,7 +246,7 @@ export default function AlertsPage() {
     const previous = alerts;
     const optimistic = applyLifecycleOptimistic(alert, payload, { actorEmail });
     setAlerts(previous.map((item) => (item.alert_id === alert.alert_id ? optimistic : item)));
-    setPendingAlertId(alert.alert_id);
+    markAlertPending(alert.alert_id);
     setActionError(null);
 
     try {
@@ -237,7 +259,7 @@ export default function AlertsPage() {
       setActionError(extractErrorMessage(error));
       throw error;
     } finally {
-      setPendingAlertId(null);
+      clearAlertPending(alert.alert_id);
     }
   }
 
@@ -247,7 +269,7 @@ export default function AlertsPage() {
     const previous = alerts;
     const optimistic = applyCommentOptimistic(alert, trimmed, actorEmail);
     setAlerts(previous.map((item) => (item.alert_id === alert.alert_id ? optimistic : item)));
-    setPendingAlertId(alert.alert_id);
+    markAlertPending(alert.alert_id);
     setActionError(null);
 
     try {
@@ -260,7 +282,7 @@ export default function AlertsPage() {
       setActionError(extractErrorMessage(error));
       throw error;
     } finally {
-      setPendingAlertId(null);
+      clearAlertPending(alert.alert_id);
     }
   }
 
@@ -394,7 +416,7 @@ export default function AlertsPage() {
                   void submitDialog();
                 }}
                 disabled={
-                  pendingAlertId === dialog.alertId ||
+                  isAlertPending(dialog.alertId) ||
                   (dialog.action === "comment" && !optionalString(dialog.comment))
                 }
               >
@@ -411,7 +433,7 @@ export default function AlertsPage() {
       <div className="stack">
         {alerts.length ? (
           alerts.map((alert) => {
-            const disabled = pendingAlertId === alert.alert_id;
+            const disabled = isAlertPending(alert.alert_id);
             return (
               <div key={alert.alert_id} className="card">
                 <div className="card-header">

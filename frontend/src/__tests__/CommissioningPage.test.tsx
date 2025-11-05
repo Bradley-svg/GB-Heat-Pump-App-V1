@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import CommissioningPage from "../pages/commissioning/CommissioningPage";
 import type { ApiClient, RequestOptions } from "../services/api-client";
-import type { CommissioningResponse } from "../types/api";
+import type { CommissioningResponse, CommissioningRunsResponse } from "../types/api";
 import { createApiClientMock, mockApiGet, renderWithApi } from "./testUtils";
 
 describe("CommissioningPage", () => {
@@ -56,15 +56,31 @@ describe("CommissioningPage", () => {
         ],
       };
 
-      const getMock = vi.fn<ApiClient["get"]>().mockResolvedValue(response);
+      const runsResponse: CommissioningRunsResponse = {
+        generated_at: "2025-01-02T10:00:00.000Z",
+        runs: [],
+      };
+
+      const getMock = vi.fn<ApiClient["get"]>().mockImplementation((path: string) => {
+        if (path === "/api/commissioning/checklist") {
+          return Promise.resolve(response as unknown as CommissioningResponse);
+        }
+        if (path === "/api/commissioning/runs?status=completed&limit=10") {
+          return Promise.resolve(runsResponse as unknown as CommissioningRunsResponse);
+        }
+        return Promise.reject(new Error(`Unexpected GET ${path}`));
+      });
       const apiClient = createApiClientMock({ get: mockApiGet(getMock) });
 
       renderWithApi(<CommissioningPage />, apiClient, "/app/commissioning");
 
       await screen.findByText("Readiness overview");
-      expect(getMock).toHaveBeenCalledTimes(1);
-      const [, requestOptions] = getMock.mock.calls[0] as [string, RequestOptions | undefined];
-      expect(requestOptions?.signal).toBeInstanceOf(AbortSignal);
+      expect(getMock).toHaveBeenCalledTimes(2);
+      const [firstPath, firstOptions] = getMock.mock.calls[0] as [string, RequestOptions | undefined];
+      expect(firstPath).toBe("/api/commissioning/checklist");
+      expect(firstOptions?.signal).toBeInstanceOf(AbortSignal);
+      const [secondPath] = getMock.mock.calls[1];
+      expect(secondPath).toBe("/api/commissioning/runs?status=completed&limit=10");
 
       expect(screen.getByText("1 ready of 2")).toBeInTheDocument();
       expect(screen.getByText("50% checklist complete across fleet")).toBeInTheDocument();
@@ -85,7 +101,7 @@ describe("CommissioningPage", () => {
     renderWithApi(<CommissioningPage />, apiClient, "/app/commissioning");
 
     await screen.findByText("Unable to load commissioning status");
-    expect(getMock).toHaveBeenCalledTimes(1);
+    expect(getMock).toHaveBeenCalledTimes(2);
   });
 });
 
