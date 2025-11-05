@@ -160,7 +160,12 @@ async function requestJson<T>(
     headers.set("content-type", "application/json");
   }
 
-  const response = await fetch(url, { ...init, headers, signal });
+  const requestInit: RequestInit = { ...init, headers, signal };
+  if (requestInit.credentials === undefined) {
+    requestInit.credentials = "include";
+  }
+
+  const response = await fetch(url, requestInit);
   const text = await response.text();
   const body = text ? safeParseJson(text) : null;
   if (!response.ok) {

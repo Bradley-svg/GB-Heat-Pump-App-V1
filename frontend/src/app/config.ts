@@ -24,11 +24,12 @@ export function readAppConfig(): AppConfig {
     return DEFAULT_APP_CONFIG;
   }
   const raw = window.__APP_CONFIG__ ?? {};
+  const rawReturnDefault =
+    typeof raw.returnDefault === "string" ? raw.returnDefault : DEFAULT_APP_CONFIG.returnDefault;
   return {
     apiBase: typeof raw.apiBase === "string" ? raw.apiBase : DEFAULT_APP_CONFIG.apiBase,
     assetBase: typeof raw.assetBase === "string" ? raw.assetBase : DEFAULT_APP_CONFIG.assetBase,
-    returnDefault:
-      typeof raw.returnDefault === "string" ? raw.returnDefault : DEFAULT_APP_CONFIG.returnDefault,
+    returnDefault: sanitizeConfiguredReturnDefault(rawReturnDefault),
   };
 }
 
@@ -36,8 +37,14 @@ function isSafeRelativePath(candidate: string): boolean {
   return candidate.startsWith("/") && !candidate.startsWith("//");
 }
 
-function sanitizeReturnCandidate(raw: string | null, config: AppConfig): string {
-  const fallback = config.returnDefault;
+function sanitizeConfiguredReturnDefault(raw: string): string {
+  if (typeof window === "undefined") {
+    return DEFAULT_APP_CONFIG.returnDefault;
+  }
+  return sanitizeReturnValue(raw, DEFAULT_APP_CONFIG.returnDefault);
+}
+
+function sanitizeReturnValue(raw: string | null | undefined, fallback: string): string {
   const candidate = raw?.trim();
   if (!candidate) return fallback;
   if (isSafeRelativePath(candidate)) {
@@ -69,6 +76,10 @@ function sanitizeReturnCandidate(raw: string | null, config: AppConfig): string 
   } catch {
     return fallback;
   }
+}
+
+function sanitizeReturnCandidate(raw: string | null, config: AppConfig): string {
+  return sanitizeReturnValue(raw, config.returnDefault);
 }
 
 export function resolveReturnUrl(config: AppConfig): string {

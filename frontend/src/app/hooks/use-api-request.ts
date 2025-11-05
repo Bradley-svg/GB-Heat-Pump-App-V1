@@ -152,16 +152,17 @@ export function useApiRequest<T>(
   } = options;
 
   const backoff = useMemo(() => resolveBackoff(backoffOverrides), [backoffOverrides]);
+  const hasInitialData = initialData !== null && initialData !== undefined;
 
   const [state, setReactState] = useState<InternalState<T>>(() => ({
-    phase: initialData ? "ready" : "loading",
+    phase: hasInitialData ? "ready" : "loading",
     data: initialData,
     error: null,
     isFetching: false,
     attempts: 0,
     isRetryScheduled: false,
     nextRetryInMs: null,
-    lastUpdatedAt: initialData ? Date.now() : null,
+    lastUpdatedAt: hasInitialData ? Date.now() : null,
     lastErrorAt: null,
   }));
 

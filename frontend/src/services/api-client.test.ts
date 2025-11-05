@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { __testables } from "./api-client";
+import { __testables, createApiClient } from "./api-client";
 
 const { normalizeApiBase, buildUrl } = __testables;
 
@@ -87,5 +87,48 @@ describe("createApiClient url joining", () => {
 
   it("rejects javascript schemes", () => {
     expect(normalizeApiBase("javascript:alert(1)")).toBe("");
+  });
+});
+
+describe("createApiClient credentials", () => {
+  const originalFetch = global.fetch;
+  const okResponse = JSON.stringify({ ok: true });
+
+  beforeEach(() => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(okResponse, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    ) as typeof fetch;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    global.fetch = originalFetch;
+  });
+
+  const baseConfig = {
+    apiBase: "https://api.example.com",
+    assetBase: "/app/assets/",
+    returnDefault: "/",
+  } as const;
+
+  it("defaults credentials to include", async () => {
+    const client = createApiClient(baseConfig);
+    await client.get("/devices");
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://api.example.com/devices",
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
+
+  it("respects explicit credential overrides", async () => {
+    const client = createApiClient(baseConfig);
+    await client.get("/devices", { credentials: "omit" });
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://api.example.com/devices",
+      expect.objectContaining({ credentials: "omit" }),
+    );
   });
 });

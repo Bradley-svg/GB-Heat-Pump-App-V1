@@ -39,6 +39,7 @@ export default function DeviceDetailPage() {
   const scopeMine = isAdmin ? mineOnly : true;
   const requestIdRef = useRef(0);
   const previousIsAdminRef = useRef(isAdmin);
+  const hasLoadedDevicesRef = useRef(false);
   const telemetryControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
 
@@ -58,8 +59,10 @@ export default function DeviceDetailPage() {
 
   useEffect(() => {
     if (!queryDevice) return;
-    setSelected((prev) => (prev === queryDevice ? prev : queryDevice));
-  }, [queryDevice]);
+    if (!hasLoadedDevicesRef.current || devices.some((device) => device.lookup === queryDevice)) {
+      setSelected((prev) => (prev === queryDevice ? prev : queryDevice));
+    }
+  }, [devices, queryDevice]);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +80,7 @@ export default function DeviceDetailPage() {
         if (cancelled) return;
         const items = payload.items ?? [];
         setDevices(items);
+        hasLoadedDevicesRef.current = true;
         setSelected((prev) => {
           if (prev && items.some((device) => device.lookup === prev)) {
             return prev;
@@ -89,6 +93,7 @@ export default function DeviceDetailPage() {
           return;
         }
         setDevices([]);
+        hasLoadedDevicesRef.current = true;
         setSelected("");
         setLatest(null);
         setSeries(null);
@@ -156,13 +161,29 @@ export default function DeviceDetailPage() {
   );
 
   useEffect(() => {
-    if (!selected) return;
-    void load(selected);
     setSearchParams((prev) => {
+      const current = prev.get("device") ?? "";
+      if (selected) {
+        if (current === selected) {
+          return prev;
+        }
+        const next = new URLSearchParams(prev);
+        next.set("device", selected);
+        return next;
+      }
+      if (!prev.has("device")) {
+        return prev;
+      }
       const next = new URLSearchParams(prev);
-      next.set("device", selected);
+      next.delete("device");
       return next;
     });
+
+    if (!selected) {
+      return;
+    }
+
+    void load(selected);
   }, [load, selected, setSearchParams]);
 
   const metrics: TelemetryLatestSnapshot = useMemo(() => latest?.latest ?? {}, [latest]);
