@@ -203,7 +203,6 @@ export async function handleCreateCommissioningRun(req: Request, env: Env) {
     checklist: body.checklist ?? null,
     notes: body.notes ?? null,
     performed_by: body.performed_by ?? null,
-    report_url: body.report_url ?? null,
   });
 
   if (!result.ok) {

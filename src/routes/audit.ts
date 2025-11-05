@@ -61,6 +61,9 @@ export async function handleListAuditTrail(req: Request, env: Env) {
 export async function handleCreateAuditEntry(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
+  if (!userIsAdmin(user)) {
+    return json({ error: "Forbidden" }, { status: 403 });
+  }
 
   let payload: unknown;
   try {
@@ -75,6 +78,16 @@ export async function handleCreateAuditEntry(req: Request, env: Env) {
   }
   const body = parseResult.data;
 
+  const expectedActorId = user.email;
+  const expectedActorEmail = user.email;
+
+  if (body.actor_id && body.actor_id !== expectedActorId) {
+    return json({ error: "Actor identity mismatch" }, { status: 400 });
+  }
+  if (body.actor_email && body.actor_email !== expectedActorEmail) {
+    return json({ error: "Actor identity mismatch" }, { status: 400 });
+  }
+
   const ip =
     body.ip_address ??
     req.headers.get("cf-connecting-ip") ??
@@ -83,8 +96,8 @@ export async function handleCreateAuditEntry(req: Request, env: Env) {
 
   const result = await createAuditEntry(env, {
     audit_id: body.audit_id,
-    actor_id: body.actor_id,
-    actor_email: body.actor_email ?? null,
+    actor_id: expectedActorId,
+    actor_email: expectedActorEmail,
     actor_name: body.actor_name ?? null,
     action: body.action,
     entity_type: body.entity_type ?? null,

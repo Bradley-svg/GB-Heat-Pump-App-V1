@@ -27,7 +27,6 @@ export interface CreateCommissioningRunParams {
   checklist?: string[] | null;
   notes?: string | null;
   performed_by?: string | null;
-  report_url?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -100,7 +99,7 @@ export async function createCommissioningRun(
   const checklistJson = params.checklist ? JSON.stringify(params.checklist) : null;
   const notes = params.notes ?? null;
   const performedBy = params.performed_by ?? null;
-  const reportUrl = params.report_url ?? null;
+  const reportUrl = null;
 
   let profileId: string | null | undefined = params.profile_id ?? null;
 

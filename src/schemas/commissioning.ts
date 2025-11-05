@@ -27,7 +27,6 @@ export const CreateCommissioningRunSchema = z
     checklist: z.array(z.string().trim().min(1)).optional(),
     notes: z.string().trim().min(1).max(4000).optional(),
     performed_by: z.string().trim().min(1).optional(),
-    report_url: z.string().trim().url().optional(),
   })
   .strict();
 

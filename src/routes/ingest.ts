@@ -456,7 +456,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
     return withCors(
       req,
       env,
-      json({ error: "DB error", detail: String(e?.message || e) }, { status: 500 }),
+      json({ error: "DB error" }, { status: 500 }),
       cors,
     );
   }

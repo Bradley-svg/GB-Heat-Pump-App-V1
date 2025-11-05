@@ -16,7 +16,7 @@ export const AuditTrailQuerySchema = z
 export const CreateAuditEntrySchema = z
   .object({
     audit_id: z.string().trim().min(1).optional(),
-    actor_id: z.string().trim().min(1),
+    actor_id: z.string().trim().min(1).optional(),
     actor_email: z.string().trim().email().optional(),
     actor_name: z.string().trim().min(1).optional(),
     action: z.string().trim().min(1),

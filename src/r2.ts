@@ -3,6 +3,7 @@ import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 
 import type { Env } from "./env";
 import { json as secureJson, withSecurityHeaders } from "./utils/responses";
+import { systemLogger } from "./utils/logging";
 
 export interface R2HandlerOptions {
   /**
@@ -197,8 +198,9 @@ export async function handleR2Request(
       await bucket.put(key, req.body, { httpMetadata: { contentType } });
       return json({ ok: true, key });
     } catch (error: unknown) {
+      systemLogger({ scope: "r2" }).error("r2.put_failed", { key, error });
       return json(
-        { error: "Write failed", detail: String((error as Error | undefined)?.message ?? error) },
+        { error: "Write failed" },
         { status: 500 },
       );
     }
@@ -210,8 +212,9 @@ export async function handleR2Request(
       await bucket.delete(key);
       return json({ ok: true, key, deleted: true });
     } catch (error: unknown) {
+      systemLogger({ scope: "r2" }).error("r2.delete_failed", { key, error });
       return json(
-        { error: "Delete failed", detail: String((error as Error | undefined)?.message ?? error) },
+        { error: "Delete failed" },
         { status: 500 },
       );
     }

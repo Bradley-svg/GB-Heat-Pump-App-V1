@@ -291,9 +291,10 @@ describe("operations routes integration", () => {
   it("exposes audit trail and accepts new entries", async () => {
     const { env, sqlite } = createTestEnv();
     requireAccessUserMock
-      .mockResolvedValueOnce(ADMIN_USER)
-      .mockResolvedValueOnce(TENANT_USER)
-      .mockResolvedValueOnce(ADMIN_USER);
+      .mockResolvedValueOnce(ADMIN_USER) // list access
+      .mockResolvedValueOnce(TENANT_USER) // tenant attempt to create
+      .mockResolvedValueOnce(ADMIN_USER) // admin create
+      .mockResolvedValueOnce(ADMIN_USER); // confirm list
 
     try {
       const listRes = await handleListAuditTrail(
@@ -305,12 +306,22 @@ describe("operations routes integration", () => {
       expect(Array.isArray(listBody.entries)).toBe(true);
       expect(listBody.entries.length).toBeGreaterThanOrEqual(1);
 
+      const tenantRes = await handleCreateAuditEntry(
+        new Request("https://example.com/api/audit/logs", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "tenant.action",
+          }),
+        }),
+        env,
+      );
+      expect(tenantRes.status).toBe(403);
+
       const createReq = new Request("https://example.com/api/audit/logs", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          actor_id: "tech-jane",
-          actor_email: "tech.jane@example.com",
           action: "test.action",
           entity_type: "alert",
           entity_id: "alert-0001",
@@ -322,6 +333,8 @@ describe("operations routes integration", () => {
       const createBody = (await createRes.json()) as any;
       expect(createBody.audit.action).toBe("test.action");
       expect(createBody.audit.metadata?.source).toBe("integration-test");
+      expect(createBody.audit.actor_email).toBe(ADMIN_USER.email);
+      expect(createBody.audit.actor_id).toBe(ADMIN_USER.email);
 
       const confirmRes = await handleListAuditTrail(
         new Request("https://example.com/api/audit/logs?limit=10"),
