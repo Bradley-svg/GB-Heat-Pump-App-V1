@@ -50,13 +50,21 @@ function parseSignatureTimestamp(raw: string): number | null {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
+function parsePositiveInt(raw: string | undefined, fallback: number): number {
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+
 function parsedRateLimit(env: Env): number {
-  const raw = env.INGEST_RATE_LIMIT_PER_MIN;
-  if (!raw) return 120;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed)) return 120;
-  if (parsed <= 0) return 0;
-  return Math.floor(parsed);
+  return parsePositiveInt(env.INGEST_RATE_LIMIT_PER_MIN, 120);
+}
+
+function parsedFailureLimit(env: Env, overallLimit: number): number {
+  const fallback =
+    overallLimit > 0 ? Math.max(10, Math.floor(overallLimit / 2)) : 60;
+  return parsePositiveInt(env.INGEST_FAILURE_LIMIT_PER_MIN, fallback);
 }
 
 async function isRateLimited(
@@ -73,15 +81,37 @@ async function isRateLimited(
          FROM ops_metrics
         WHERE device_id = ?1
           AND route = ?2
-          AND ts >= ?3
-          AND status_code >= 200
-          AND status_code < 400`,
+          AND ts >= ?3`,
     )
     .bind(deviceId, route, sinceIso)
     .first<{ cnt: number | string | null }>();
   const rawCount = row?.cnt ?? 0;
   const count = typeof rawCount === "number" ? rawCount : Number(rawCount);
   return Number.isFinite(count) && count >= limitPerMinute;
+}
+
+async function isFailureRateLimited(
+  env: Env,
+  route: string,
+  deviceId: string,
+  failureLimitPerMinute: number,
+) {
+  if (failureLimitPerMinute <= 0) return false;
+  const sinceIso = new Date(Date.now() - 60_000).toISOString();
+  const row = await env.DB
+    .prepare(
+      `SELECT COUNT(*) AS cnt
+         FROM ops_metrics
+        WHERE device_id = ?1
+          AND route = ?2
+          AND ts >= ?3
+          AND status_code >= 400`,
+    )
+    .bind(deviceId, route, sinceIso)
+    .first<{ cnt: number | string | null }>();
+  const rawCount = row?.cnt ?? 0;
+  const count = typeof rawCount === "number" ? rawCount : Number(rawCount);
+  return Number.isFinite(count) && count >= failureLimitPerMinute;
 }
 
 function isNonceConflict(error: unknown): boolean {
@@ -242,6 +272,30 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
   }
   const tsMs = tsCheck.ms!;
 
+  const limitPerMinute = parsedRateLimit(env);
+  const failureLimitPerMinute = parsedFailureLimit(env, limitPerMinute);
+
+  if (
+    await isFailureRateLimited(env, INGEST_ROUTE, body.device_id, failureLimitPerMinute)
+  ) {
+    await logAndRecordEarlyExit(env, INGEST_ROUTE, 429, t0, log, "ingest.failure_rate_limited", {
+      deviceId: body.device_id,
+      fields: {
+        reason: "failure_rate_limited",
+        failure_limit_per_minute: failureLimitPerMinute,
+      },
+    });
+    return withCors(req, env, json({ error: "Rate limit exceeded" }, { status: 429 }), cors);
+  }
+
+  if (await isRateLimited(env, INGEST_ROUTE, body.device_id, limitPerMinute)) {
+    await logAndRecordEarlyExit(env, INGEST_ROUTE, 429, t0, log, "ingest.rate_limited", {
+      deviceId: body.device_id,
+      fields: { reason: "rate_limited", limit_per_minute: limitPerMinute },
+    });
+    return withCors(req, env, json({ error: "Rate limit exceeded" }, { status: 429 }), cors);
+  }
+
   const keyHeader = req.headers.get(DEVICE_KEY_HEADER);
   const keyVerification = await verifyDeviceKey(env, body.device_id, keyHeader);
   if (!keyVerification.ok || !keyVerification.deviceKeyHash) {
@@ -323,16 +377,6 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
         cors,
       );
     }
-  }
-
-  const deviceLog = log.with({ device_id: body.device_id });
-  const limitPerMinute = parsedRateLimit(env);
-  if (await isRateLimited(env, INGEST_ROUTE, body.device_id, limitPerMinute)) {
-    await logAndRecordEarlyExit(env, INGEST_ROUTE, 429, t0, log, "ingest.rate_limited", {
-      deviceId: body.device_id,
-      fields: { reason: "rate_limited", limit_per_minute: limitPerMinute },
-    });
-    return withCors(req, env, json({ error: "Rate limit exceeded" }, { status: 429 }), cors);
   }
 
   const supply = typeof body.metrics.supplyC === "number" ? body.metrics.supplyC : null;
@@ -421,6 +465,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
       ).bind(body.device_id, tsMs, dedupExpiresAt),
     ]);
 
+    const deviceLog = log.with({ device_id: body.device_id });
     await recordOpsMetric(env, INGEST_ROUTE, 200, Date.now() - t0, body.device_id, deviceLog);
     deviceLog.info("ingest.telemetry_stored", {
       payload_ts: new Date(tsMs).toISOString(),
@@ -523,6 +568,30 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
       fields: { reason: tsCheck.reason },
     });
     return withCors(req, env, json({ error: tsCheck.reason }, { status: 400 }), cors);
+  }
+
+  const heartRateLimit = parsedRateLimit(env);
+  const heartFailureLimit = parsedFailureLimit(env, heartRateLimit);
+
+  if (
+    await isFailureRateLimited(env, HEARTBEAT_ROUTE, body.device_id, heartFailureLimit)
+  ) {
+    await logAndRecordEarlyExit(env, HEARTBEAT_ROUTE, 429, t0, log, "heartbeat.failure_rate_limited", {
+      deviceId: body.device_id,
+      fields: {
+        reason: "failure_rate_limited",
+        failure_limit_per_minute: heartFailureLimit,
+      },
+    });
+    return withCors(req, env, json({ error: "Rate limit exceeded" }, { status: 429 }), cors);
+  }
+
+  if (await isRateLimited(env, HEARTBEAT_ROUTE, body.device_id, heartRateLimit)) {
+    await logAndRecordEarlyExit(env, HEARTBEAT_ROUTE, 429, t0, log, "heartbeat.rate_limited", {
+      deviceId: body.device_id,
+      fields: { reason: "rate_limited", limit_per_minute: heartRateLimit },
+    });
+    return withCors(req, env, json({ error: "Rate limit exceeded" }, { status: 429 }), cors);
   }
 
   const keyHeader = req.headers.get(DEVICE_KEY_HEADER);

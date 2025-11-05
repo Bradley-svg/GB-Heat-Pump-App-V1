@@ -22,6 +22,7 @@ export interface Env {
   INGEST_RATE_LIMIT_PER_MIN: string;
   INGEST_DEDUP_WINDOW_MINUTES?: string;
   INGEST_SIGNATURE_TOLERANCE_SECS: string;
+  INGEST_FAILURE_LIMIT_PER_MIN?: string;
   TELEMETRY_RETENTION_DAYS?: string;
   TELEMETRY_REFACTOR_MODE?: string;
   RETENTION_BACKUP_PREFIX?: string;
@@ -165,6 +166,10 @@ const EnvSchema = z
       typeof value.INGEST_RATE_LIMIT_PER_MIN === "string"
         ? value.INGEST_RATE_LIMIT_PER_MIN.trim()
         : "";
+    const ingestFailureLimitRaw =
+      typeof value.INGEST_FAILURE_LIMIT_PER_MIN === "string"
+        ? value.INGEST_FAILURE_LIMIT_PER_MIN.trim()
+        : "";
     const ingestToleranceRaw =
       typeof value.INGEST_SIGNATURE_TOLERANCE_SECS === "string"
         ? value.INGEST_SIGNATURE_TOLERANCE_SECS.trim()
@@ -220,6 +225,17 @@ const EnvSchema = z
           path: ["INGEST_RATE_LIMIT_PER_MIN"],
           code: z.ZodIssueCode.custom,
           message: "INGEST_RATE_LIMIT_PER_MIN must be a positive integer",
+        });
+      }
+    }
+
+    if (ingestFailureLimitRaw) {
+      const parsed = Number.parseInt(ingestFailureLimitRaw, 10);
+      if (Number.isNaN(parsed) || parsed <= 0) {
+        ctx.addIssue({
+          path: ["INGEST_FAILURE_LIMIT_PER_MIN"],
+          code: z.ZodIssueCode.custom,
+          message: "INGEST_FAILURE_LIMIT_PER_MIN must be a positive integer",
         });
       }
     }

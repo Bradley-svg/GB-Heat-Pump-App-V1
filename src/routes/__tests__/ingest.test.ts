@@ -22,6 +22,10 @@ function isRateLimitCountQuery(sql: string): boolean {
   );
 }
 
+function isFailureRateLimitQuery(sql: string): boolean {
+  return isRateLimitCountQuery(sql) && /\bstatus_code\s*>=\s*400\b/i.test(sql);
+}
+
 function baseEnv(overrides: Partial<Env> = {}): Env {
   const statement = {
     bind: vi.fn().mockReturnThis(),
@@ -420,9 +424,18 @@ describe("handleIngest", () => {
     verifyDeviceKeyMock.mockResolvedValue({ ok: true, deviceKeyHash: DEVICE_KEY_HASH });
     const selectFirst = vi.fn().mockResolvedValue({ profile_id: "demo" });
     const countFirst = vi.fn().mockResolvedValue({ cnt: 5 });
+    const failureFirst = vi.fn().mockResolvedValue({ cnt: 0 });
     const opsRun = vi.fn().mockResolvedValue(undefined);
 
     const prepare = vi.fn((sql: string) => {
+      if (isFailureRateLimitQuery(sql)) {
+        return {
+          bind: vi.fn(() => ({
+            first: failureFirst,
+          })),
+        };
+      }
+
       if (isRateLimitCountQuery(sql)) {
         return {
           bind: vi.fn(() => ({
@@ -451,7 +464,7 @@ describe("handleIngest", () => {
     });
 
     const env: Env = {
-      ...baseEnv({ INGEST_RATE_LIMIT_PER_MIN: "1" }),
+      ...baseEnv({ INGEST_RATE_LIMIT_PER_MIN: "1", INGEST_FAILURE_LIMIT_PER_MIN: "100" }),
       DB: {
         prepare,
         batch: vi.fn(),
@@ -464,11 +477,54 @@ describe("handleIngest", () => {
     };
 
     const req = await buildSignedRequest("demo", payload);
+  const res = await handleIngest(req, env, "demo");
+
+  expect(res.status).toBe(429);
+  const body = (await res.json()) as any;
+  expect(body.error).toBe("Rate limit exceeded");
+  expect(opsRun).toHaveBeenCalled();
+  });
+
+  it("throttles repeated failures when failure limit is exceeded", async () => {
+    const env = baseEnv({ INGEST_FAILURE_LIMIT_PER_MIN: "2" });
+    const defaultPrepare = env.DB.prepare as any;
+    const failureFirst = vi.fn().mockResolvedValue({ cnt: 3 });
+    const totalFirst = vi.fn().mockResolvedValue({ cnt: 0 });
+
+    env.DB.prepare = vi.fn((sql: string) => {
+      if (isFailureRateLimitQuery(sql)) {
+        return {
+          bind: vi.fn(() => ({
+            first: failureFirst,
+          })),
+        } as any;
+      }
+
+      if (isRateLimitCountQuery(sql)) {
+        return {
+          bind: vi.fn(() => ({
+            first: totalFirst,
+          })),
+        } as any;
+      }
+
+      return defaultPrepare(sql);
+    });
+
+    (env.DB as any).batch = vi.fn();
+
+    const payload = {
+      device_id: "dev-failure",
+      metrics: { supplyC: 18 },
+    };
+
+    const req = await buildSignedRequest("demo", payload);
     const res = await handleIngest(req, env, "demo");
 
     expect(res.status).toBe(429);
     const body = (await res.json()) as any;
     expect(body.error).toBe("Rate limit exceeded");
-    expect(opsRun).toHaveBeenCalled();
+    expect(verifyDeviceKeyMock).not.toHaveBeenCalled();
+    expect(failureFirst).toHaveBeenCalled();
   });
 });

@@ -29,6 +29,8 @@ const STATIC_CONTENT_TYPES: Record<string, string> = {
 const APP_R2_PREFIX = "app/";
 const DEFAULT_HEARTBEAT_INTERVAL_SECS = 30;
 const DEFAULT_OFFLINE_MULTIPLIER = 6;
+const OFFLINE_BATCH_SIZE = 100;
+const OFFLINE_MAX_BATCHES_PER_RUN = 40;
 
 function extname(path: string): string {
   const idx = path.lastIndexOf(".");
@@ -336,23 +338,31 @@ export default {
     });
 
     const ts = new Date().toISOString();
-    const BATCH = 25;
-
     let processed = 0;
-    for (const batchIds of chunk(ids, BATCH)) {
-      const phA = batchIds.map((_, i) => `?${i + 1}`).join(",");
-      await env.DB.prepare(`UPDATE devices SET online=0 WHERE online=1 AND device_id IN (${phA})`)
+    let batches = 0;
+    let truncated = false;
+
+    for (const batchIds of chunk(ids, OFFLINE_BATCH_SIZE)) {
+      batches += 1;
+      const devicePlaceholders = batchIds.map(() => "?").join(",");
+      await env.DB.prepare(
+        `UPDATE devices SET online=0 WHERE online=1 AND device_id IN (${devicePlaceholders})`,
+      )
         .bind(...batchIds)
         .run();
 
-      const phB = batchIds.map((_, i) => `?${i + 2}`).join(",");
-      await env.DB.prepare(`UPDATE latest_state SET online=0, updated_at=?1 WHERE device_id IN (${phB})`)
+      const latestPlaceholders = batchIds.map((_, index) => `?${index + 2}`).join(",");
+      await env.DB.prepare(
+        `UPDATE latest_state SET online=0, updated_at=?1 WHERE device_id IN (${latestPlaceholders})`,
+      )
         .bind(ts, ...batchIds)
         .run();
 
       const values = batchIds.map(() => `(?, ?, ?, ?, ?)`).join(",");
       const binds: any[] = [];
-      for (const id of batchIds) binds.push(ts, "/cron/offline", 200, 0, id);
+      for (const id of batchIds) {
+        binds.push(ts, "/cron/offline", 200, 0, id);
+      }
       await env.DB.prepare(
         `INSERT INTO ops_metrics (ts, route, status_code, duration_ms, device_id) VALUES ${values}`,
       )
@@ -360,12 +370,17 @@ export default {
         .run();
 
       processed += batchIds.length;
+      if (batches >= OFFLINE_MAX_BATCHES_PER_RUN) {
+        truncated = true;
+        break;
+      }
     }
 
     log.info("cron.offline_check.completed", {
       stale_count: ids.length,
       processed,
-      batches: Math.ceil(ids.length / BATCH),
+      batches,
+      truncated,
     });
   },
 };

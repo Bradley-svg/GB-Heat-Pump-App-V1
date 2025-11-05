@@ -126,7 +126,9 @@ export async function presentLatestBatchRow(
   };
 
   if (includeMetrics) {
-    latest.payload = safeParseJson(row.payload_json);
+    if (isAdmin) {
+      latest.payload = safeParseJson(row.payload_json);
+    }
     latest.supplyC = maskTelemetryNumber(row.supplyC, isAdmin);
     latest.returnC = maskTelemetryNumber(row.returnC, isAdmin);
     latest.tankC = maskTelemetryNumber(row.tankC, isAdmin);
@@ -138,6 +140,11 @@ export async function presentLatestBatchRow(
     latest.deltaT = maskTelemetryNumber(row.deltaT, isAdmin, 2);
     latest.thermalKW = maskTelemetryNumber(row.thermalKW, isAdmin, 3);
     latest.cop = maskTelemetryNumber(row.cop, isAdmin, 2);
+  } else if (isAdmin) {
+    const parsedPayload = safeParseJson(row.payload_json);
+    if (parsedPayload !== null) {
+      latest.payload = parsedPayload;
+    }
   }
 
   if (includeFaults) {

@@ -1,5 +1,4 @@
 import type { Env } from "../env";
-import { chunk } from "../utils";
 import { systemLogger, type Logger } from "../utils/logging";
 
 const DEFAULT_RETENTION_DAYS = 90;
@@ -12,6 +11,7 @@ export const TELEMETRY_RETENTION_CRON = "15 2 * * *";
 type Nullable<T> = T | null | undefined;
 
 type TelemetryRow = {
+  rowid: number;
   device_id: string;
   ts: number | string;
   metrics_json: string;
@@ -28,6 +28,7 @@ type RetentionTableSummary = {
   deleted: number;
   batches: number;
   backups: string[];
+  hasMore: boolean;
 };
 
 export type RetentionSummary = {
@@ -36,6 +37,7 @@ export type RetentionSummary = {
   cutoffIso: string;
   telemetry: RetentionTableSummary;
   opsMetricsDeleted: number;
+  telemetryHasMore: boolean;
 };
 
 export interface RetentionOptions {
@@ -51,6 +53,7 @@ type ArchiveTarget = {
 };
 
 const BOOLEAN_TRUE = new Set(["1", "true", "yes", "on"]);
+const MAX_TELEMETRY_BATCHES_PER_RUN = 40;
 
 export async function runTelemetryRetention(env: Env, options: RetentionOptions = {}): Promise<RetentionSummary> {
   const now = options.now ?? new Date();
@@ -107,6 +110,7 @@ export async function runTelemetryRetention(env: Env, options: RetentionOptions 
     telemetry_batches: telemetrySummary.batches,
     telemetry_backups: telemetrySummary.backups.length,
     ops_metrics_deleted: opsDeleted,
+    telemetry_has_more: telemetrySummary.hasMore,
   });
 
   return {
@@ -115,6 +119,7 @@ export async function runTelemetryRetention(env: Env, options: RetentionOptions 
     cutoffIso,
     telemetry: telemetrySummary,
     opsMetricsDeleted: opsDeleted,
+    telemetryHasMore: telemetrySummary.hasMore,
   };
 }
 
@@ -165,11 +170,12 @@ async function pruneTelemetry(
     deleted: 0,
     batches: 0,
     backups: [],
+    hasMore: false,
   };
 
   while (true) {
     const batch = await env.DB.prepare(
-      `SELECT device_id, ts, metrics_json, deltaT, thermalKW, cop, cop_quality, status_json, faults_json
+      `SELECT rowid, device_id, ts, metrics_json, deltaT, thermalKW, cop, cop_quality, status_json, faults_json
          FROM telemetry
         WHERE ts < ?1
         ORDER BY ts
@@ -183,6 +189,7 @@ async function pruneTelemetry(
 
     summary.scanned += rows.length;
     summary.batches += 1;
+    const rowIds = rows.map((row) => row.rowid).filter((value) => typeof value === "number");
 
     if (!params.dryRun && params.archive) {
       const key = buildArchiveKey(params.archive.prefix, params.jobId, "telemetry", summary.batches);
@@ -218,16 +225,20 @@ async function pruneTelemetry(
     }
 
     if (!params.dryRun) {
-      const deletions = rows.map((row) =>
-        env.DB.prepare(`DELETE FROM telemetry WHERE device_id = ?1 AND ts = ?2`).bind(
-          row.device_id,
-          toNumber(row.ts),
-        ),
-      );
-      for (const statements of chunk(deletions, 20)) {
-        await env.DB.batch(statements);
+      if (rowIds.length) {
+        const placeholders = rowIds.map(() => "?").join(",");
+        await env.DB.prepare(`DELETE FROM telemetry WHERE rowid IN (${placeholders})`).bind(...rowIds).run();
       }
-      summary.deleted += rows.length;
+      summary.deleted += rowIds.length;
+    }
+
+    if (summary.batches >= MAX_TELEMETRY_BATCHES_PER_RUN) {
+      summary.hasMore = true;
+      params.log.warn("retention.batch_limit_reached", {
+        batches: summary.batches,
+        deleted: params.dryRun ? 0 : summary.deleted,
+      });
+      break;
     }
   }
 
@@ -235,6 +246,7 @@ async function pruneTelemetry(
     scanned: summary.scanned,
     deleted: params.dryRun ? 0 : summary.deleted,
     batches: summary.batches,
+    has_more: summary.hasMore,
   });
 
   return summary;

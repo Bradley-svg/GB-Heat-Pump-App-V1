@@ -72,6 +72,7 @@ describe("telemetry routes", () => {
         cop: expect.any(Number),
         faults: [],
       });
+      expect(first.latest.payload).toBeDefined();
     } finally {
       sqlite.close();
     }
@@ -101,6 +102,7 @@ describe("telemetry routes", () => {
         supplyC: expect.any(Number),
         faults: expect.any(Array),
       });
+      expect(item.latest.payload).toBeUndefined();
     } finally {
       sqlite.close();
     }
