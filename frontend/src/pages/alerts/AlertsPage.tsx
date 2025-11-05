@@ -40,7 +40,14 @@ function optionalString(value: string | null | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function normalizeAssigneeInput(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = optionalString(value);
+  return trimmed ?? null;
+}
+
 function formatAssigneeMetadata(value: unknown): string {
+  if (value === null) return "Unassigned";
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   return JSON.stringify(value);
@@ -81,12 +88,13 @@ function applyLifecycleOptimistic(
         copy.status = "acknowledged";
       }
       copy.acknowledged_at = now;
-      const assignee = optionalString(payload.assignee);
-      if (assignee) {
-        copy.assigned_to = assignee;
+      const normalizedAssignee = normalizeAssigneeInput(payload.assignee);
+      if (normalizedAssignee !== undefined) {
+        copy.assigned_to = normalizedAssignee;
       }
       const commentBody = optionalString(payload.comment);
-      const metadata = assignee ? { assignee } : null;
+      const metadata =
+        normalizedAssignee !== undefined ? { assignee: normalizedAssignee } : null;
       if (commentBody || metadata) {
         copy.comments = [
           ...copy.comments,
@@ -100,11 +108,10 @@ function applyLifecycleOptimistic(
       break;
     }
     case "assign": {
-      const assigneeInput = payload.assignee ?? "";
-      const assignee = optionalString(assigneeInput) ?? assigneeInput;
+      const assignee = normalizeAssigneeInput(payload.assignee) ?? null;
       copy.assigned_to = assignee;
       const commentBody = optionalString(payload.comment);
-      const metadata = assignee ? { assignee } : null;
+      const metadata = { assignee };
       if (commentBody || metadata) {
         copy.comments = [
           ...copy.comments,
@@ -265,26 +272,29 @@ export default function AlertsPage() {
         await performCommentAction(dialogAlert, dialog.comment);
       } else {
         const commentValue = optionalString(dialog.comment);
-        const assigneeValue = optionalString(dialog.assignee);
-        const payload: AlertLifecycleActionPayload =
-          dialog.action === "assign" ?
-            {
-              action: "assign",
-              assignee: assigneeValue ?? "",
-              comment: commentValue,
-            }
-          : dialog.action === "acknowledge" ?
-            {
-              action: "acknowledge",
-              comment: commentValue,
-              assignee: assigneeValue,
-            }
-          : {
-              action: "resolve",
-              comment: commentValue,
-            };
-
-        await performLifecycleAction(dialogAlert, payload);
+        if (dialog.action === "assign") {
+          const assigneeValue = normalizeAssigneeInput(dialog.assignee) ?? null;
+          const payload: AlertLifecycleActionPayload = {
+            action: "assign",
+            assignee: assigneeValue,
+            comment: commentValue,
+          };
+          await performLifecycleAction(dialogAlert, payload);
+        } else if (dialog.action === "acknowledge") {
+          const assigneeValue = normalizeAssigneeInput(dialog.assignee);
+          const payload: AlertLifecycleActionPayload = {
+            action: "acknowledge",
+            comment: commentValue,
+            ...(assigneeValue !== undefined ? { assignee: assigneeValue } : {}),
+          };
+          await performLifecycleAction(dialogAlert, payload);
+        } else {
+          const payload: AlertLifecycleActionPayload = {
+            action: "resolve",
+            comment: commentValue,
+          };
+          await performLifecycleAction(dialogAlert, payload);
+        }
       }
       closeDialog();
     } catch {
@@ -385,7 +395,6 @@ export default function AlertsPage() {
                 }}
                 disabled={
                   pendingAlertId === dialog.alertId ||
-                  (dialog.action === "assign" && !optionalString(dialog.assignee)) ||
                   (dialog.action === "comment" && !optionalString(dialog.comment))
                 }
               >
@@ -501,24 +510,32 @@ export default function AlertsPage() {
                     <div className="stack compact">
                       <div className="muted">History</div>
                       <ul className="list tight">
-                        {alert.comments.map((comment) => (
-                          <li key={comment.comment_id} className="list-item">
-                            <div>
-                              <div className="meta">
-                                {comment.action} -{" "}
-                                {comment.author_email ?? comment.author_id ?? "unknown"} -{" "}
-                                {formatRelative(comment.created_at)}
-                                {comment.pending ? " - pending" : ""}
-                              </div>
-                              {comment.body ? <div>{comment.body}</div> : null}
-                              {comment.metadata?.assignee ? (
+                        {alert.comments.map((comment) => {
+                          const hasAssigneeMetadata =
+                            comment.metadata != null &&
+                            Object.prototype.hasOwnProperty.call(comment.metadata, "assignee");
+                          const metadataAssignee = hasAssigneeMetadata
+                            ? comment.metadata!.assignee
+                            : undefined;
+                          return (
+                            <li key={comment.comment_id} className="list-item">
+                              <div>
                                 <div className="meta">
-                                  Assignee: {formatAssigneeMetadata(comment.metadata.assignee)}
+                                  {comment.action} -{" "}
+                                  {comment.author_email ?? comment.author_id ?? "unknown"} -{" "}
+                                  {formatRelative(comment.created_at)}
+                                  {comment.pending ? " - pending" : ""}
                                 </div>
-                              ) : null}
-                            </div>
-                          </li>
-                        ))}
+                                {comment.body ? <div>{comment.body}</div> : null}
+                                {hasAssigneeMetadata ? (
+                                  <div className="meta">
+                                    Assignee: {formatAssigneeMetadata(metadataAssignee)}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </li>
+                          );
+                        })}
                       </ul>
                     </div>
                   ) : null}

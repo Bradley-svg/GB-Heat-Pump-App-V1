@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { useApiClient, useCurrentUserState } from "../../app/contexts";
@@ -34,8 +34,18 @@ export default function DeviceDetailPage() {
   const [series, setSeries] = useState<TelemetrySeriesResponse | null>(null);
   const [selectedDisplay, setSelectedDisplay] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
+  const [telemetryError, setTelemetryError] = useState(false);
+  const [deviceLoadError, setDeviceLoadError] = useState(false);
   const scopeMine = isAdmin ? mineOnly : true;
+  const requestIdRef = useRef(0);
+  const previousIsAdminRef = useRef(isAdmin);
+
+  useEffect(() => {
+    if (!previousIsAdminRef.current && isAdmin) {
+      setMineOnly(false);
+    }
+    previousIsAdminRef.current = isAdmin;
+  }, [isAdmin]);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,10 +66,15 @@ export default function DeviceDetailPage() {
           }
           return items[0]?.lookup ?? "";
         });
+        setDeviceLoadError(false);
       } catch {
         if (!cancelled) {
           setDevices([]);
           setSelected("");
+          setLatest(null);
+          setSeries(null);
+          setSelectedDisplay("");
+          setDeviceLoadError(true);
         }
       }
     }
@@ -73,8 +88,10 @@ export default function DeviceDetailPage() {
   const load = useCallback(
     async (lookup: string) => {
       if (!lookup) return;
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
       setLoading(true);
-      setError(false);
+      setTelemetryError(false);
       try {
         const params = new URLSearchParams({
           scope: "device",
@@ -87,13 +104,19 @@ export default function DeviceDetailPage() {
           api.post<TelemetryLatestBatchResponse>("/api/telemetry/latest-batch", { devices: [lookup] }),
           api.get<TelemetrySeriesResponse>(`/api/telemetry/series?${params.toString()}`),
         ]);
+        if (requestIdRef.current !== requestId) {
+          return;
+        }
         const batchItem = latestRes.items?.[0] ?? null;
         setLatest(batchItem);
         setSeries(seriesRes);
         setSelectedDisplay(batchItem?.device_id ?? "");
         setLoading(false);
       } catch {
-        setError(true);
+        if (requestIdRef.current !== requestId) {
+          return;
+        }
+        setTelemetryError(true);
         setLoading(false);
       }
     },
@@ -232,10 +255,14 @@ export default function DeviceDetailPage() {
           </button>
         </div>
 
-        {error ? (
+        {telemetryError ? (
           <div className="callout error mt-1">
             Unable to load device data
           </div>
+        ) : null}
+
+        {deviceLoadError ? (
+          <div className="callout error mt-1">Unable to load devices</div>
         ) : null}
 
         {latest ? (
