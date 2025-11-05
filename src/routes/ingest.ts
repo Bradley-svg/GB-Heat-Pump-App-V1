@@ -15,6 +15,7 @@ import { deriveTelemetryMetrics } from "../telemetry";
 import { ingestDedupWindowMs } from "../utils/ingest-dedup";
 import { loggerForRequest, type Logger } from "../utils/logging";
 import { recordOpsMetric } from "../lib/ops-metrics";
+import { withTransaction } from "../lib/db";
 
 const DEVICE_KEY_HEADER = "X-GREENBRO-DEVICE-KEY";
 const SIGNATURE_HEADER = "X-GREENBRO-SIGNATURE";
@@ -403,6 +404,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
     powerKW,
   });
 
+  const sanitizedMetricsJson = JSON.stringify(body.metrics);
   const faults_json = JSON.stringify(body.faults || []);
   const status_json = JSON.stringify({
     mode: body.metrics.mode ?? null,
@@ -415,67 +417,83 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
   const dedupCleanupCutoff = Date.now();
 
   try {
-    await env.DB.prepare(
-      `DELETE FROM ingest_nonces WHERE device_id = ?1 AND ts_ms = ?2 AND expires_at < ?3`,
-    )
-      .bind(body.device_id, tsMs, dedupCleanupCutoff)
-      .run();
+    const updatedAtIso = nowISO();
+    const lastSeenIso = new Date(tsMs).toISOString();
 
-    await env.DB.batch([
-      env.DB.prepare(
-        `INSERT INTO telemetry (device_id, ts, metrics_json, deltaT, thermalKW, cop, cop_quality, status_json, faults_json)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-         ON CONFLICT (device_id, ts) DO NOTHING`,
-      ).bind(
-        body.device_id,
-        tsMs,
-        JSON.stringify(body.metrics),
-        deltaT,
-        thermalKW,
-        cop,
-        cop_quality,
-        status_json,
-        faults_json,
-      ),
-      env.DB.prepare(
-        `INSERT INTO latest_state
-           (device_id, ts, supplyC, returnC, tankC, ambientC, flowLps, compCurrentA, eevSteps, powerKW,
-            deltaT, thermalKW, cop, cop_quality, mode, defrost, online, faults_json, updated_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,1,?17,?18)
-         ON CONFLICT(device_id) DO UPDATE SET
-            ts=excluded.ts, supplyC=excluded.supplyC, returnC=excluded.returnC, tankC=excluded.tankC,
-            ambientC=excluded.ambientC, flowLps=excluded.flowLps, compCurrentA=excluded.compCurrentA,
-            eevSteps=excluded.eevSteps, powerKW=excluded.powerKW, deltaT=excluded.deltaT,
-            thermalKW=excluded.thermalKW, cop=excluded.cop, cop_quality=excluded.cop_quality,
-            mode=excluded.mode, defrost=excluded.defrost, online=1, faults_json=excluded.faults_json,
-            updated_at=excluded.updated_at`,
-      ).bind(
-        body.device_id,
-        tsMs,
-        supply,
-        ret,
-        body.metrics.tankC ?? null,
-        body.metrics.ambientC ?? null,
-        flow,
-        body.metrics.compCurrentA ?? null,
-        body.metrics.eevSteps ?? null,
-        body.metrics.powerKW ?? null,
-        deltaT,
-        thermalKW,
-        cop,
-        cop_quality,
-        body.metrics.mode ?? null,
-        body.metrics.defrost ?? 0,
-        faults_json,
-        nowISO(),
-      ),
-      env.DB.prepare(
-        `UPDATE devices SET online=1, last_seen_at=?2 WHERE device_id=?1`,
-      ).bind(body.device_id, new Date(tsMs).toISOString()),
-      env.DB.prepare(
-        `INSERT INTO ingest_nonces (device_id, ts_ms, expires_at) VALUES (?1, ?2, ?3)`,
-      ).bind(body.device_id, tsMs, dedupExpiresAt),
-    ]);
+    await withTransaction(env.DB, async () => {
+      await env.DB
+        .prepare(
+          `DELETE FROM ingest_nonces WHERE device_id = ?1 AND ts_ms = ?2 AND expires_at < ?3`,
+        )
+        .bind(body.device_id, tsMs, dedupCleanupCutoff)
+        .run();
+
+      await env.DB
+        .prepare(
+          `INSERT INTO telemetry (device_id, ts, metrics_json, deltaT, thermalKW, cop, cop_quality, status_json, faults_json)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+           ON CONFLICT (device_id, ts) DO NOTHING`,
+        )
+        .bind(
+          body.device_id,
+          tsMs,
+          sanitizedMetricsJson,
+          deltaT,
+          thermalKW,
+          cop,
+          cop_quality,
+          status_json,
+          faults_json,
+        )
+        .run();
+
+      await env.DB
+        .prepare(
+          `INSERT INTO latest_state
+             (device_id, ts, supplyC, returnC, tankC, ambientC, flowLps, compCurrentA, eevSteps, powerKW,
+              deltaT, thermalKW, cop, cop_quality, mode, defrost, online, payload_json, faults_json, updated_at)
+           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,1,?17,?18,?19)
+           ON CONFLICT(device_id) DO UPDATE SET
+              ts=excluded.ts, supplyC=excluded.supplyC, returnC=excluded.returnC, tankC=excluded.tankC,
+              ambientC=excluded.ambientC, flowLps=excluded.flowLps, compCurrentA=excluded.compCurrentA,
+              eevSteps=excluded.eevSteps, powerKW=excluded.powerKW, deltaT=excluded.deltaT,
+              thermalKW=excluded.thermalKW, cop=excluded.cop, cop_quality=excluded.cop_quality,
+              mode=excluded.mode, defrost=excluded.defrost, online=1, payload_json=excluded.payload_json,
+              faults_json=excluded.faults_json, updated_at=excluded.updated_at`,
+        )
+        .bind(
+          body.device_id,
+          tsMs,
+          supply,
+          ret,
+          body.metrics.tankC ?? null,
+          body.metrics.ambientC ?? null,
+          flow,
+          body.metrics.compCurrentA ?? null,
+          body.metrics.eevSteps ?? null,
+          body.metrics.powerKW ?? null,
+          deltaT,
+          thermalKW,
+          cop,
+          cop_quality,
+          body.metrics.mode ?? null,
+          body.metrics.defrost ?? 0,
+          sanitizedMetricsJson,
+          faults_json,
+          updatedAtIso,
+        )
+        .run();
+
+      await env.DB
+        .prepare(`UPDATE devices SET online=1, last_seen_at=?2 WHERE device_id=?1`)
+        .bind(body.device_id, lastSeenIso)
+        .run();
+
+      await env.DB
+        .prepare(`INSERT INTO ingest_nonces (device_id, ts_ms, expires_at) VALUES (?1, ?2, ?3)`)
+        .bind(body.device_id, tsMs, dedupExpiresAt)
+        .run();
+    });
 
     const deviceLog = log.with({ device_id: body.device_id });
     await recordOpsMetric(env, INGEST_ROUTE, 200, Date.now() - t0, body.device_id, deviceLog);
@@ -701,16 +719,22 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
   const tsMs = tsCheck.ms ?? Date.now();
 
   try {
-    await env.DB.batch([
-      env.DB.prepare(
-        `UPDATE latest_state
-            SET online=1, updated_at=?2, faults_json='[]'
-          WHERE device_id=?1`,
-      ).bind(body.device_id, new Date(tsMs).toISOString()),
-      env.DB.prepare(
-        `UPDATE devices SET online=1, last_seen_at=?2 WHERE device_id=?1`,
-      ).bind(body.device_id, new Date(tsMs).toISOString()),
-    ]);
+    const updatedIso = new Date(tsMs).toISOString();
+    await withTransaction(env.DB, async () => {
+      await env.DB
+        .prepare(
+          `UPDATE latest_state
+              SET online=1, updated_at=?2, faults_json='[]'
+            WHERE device_id=?1`,
+        )
+        .bind(body.device_id, updatedIso)
+        .run();
+
+      await env.DB
+        .prepare(`UPDATE devices SET online=1, last_seen_at=?2 WHERE device_id=?1`)
+        .bind(body.device_id, updatedIso)
+        .run();
+    });
 
     const deviceLog = log.with({ device_id: body.device_id });
     await recordOpsMetric(env, HEARTBEAT_ROUTE, 200, Date.now() - t0, body.device_id, deviceLog);

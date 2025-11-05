@@ -1,5 +1,6 @@
 import type { Env } from "../env";
 import { andWhere, nowISO } from "../utils";
+import { withTransaction } from "./db";
 
 export interface AlertRecord {
   alert_id: string;
@@ -415,7 +416,11 @@ export async function updateAlertLifecycle(
     };
   }
 
-  await env.DB.batch(statements);
+  await withTransaction(env.DB, async () => {
+    for (const statement of statements) {
+      await statement.run();
+    }
+  });
 
   const refreshed = await getAlert(env, params.alert_id);
   if (!refreshed) {
@@ -508,7 +513,10 @@ export async function addAlertComment(
     .prepare(`UPDATE alerts SET updated_at = ?2 WHERE alert_id = ?1`)
     .bind(params.alert_id, now);
 
-  await env.DB.batch([insertStmt, updateAlertStmt]);
+  await withTransaction(env.DB, async () => {
+    await insertStmt.run();
+    await updateAlertStmt.run();
+  });
 
   return {
     comment_id: commentId,

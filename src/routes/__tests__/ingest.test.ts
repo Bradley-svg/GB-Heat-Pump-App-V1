@@ -157,27 +157,35 @@ describe("handleIngest", () => {
     expect(body.error).toBe("Invalid signature");
   });
 
-  it("returns 200 for a valid payload", async () => {
+  it("returns 200 for a valid payload and drops unexpected metric keys", async () => {
     verifyDeviceKeyMock.mockResolvedValue({ ok: true, deviceKeyHash: DEVICE_KEY_HASH });
     claimDeviceIfUnownedMock.mockResolvedValue({ ok: true });
 
+    const telemetryBinds: unknown[][] = [];
+    const latestStateBinds: unknown[][] = [];
     const selectFirst = vi.fn().mockResolvedValue({ profile_id: "demo" });
     const countFirst = vi.fn().mockResolvedValue({ cnt: 0 });
-
-    const metricsInsert = { kind: "telemetry" };
-    const latestInsert = { kind: "latest_state" };
-    const deviceUpdate = { kind: "device_update" };
-    const nonceInsert = { kind: "nonce_insert" };
     const nonceDeleteRun = vi.fn().mockResolvedValue(undefined);
+    const deviceUpdateRun = vi.fn().mockResolvedValue(undefined);
+    const nonceInsertRun = vi.fn().mockResolvedValue(undefined);
     const opsRun = vi.fn().mockResolvedValue(undefined);
 
-    const prepare = vi.fn((sql: string) => {
+    const env = baseEnv();
+    const defaultPrepare = env.DB.prepare as any;
+
+    env.DB.prepare = vi.fn((sql: string) => {
+      if (/^(?:PRAGMA|BEGIN|COMMIT|ROLLBACK)/i.test(sql)) {
+        return {
+          run: vi.fn().mockResolvedValue(undefined),
+        } as any;
+      }
+
       if (isRateLimitCountQuery(sql)) {
         return {
           bind: vi.fn(() => ({
             first: countFirst,
           })),
-        };
+        } as any;
       }
 
       if (sql.includes("SELECT profile_id FROM devices")) {
@@ -185,25 +193,7 @@ describe("handleIngest", () => {
           bind: vi.fn(() => ({
             first: selectFirst,
           })),
-        };
-      }
-
-      if (sql.startsWith("INSERT INTO telemetry")) {
-        return {
-          bind: vi.fn(() => metricsInsert),
-        };
-      }
-
-      if (sql.startsWith("INSERT INTO latest_state")) {
-        return {
-          bind: vi.fn(() => latestInsert),
-        };
-      }
-
-      if (sql.startsWith("UPDATE devices SET online=1")) {
-        return {
-          bind: vi.fn(() => deviceUpdate),
-        };
+        } as any;
       }
 
       if (sql.startsWith("DELETE FROM ingest_nonces")) {
@@ -211,13 +201,45 @@ describe("handleIngest", () => {
           bind: vi.fn(() => ({
             run: nonceDeleteRun,
           })),
-        };
+        } as any;
+      }
+
+      if (sql.startsWith("INSERT INTO telemetry")) {
+        return {
+          bind: vi.fn((...args: unknown[]) => {
+            telemetryBinds.push(args);
+            return {
+              run: vi.fn().mockResolvedValue(undefined),
+            };
+          }),
+        } as any;
+      }
+
+      if (sql.startsWith("INSERT INTO latest_state")) {
+        return {
+          bind: vi.fn((...args: unknown[]) => {
+            latestStateBinds.push(args);
+            return {
+              run: vi.fn().mockResolvedValue(undefined),
+            };
+          }),
+        } as any;
+      }
+
+      if (sql.startsWith("UPDATE devices SET online=1")) {
+        return {
+          bind: vi.fn(() => ({
+            run: deviceUpdateRun,
+          })),
+        } as any;
       }
 
       if (sql.startsWith("INSERT INTO ingest_nonces")) {
         return {
-          bind: vi.fn(() => nonceInsert),
-        };
+          bind: vi.fn(() => ({
+            run: nonceInsertRun,
+          })),
+        } as any;
       }
 
       if (sql.startsWith("INSERT INTO ops_metrics")) {
@@ -225,29 +247,18 @@ describe("handleIngest", () => {
           bind: vi.fn(() => ({
             run: opsRun,
           })),
-        };
+        } as any;
       }
 
-      throw new Error(`Unexpected SQL: ${sql}`);
+      return defaultPrepare(sql);
     });
-
-    const batch = vi.fn().mockResolvedValue(undefined);
-
-    const env: Env = {
-      ...baseEnv(),
-      DB: {
-        prepare,
-        batch,
-      } as any,
-    };
 
     const payload = {
       device_id: "dev-123",
       metrics: {
         supplyC: 45.2,
-        returnC: 40.1,
-        flowLps: 0.2,
         powerKW: 1.2,
+        secretToken: "should-be-dropped",
       },
     };
 
@@ -258,18 +269,29 @@ describe("handleIngest", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.ok).toBe(true);
-
     expect(selectFirst).toHaveBeenCalled();
     expect(countFirst).toHaveBeenCalled();
     expect(nonceDeleteRun).toHaveBeenCalled();
-    expect(batch).toHaveBeenCalledTimes(1);
-    expect(batch.mock.calls[0][0]).toEqual([
-      metricsInsert,
-      latestInsert,
-      deviceUpdate,
-      nonceInsert,
-    ]);
+    expect(deviceUpdateRun).toHaveBeenCalled();
+    expect(nonceInsertRun).toHaveBeenCalled();
     expect(opsRun).toHaveBeenCalled();
+
+    expect(telemetryBinds).toHaveLength(1);
+    const metricsJson = telemetryBinds[0]?.[2];
+    expect(typeof metricsJson).toBe("string");
+    const telemetryPayload = JSON.parse(metricsJson as string) as Record<string, unknown>;
+    expect(telemetryPayload).not.toHaveProperty("secretToken");
+    expect(telemetryPayload).toMatchObject({
+      supplyC: 45.2,
+      powerKW: 1.2,
+    });
+
+    expect(latestStateBinds).toHaveLength(1);
+    const payloadJson = latestStateBinds[0]?.[16];
+    expect(typeof payloadJson).toBe("string");
+    const latestPayload = JSON.parse(payloadJson as string) as Record<string, unknown>;
+    expect(latestPayload).not.toHaveProperty("secretToken");
+
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
     const varyHeader = res.headers.get("vary");
     expect(varyHeader && varyHeader.toLowerCase()).toBe("origin");
@@ -294,25 +316,32 @@ describe("handleIngest", () => {
     verifyDeviceKeyMock.mockResolvedValue({ ok: true, deviceKeyHash: DEVICE_KEY_HASH });
     const selectFirst = vi.fn().mockResolvedValue({ profile_id: "demo" });
     const countFirst = vi.fn().mockResolvedValue({ cnt: 0 });
-
-    const metricsInsert = { kind: "telemetry" };
-    const latestInsert = { kind: "latest_state" };
-    const deviceUpdate = { kind: "device_update" };
-    const nonceInsert = { kind: "nonce_insert" };
     const nonceDeleteRun = vi.fn().mockResolvedValue(undefined);
+    const telemetryRun = vi.fn().mockResolvedValue(undefined);
+    const latestRun = vi.fn().mockResolvedValue(undefined);
+    const deviceUpdateRun = vi.fn().mockResolvedValue(undefined);
     const opsRun = vi.fn().mockResolvedValue(undefined);
 
     const duplicateError = new Error(
       "UNIQUE constraint failed: ingest_nonces.device_id, ingest_nonces.ts_ms",
     );
 
-    const prepare = vi.fn((sql: string) => {
+    const env = baseEnv();
+    const defaultPrepare = env.DB.prepare as any;
+
+    env.DB.prepare = vi.fn((sql: string) => {
+      if (/^(?:PRAGMA|BEGIN|COMMIT|ROLLBACK)/i.test(sql)) {
+        return {
+          run: vi.fn().mockResolvedValue(undefined),
+        } as any;
+      }
+
       if (isRateLimitCountQuery(sql)) {
         return {
           bind: vi.fn(() => ({
             first: countFirst,
           })),
-        };
+        } as any;
       }
 
       if (sql.includes("SELECT profile_id FROM devices")) {
@@ -320,7 +349,7 @@ describe("handleIngest", () => {
           bind: vi.fn(() => ({
             first: selectFirst,
           })),
-        };
+        } as any;
       }
 
       if (sql.startsWith("DELETE FROM ingest_nonces")) {
@@ -328,31 +357,39 @@ describe("handleIngest", () => {
           bind: vi.fn(() => ({
             run: nonceDeleteRun,
           })),
-        };
+        } as any;
       }
 
       if (sql.startsWith("INSERT INTO telemetry")) {
         return {
-          bind: vi.fn(() => metricsInsert),
-        };
+          bind: vi.fn(() => ({
+            run: telemetryRun,
+          })),
+        } as any;
       }
 
       if (sql.startsWith("INSERT INTO latest_state")) {
         return {
-          bind: vi.fn(() => latestInsert),
-        };
+          bind: vi.fn(() => ({
+            run: latestRun,
+          })),
+        } as any;
       }
 
       if (sql.startsWith("UPDATE devices SET online=1")) {
         return {
-          bind: vi.fn(() => deviceUpdate),
-        };
+          bind: vi.fn(() => ({
+            run: deviceUpdateRun,
+          })),
+        } as any;
       }
 
       if (sql.startsWith("INSERT INTO ingest_nonces")) {
         return {
-          bind: vi.fn(() => nonceInsert),
-        };
+          bind: vi.fn(() => ({
+            run: vi.fn().mockRejectedValue(duplicateError),
+          })),
+        } as any;
       }
 
       if (sql.startsWith("INSERT INTO ops_metrics")) {
@@ -360,27 +397,15 @@ describe("handleIngest", () => {
           bind: vi.fn(() => ({
             run: opsRun,
           })),
-        };
+        } as any;
       }
 
-      throw new Error(`Unexpected SQL: ${sql}`);
+      return defaultPrepare(sql);
     });
-
-    const batch = vi.fn().mockRejectedValue(duplicateError);
-
-    const env: Env = {
-      ...baseEnv(),
-      DB: {
-        prepare,
-        batch,
-      } as any,
-    };
 
     const payload = {
       device_id: "dev-duplicate",
-      metrics: {
-        supplyC: 30.5,
-      },
+      metrics: { supplyC: 29.1, powerKW: 1.1 },
     };
 
     const req = await buildSignedRequest("demo", payload);
@@ -391,13 +416,9 @@ describe("handleIngest", () => {
     expect(body.error).toBe("Duplicate payload");
 
     expect(nonceDeleteRun).toHaveBeenCalled();
-    expect(batch).toHaveBeenCalledTimes(1);
-    expect(batch.mock.calls[0][0]).toEqual([
-      metricsInsert,
-      latestInsert,
-      deviceUpdate,
-      nonceInsert,
-    ]);
+    expect(telemetryRun).toHaveBeenCalled();
+    expect(latestRun).toHaveBeenCalled();
+    expect(deviceUpdateRun).toHaveBeenCalled();
     expect(opsRun).toHaveBeenCalled();
   });
 
@@ -590,3 +611,10 @@ describe("handleIngest", () => {
     expect(totalFirst).toHaveBeenCalled();
   });
 });
+
+
+
+
+
+
+
