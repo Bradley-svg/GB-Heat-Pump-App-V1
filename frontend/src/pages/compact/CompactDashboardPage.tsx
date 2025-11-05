@@ -212,7 +212,8 @@ export default function CompactDashboardPage() {
         </div>
         {devices.length ? (
           <div className="min-table">
-            <table className="table" aria-label="Device roster summary">
+            <table className="table">
+              <caption>Device roster summary</caption>
               <thead>
                 <tr>
                   <th scope="col">Device</th>

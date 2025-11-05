@@ -152,7 +152,8 @@ export default function OpsPage() {
         </div>
         {ops.length ? (
           <div className="min-table">
-            <table className="table" aria-label="Route performance breakdown">
+            <table className="table">
+              <caption>Route performance breakdown</caption>
               <thead>
                 <tr>
                   <th scope="col">Route</th>
@@ -189,7 +190,8 @@ export default function OpsPage() {
         </div>
         {recent.length ? (
           <div className="min-table">
-            <table className="table" aria-label="Recent operations events">
+            <table className="table">
+              <caption>Recent operations events</caption>
               <thead>
                 <tr>
                   <th scope="col">Timestamp</th>

@@ -62,7 +62,8 @@ export default function AdminPage() {
         </div>
         {data.tenants?.length ? (
           <div className="min-table">
-            <table className="table" aria-label="Tenant inventory">
+            <table className="table">
+              <caption>Tenant inventory</caption>
               <thead>
                 <tr>
                   <th scope="col">Profile</th>
@@ -93,7 +94,8 @@ export default function AdminPage() {
         </div>
         {data.ops?.length ? (
           <div className="min-table">
-            <table className="table" aria-label="Recent operations">
+            <table className="table">
+              <caption>Recent operations</caption>
               <thead>
                 <tr>
                   <th scope="col">Timestamp</th>

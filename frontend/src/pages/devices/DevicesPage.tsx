@@ -132,7 +132,8 @@ export default function DevicesPage() {
         </div>
         {items.length ? (
           <div className="min-table">
-            <table className="table" aria-label="Devices in scope">
+            <table className="table">
+              <caption>Devices in scope</caption>
               <thead>
                 <tr>
                   <th scope="col">Device</th>

@@ -1,75 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { useApiClient, useCurrentUserState } from "../../app/contexts";
-import { useApiRequest } from "../../app/hooks/use-api-request";
+import { useCurrentUserState } from "../../app/contexts";
 import { Page } from "../../components";
 import { Sparkline } from "../../components/Sparkline";
 import { formatDate, formatNumber, formatRelative } from "../../utils/format";
 import type {
-  DeviceListResponse,
-  TelemetryLatestBatchItem,
-  TelemetryLatestBatchResponse,
   TelemetryLatestSnapshot,
   TelemetryMetric,
   TelemetrySeriesEntry,
-  TelemetrySeriesResponse,
 } from "../../types/api";
-
-interface DeviceTelemetryData {
-  latest: TelemetryLatestBatchItem | null;
-  series: TelemetrySeriesResponse | null;
-}
-
-function useDeviceRoster(scopeMine: boolean) {
-  const api = useApiClient();
-
-  const fetchRoster = useCallback(
-    ({ signal }: { signal: AbortSignal }) => {
-      const params = new URLSearchParams({
-        limit: "50",
-        mine: scopeMine ? "1" : "0",
-      });
-      return api.get<DeviceListResponse>(`/api/devices?${params.toString()}`, { signal });
-    },
-    [api, scopeMine],
-  );
-
-  return useApiRequest(fetchRoster, { enableAutoRetry: true });
-}
-
-function useDeviceTelemetry(lookup: string | null) {
-  const api = useApiClient();
-
-  const fetchTelemetry = useCallback(
-    async ({ signal }: { signal: AbortSignal }): Promise<DeviceTelemetryData> => {
-      if (!lookup) {
-        return { latest: null, series: null };
-      }
-
-      const params = new URLSearchParams({
-        scope: "device",
-        device: lookup,
-        interval: "5m",
-        limit: "120",
-        fill: "carry",
-      });
-
-      const [latestBatch, series] = await Promise.all([
-        api.post<TelemetryLatestBatchResponse>("/api/telemetry/latest-batch", { devices: [lookup] }, { signal }),
-        api.get<TelemetrySeriesResponse>(`/api/telemetry/series?${params.toString()}`, { signal }),
-      ]);
-
-      return {
-        latest: latestBatch.items?.[0] ?? null,
-        series,
-      };
-    },
-    [api, lookup],
-  );
-
-  return useApiRequest<DeviceTelemetryData>(fetchTelemetry, { enableAutoRetry: true });
-}
+import { useDeviceRoster, useDeviceTelemetry } from "./useDeviceData";
 
 export default function DeviceDetailPage() {
   const currentUser = useCurrentUserState();
@@ -373,7 +314,8 @@ export default function DeviceDetailPage() {
                   <div className="subdued">{displayHistory.length} buckets</div>
                 </div>
                 <div className="min-table">
-                  <table className="table" aria-label="Recent telemetry buckets">
+                  <table className="table">
+                    <caption>Recent telemetry buckets</caption>
                     <thead>
                       <tr>
                         <th scope="col">Timestamp</th>
