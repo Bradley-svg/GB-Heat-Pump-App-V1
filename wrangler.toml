@@ -24,7 +24,9 @@ RETENTION_BACKUP_PREFIX = "data-retention"
 # Ingest controls are provided via `wrangler secret put` per environment:
 #   INGEST_ALLOWED_ORIGINS
 #   INGEST_RATE_LIMIT_PER_MIN
+#   INGEST_FAILURE_LIMIT_PER_MIN
 #   INGEST_SIGNATURE_TOLERANCE_SECS
+INGEST_FAILURE_LIMIT_PER_MIN = "60"
 
 # Ops thresholds (override per-env if needed)
 HEARTBEAT_INTERVAL_SECS = "30"        # expected device heartbeat period

@@ -55,6 +55,7 @@ wrangler secret put ACCESS_JWKS_URL
 wrangler secret put CURSOR_SECRET
 wrangler secret put INGEST_ALLOWED_ORIGINS           # e.g. https://devices.greenbro.io,https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev
 wrangler secret put INGEST_RATE_LIMIT_PER_MIN        # firmware cap (120 today)
+wrangler secret put INGEST_FAILURE_LIMIT_PER_MIN     # auth/validation failure guardrail (default 60)
 wrangler secret put INGEST_SIGNATURE_TOLERANCE_SECS  # default 300
 wrangler secret put ASSET_SIGNING_SECRET             # optional unless issuing signed URLs
 ```
@@ -216,6 +217,7 @@ Override these with `[env.<name>.vars]` when staging or production diverge.
 | `ALLOWED_PREFIXES`         | Optional allow list for R2 keys (for example `brand/,reports/`). |
 | `INGEST_ALLOWED_ORIGINS`   | **Required** allowlist of device origins; Worker returns 403 if unset (comma or newline separated). Production firmware expects `https://devices.greenbro.io,https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev`. |
 | `INGEST_RATE_LIMIT_PER_MIN`| Rate limiting for ingestion endpoints. Production cadence requires `120` to avoid false positives. |
+| `INGEST_FAILURE_LIMIT_PER_MIN` | Failure-rate guardrail; throttle repeated auth/validation errors (default `60`). |
 | `INGEST_SIGNATURE_TOLERANCE_SECS` | Replay protection window for device signatures. Set to `300` seconds unless firmware clock drift changes. |
 
 > Non-local development (remote dev, staging, production) must set `INGEST_ALLOWED_ORIGINS`. For purely local `wrangler dev --local` sessions you can omit it, but ingest requests from browsers will be refused until the allowlist is populated.
@@ -227,6 +229,7 @@ wrangler secret put CURSOR_SECRET
 wrangler secret put ASSET_SIGNING_SECRET --env staging
 wrangler secret put INGEST_ALLOWED_ORIGINS
 wrangler secret put INGEST_RATE_LIMIT_PER_MIN
+wrangler secret put INGEST_FAILURE_LIMIT_PER_MIN
 wrangler secret put INGEST_SIGNATURE_TOLERANCE_SECS
 ```
 

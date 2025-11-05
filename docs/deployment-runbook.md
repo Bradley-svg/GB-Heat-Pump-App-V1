@@ -90,7 +90,7 @@ Cron schedules in `wrangler.toml` (under `[triggers]`) deploy automatically with
 
 **Verification**
 - After a deploy, confirm the cron is registered: `npx wrangler deployments status` (look for the `crons` block).
-- Watch for the scheduled Worker logs: `npx wrangler tail --filter "offline_cron"` and confirm `cron.offline_check.completed` appears within the expected window (see `docs/observability.md` §2).
+- Watch for the scheduled Worker logs: `npx wrangler tail --filter "offline_cron"` and confirm `cron.offline_check.completed` appears within the expected window (see `docs/observability.md` section 2) with `"truncated": false` to indicate the batch completed.
 
 **Rollback**
 - Redeploy with the previous `wrangler.toml` (with the prior cron list) using `npm run deploy`.

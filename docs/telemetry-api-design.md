@@ -101,7 +101,8 @@ changes.
   - `missing`: identifiers that could not be resolved or are out of scope.
   - Field masking: non-admin responses omit raw `device_id` inside `latest`
     payload (same as `/api/devices/:id/latest`) and precision is rounded via
-    `maskTelemetryNumber`.
+    `maskTelemetryNumber`. The `payload` blob is only returned for admin
+    callers; tenant responses set it to `null` even when metrics are enabled.
 
 ### Implementation Notes
 

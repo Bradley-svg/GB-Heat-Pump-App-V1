@@ -11,7 +11,8 @@ This document captures where the system's sensitive values live, how to provisio
 | `ACCESS_JWKS_URL` | JWKS endpoint published by Cloudflare Access that contains signing keys for issued JWTs. | Not strictly secret, but keep private to avoid exposing Access topology. Rotate if Access domain or certificate bundle changes. | Review with Access certificate rollovers; rotate at least twice per year. |
 | `ASSET_SIGNING_SECRET` | HMAC secret for generating signed URLs to the R2-backed asset worker. | Optional: only required when issuing signed `GET`/`HEAD` URLs. Rotation requires updating any producer of signed URLs. | Rotate every 6 months or when the signing service rotates credentials. |
 | `INGEST_ALLOWED_ORIGINS` | Comma or newline-separated list of browser origins that may call `/api/ingest` and `/api/heartbeat`. | Production firmware expects `https://devices.greenbro.io,https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev`. Update immediately if firmware allowlist changes. | Review before each firmware release and at least quarterly. |
-| `INGEST_RATE_LIMIT_PER_MIN` | Per-device throttle for ingest + heartbeat endpoints. | Current firmware transmits at up to 120 requests/minute. Set to `120` unless hardware cadence changes. | Validate monthly against telemetry load; rotate whenever firmware cadence changes. |
+| `INGEST_RATE_LIMIT_PER_MIN` | Per-device success-rate throttle for ingest + heartbeat endpoints. | Current firmware transmits at up to 120 requests/minute. Set to `120` unless hardware cadence changes. | Validate monthly against telemetry load; rotate whenever firmware cadence changes. |
+| `INGEST_FAILURE_LIMIT_PER_MIN` | Guardrail for repeated auth/validation failures per device. | Defaults to `60` (half of the success ceiling). Raise only if firmware intentionally retries after validation errors. | Review alongside success limit; adjust when cadence or validation behavior changes. |
 | `INGEST_SIGNATURE_TOLERANCE_SECS` | Acceptable clock skew for signed ingest requests. | Default `300` seconds (5 minutes). Tighten or relax in lockstep with firmware timestamp tolerance. | Reconfirm monthly and during any device time-sync firmware update. |
 
 The Worker code reads each secret from the runtime `env` object. No secret values should live in `wrangler.toml`, GitHub, or checked-in source files.
@@ -29,6 +30,7 @@ Every deploy runs through a "secrets provisioning" gate:
    wrangler secret put ACCESS_JWKS_URL
    wrangler secret put INGEST_ALLOWED_ORIGINS
    wrangler secret put INGEST_RATE_LIMIT_PER_MIN
+   wrangler secret put INGEST_FAILURE_LIMIT_PER_MIN
    wrangler secret put INGEST_SIGNATURE_TOLERANCE_SECS
    # Optional when signed asset URLs are needed:
    wrangler secret put ASSET_SIGNING_SECRET
@@ -42,6 +44,7 @@ Every deploy runs through a "secrets provisioning" gate:
    export CURSOR_SECRET=generate-a-strong-value-here
    export INGEST_ALLOWED_ORIGINS=https://devices.greenbro.io,https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev
    export INGEST_RATE_LIMIT_PER_MIN=120
+   export INGEST_FAILURE_LIMIT_PER_MIN=60
    export INGEST_SIGNATURE_TOLERANCE_SECS=300
    # export ASSET_SIGNING_SECRET=only-if-signed-urls-required
    # Optional development flags (local-only; CI now blocks them in shared environments)

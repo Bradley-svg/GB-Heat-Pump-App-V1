@@ -12,6 +12,7 @@
   - **telemetry**: exports batches of rows older than the cutoff to NDJSON in R2, then deletes them from D1.
   - **ops_metrics**: direct delete (no archive; metrics are transient).
 - Successful runs emit structured logs (`cron.retention.*`) and summary counts.
+- If the Worker hits the per-run batch limit it logs `retention.batch_limit_reached` and the final `cron.retention.completed` entry includes `"telemetry_has_more": true`; run the cron again (or wait for the next scheduled tick) to drain the remaining backlog.
 
 ## Configuration
 | Setting | Default | Notes |
@@ -42,6 +43,7 @@
    wrangler r2 object get RETENTION_ARCHIVE data-retention/<job-id>/telemetry/batch-0001.ndjson
    ```
 5. Store long-term archives in the warehouse (for example, BigQuery or Snowflake) per the Observability playbook.
+6. Inspect the latest `cron.retention.completed` log; if it reports `"telemetry_has_more": true`, run the cron again (or wait for the next window) until the flag returns `false`.
 
 ## Manual Operations
 - Trigger a one-off cleanup (production):

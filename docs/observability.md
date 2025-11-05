@@ -103,7 +103,7 @@ These fields are designed to feed dashboards or alerting pipelines without addit
 - **Immediate checks**:
   1. Inspect `ops_summary.top_server_error_routes` for spikes in `/api/heartbeat`.
   2. Query logs for `heartbeat.rate_limited` or `ingest.db_error` events.
-  3. Confirm the offline cron ran (look for `cron.offline_check.completed` log within the last 5 minutes) and review the `processed` count.
+  3. Confirm the offline cron ran (look for `cron.offline_check.completed` log within the last 5 minutes), review the `processed` count, and ensure the entry reports `"truncated": false`.
 - **Response**:
   - If heartbeats are rate limited, review `INGEST_RATE_LIMIT_PER_MIN` in Workers KV/config and device firmware sending cadence.
   - If DB writes are failing (`ingest.db_error`), run `wrangler d1 execute` with a read-only check on `latest_state` to verify connectivity.
