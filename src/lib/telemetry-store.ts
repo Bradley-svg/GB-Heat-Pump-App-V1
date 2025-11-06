@@ -174,19 +174,19 @@ function buildSeriesSql(whereClause: string): string {
       SELECT
         bucket_start_ms,
         SUM(sample_count) AS sample_count,
-        AVG(avg_deltaT) AS avg_deltaT,
+        SUM(avg_deltaT * sample_count) / NULLIF(SUM(CASE WHEN avg_deltaT IS NOT NULL THEN sample_count ELSE 0 END), 0) AS avg_deltaT,
         MIN(min_deltaT) AS min_deltaT,
         MAX(max_deltaT) AS max_deltaT,
-        AVG(avg_thermalKW) AS avg_thermalKW,
+        SUM(avg_thermalKW * sample_count) / NULLIF(SUM(CASE WHEN avg_thermalKW IS NOT NULL THEN sample_count ELSE 0 END), 0) AS avg_thermalKW,
         MIN(min_thermalKW) AS min_thermalKW,
         MAX(max_thermalKW) AS max_thermalKW,
-        AVG(avg_cop) AS avg_cop,
+        SUM(avg_cop * sample_count) / NULLIF(SUM(CASE WHEN avg_cop IS NOT NULL THEN sample_count ELSE 0 END), 0) AS avg_cop,
         MIN(min_cop) AS min_cop,
         MAX(max_cop) AS max_cop,
-        AVG(avg_supplyC) AS avg_supplyC,
-        AVG(avg_returnC) AS avg_returnC,
-        AVG(avg_flowLps) AS avg_flowLps,
-        AVG(avg_powerKW) AS avg_powerKW
+        SUM(avg_supplyC * sample_count) / NULLIF(SUM(CASE WHEN avg_supplyC IS NOT NULL THEN sample_count ELSE 0 END), 0) AS avg_supplyC,
+        SUM(avg_returnC * sample_count) / NULLIF(SUM(CASE WHEN avg_returnC IS NOT NULL THEN sample_count ELSE 0 END), 0) AS avg_returnC,
+        SUM(avg_flowLps * sample_count) / NULLIF(SUM(CASE WHEN avg_flowLps IS NOT NULL THEN sample_count ELSE 0 END), 0) AS avg_flowLps,
+        SUM(avg_powerKW * sample_count) / NULLIF(SUM(CASE WHEN avg_powerKW IS NOT NULL THEN sample_count ELSE 0 END), 0) AS avg_powerKW
       FROM per_device
       GROUP BY bucket_start_ms
     )
