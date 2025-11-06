@@ -3,6 +3,7 @@ import type { JWTPayload } from "jose";
 import { deriveUserFromClaims, landingFor } from "../rbac";
 import type { Env, User } from "../env";
 import { loggerForRequest } from "../utils/logging";
+import { extractSessionToken, lookupSession } from "./auth/sessions";
 
 const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 const devUserCache = new WeakMap<
@@ -118,6 +119,24 @@ export async function requireAccessUser(req: Request, env: Env): Promise<User | 
     return cached;
   }
 
+  const sessionToken = extractSessionToken(req);
+  if (sessionToken) {
+    try {
+      const session = await lookupSession(env, sessionToken);
+      if (session) {
+        const user: User = {
+          email: session.email,
+          roles: normalizeRoles(session.roles),
+          clientIds: normalizeClientIds(session.clientIds),
+        };
+        cacheRequestUser(req, user);
+        return user;
+      }
+    } catch (error) {
+      loggerForRequest(req, { scope: "access" }).error("access.session_lookup_failed", { error });
+    }
+  }
+
   const jwt = req.headers.get("Cf-Access-Jwt-Assertion");
   if (jwt) {
     try {
@@ -225,4 +244,22 @@ function sanitizeEmailForLog(candidate: unknown): string | undefined {
   if (localPart.length === 1) return `*@${domain}`;
   if (localPart.length === 2) return `${localPart[0]}*@${domain}`;
   return `${localPart[0]}***${localPart.slice(-1)}@${domain}`;
+}
+
+function normalizeRoles(roles: string[]): User["roles"] {
+  const normalized = roles
+    .map((role) => (typeof role === "string" ? role.trim().toLowerCase() : ""))
+    .filter((role) => role.length > 0);
+  const expanded = normalized.map((role) => {
+    if (role === "client-admin" || role === "client_admin") return "client";
+    return role;
+  });
+  const filtered = expanded
+    .map((role) => ALLOWED_ROLES.find((allowed) => allowed === role))
+    .filter((role): role is User["roles"][number] => Boolean(role));
+  return filtered.length > 0 ? Array.from(new Set(filtered)) : [];
+}
+
+function normalizeClientIds(clientIds: string[]): string[] {
+  return clientIds.map((id) => id.trim()).filter((id) => id.length > 0);
 }

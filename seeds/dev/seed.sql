@@ -217,4 +217,47 @@ INSERT OR REPLACE INTO audit_trail (
     '2025-01-03T08:45:00.000Z'
   );
 
+-- Demo dashboard user aligned with new auth flow
+INSERT OR REPLACE INTO users (
+  id,
+  email,
+  password_hash,
+  password_salt,
+  password_iters,
+  roles,
+  client_ids,
+  profile_id,
+  created_at,
+  updated_at,
+  verified_at
+) VALUES (
+  'user-demo-001',
+  'demo@example.com',
+  'QyBTkxeVVWzqzQffQhy1PZj6232qv0I5xjRwj2/Axgw=',
+  'wGQuXW9VEaRh3FkLhPxqyA==',
+  100000,
+  '["client"]',
+  '["profile-west"]',
+  'profile-west',
+  '2025-01-01T12:00:00.000Z',
+  '2025-01-01T12:00:00.000Z',
+  '2025-01-01T12:05:00.000Z'
+);
+
+INSERT OR REPLACE INTO user_profiles (
+  user_id,
+  first_name,
+  last_name,
+  phone,
+  company,
+  metadata
+) VALUES (
+  'user-demo-001',
+  'Green',
+  'User',
+  '+27-21-555-0100',
+  'GREENBRO',
+  '{"source":"seed","note":"demo account"}'
+);
+
 COMMIT;

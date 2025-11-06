@@ -16,6 +16,13 @@ import {
   handleUpdateAlertRecord,
   handleCreateAlertComment,
 } from "./routes/alerts";
+import {
+  handleLogin,
+  handleLogout,
+  handleRecover,
+  handleReset,
+  handleSignup,
+} from "./routes/auth";
 import { handleArchive } from "./routes/archive";
 import { handleClientCompact } from "./routes/client";
 import { handleFleetAdminOverview } from "./routes/admin";
@@ -46,6 +53,11 @@ registerTelemetryRoutes(router);
 registerAdminRoutes(router);
 
 router
+  .post("/api/auth/signup", (req, env) => handleSignup(req, env))
+  .post("/api/auth/login", (req, env) => handleLogin(req, env))
+  .post("/api/auth/logout", (req, env) => handleLogout(req, env))
+  .post("/api/auth/recover", (req, env) => handleRecover(req, env))
+  .post("/api/auth/reset", (req, env) => handleReset(req, env))
   .get("/api/me", withAccess((req, env) => handleMe(req, env)))
   .get("/api/fleet/summary", withAccess((req, env) => handleFleetSummary(req, env)))
   .get(

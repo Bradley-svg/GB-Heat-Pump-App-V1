@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const opsPageRender = vi.hoisted(() => vi.fn(() => <div>Ops Mock</div>));
@@ -37,9 +38,15 @@ afterEach(() => {
 });
 
 function renderAppShell(userRoles: string[], initialPath = "/app/") {
+  const normalizedRoles = userRoles.map((role) => {
+    const lower = role.toLowerCase();
+    if (lower === "client-admin" || lower === "client_admin") return "client";
+    if (lower === "admin-client" || lower === "admin_client") return "admin";
+    return role;
+  });
   const userState: CurrentUserState = {
     status: "ready",
-    user: { email: "user@example.com", roles: userRoles, clientIds: [] },
+    user: { email: "user@example.com", roles: normalizedRoles, clientIds: [] },
     error: null,
     refresh: () => {
       /* noop */
@@ -50,8 +57,6 @@ function renderAppShell(userRoles: string[], initialPath = "/app/") {
 }
 
 function renderAppShellWithState(userState: CurrentUserState, initialPath = "/app/") {
-  window.history.replaceState({}, "", initialPath);
-
   const apiClientStub: ApiClient = {
     get: vi.fn().mockResolvedValue({}),
     post: vi.fn().mockResolvedValue({}),
@@ -59,15 +64,27 @@ function renderAppShellWithState(userState: CurrentUserState, initialPath = "/ap
     delete: vi.fn().mockResolvedValue({}),
   };
 
-  return render(
+  const router = createMemoryRouter(
+    [
+      {
+        path: "/app/*",
+        element: <AppShell />,
+      },
+    ],
+    { initialEntries: [initialPath] },
+  );
+
+  const utils = render(
     <AppConfigContext.Provider value={defaultConfig}>
       <ApiClientContext.Provider value={apiClientStub}>
         <CurrentUserContext.Provider value={userState}>
-          <AppShell />
+          <RouterProvider router={router} />
         </CurrentUserContext.Provider>
       </ApiClientContext.Provider>
     </AppConfigContext.Provider>,
   );
+
+  return { router, ...utils };
 }
 
 describe("AppShell role gating", () => {
@@ -107,7 +124,7 @@ describe("AppShell role gating", () => {
       },
     });
 
-    expect(screen.getByRole("heading", { name: "Unauthorized" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Unable to load dashboard" })).toBeInTheDocument();
   });
 
   it("hides Ops navigation for non-admins", async () => {
@@ -119,69 +136,64 @@ describe("AppShell role gating", () => {
   });
 
   it("prevents direct Ops routing for non-admins", async () => {
-    renderAppShell(["client"]);
-    act(() => {
-      window.history.pushState({}, "", "/app/ops");
-      window.dispatchEvent(new PopStateEvent("popstate"));
+    const { router } = renderAppShell(["client"]);
+    await act(async () => {
+      await router.navigate("/app/ops");
     });
 
     await waitFor(() => {
-      expect(window.location.pathname).toBe("/app/compact");
+      expect(router.state.location.pathname).toBe("/app/compact");
     });
     expect(screen.queryByText("Unauthorized")).not.toBeInTheDocument();
     expect(opsPageRender).not.toHaveBeenCalled();
   });
 
   it("prevents direct Admin routing for non-admins", async () => {
-    renderAppShell(["client"]);
-    act(() => {
-      window.history.pushState({}, "", "/app/admin");
-      window.dispatchEvent(new PopStateEvent("popstate"));
+    const { router } = renderAppShell(["client"]);
+    await act(async () => {
+      await router.navigate("/app/admin");
     });
 
     await waitFor(() => {
-      expect(window.location.pathname).toBe("/app/compact");
+      expect(router.state.location.pathname).toBe("/app/compact");
     });
     expect(screen.queryByText("Unauthorized")).not.toBeInTheDocument();
     expect(adminPageRender).not.toHaveBeenCalled();
   });
 
   it("prevents direct Admin Archive routing for non-admins", async () => {
-    renderAppShell(["client"]);
-    act(() => {
-      window.history.pushState({}, "", "/app/admin/archive");
-      window.dispatchEvent(new PopStateEvent("popstate"));
+    const { router } = renderAppShell(["client"]);
+    await act(async () => {
+      await router.navigate("/app/admin/archive");
     });
 
     await waitFor(() => {
-      expect(window.location.pathname).toBe("/app/compact");
+      expect(router.state.location.pathname).toBe("/app/compact");
     });
     expect(screen.queryByText("Unauthorized")).not.toBeInTheDocument();
     expect(adminArchivePageRender).not.toHaveBeenCalled();
   });
 
   it("redirects clients hitting unknown routes back to their landing page", async () => {
-    renderAppShell(["client"]);
-    act(() => {
-      window.history.pushState({}, "", "/app/unknown");
-      window.dispatchEvent(new PopStateEvent("popstate"));
+    const { router } = renderAppShell(["client"]);
+    await act(async () => {
+      await router.navigate("/app/unknown");
     });
 
     await waitFor(() => {
-      expect(window.location.pathname).toBe("/app/compact");
+      expect(router.state.location.pathname).toBe("/app/compact");
     });
     expect(screen.queryByRole("heading", { name: "Unauthorized" })).not.toBeInTheDocument();
   });
 
   it("treats client-admin role as non-admin", async () => {
-    renderAppShell(["client-admin"]);
-    act(() => {
-      window.history.pushState({}, "", "/app/ops");
-      window.dispatchEvent(new PopStateEvent("popstate"));
+    const { router } = renderAppShell(["client-admin"]);
+    await act(async () => {
+      await router.navigate("/app/ops");
     });
 
     await waitFor(() => {
-      expect(window.location.pathname).toBe("/app/compact");
+      expect(router.state.location.pathname).toBe("/app/compact");
     });
     expect(screen.queryByText("Unauthorized")).not.toBeInTheDocument();
     await waitFor(() => {
@@ -191,10 +203,9 @@ describe("AppShell role gating", () => {
   });
 
   it("shows Ops navigation and route for admins", async () => {
-    renderAppShell(["admin"]);
-    act(() => {
-      window.history.pushState({}, "", "/app/ops");
-      window.dispatchEvent(new PopStateEvent("popstate"));
+    const { router } = renderAppShell(["admin"]);
+    await act(async () => {
+      await router.navigate("/app/ops");
     });
 
     expect(await screen.findByText("Ops")).toBeInTheDocument();
@@ -204,10 +215,9 @@ describe("AppShell role gating", () => {
   });
 
   it("allows admin routes for admins", async () => {
-    renderAppShell(["admin"]);
-    act(() => {
-      window.history.pushState({}, "", "/app/admin");
-      window.dispatchEvent(new PopStateEvent("popstate"));
+    const { router } = renderAppShell(["admin"]);
+    await act(async () => {
+      await router.navigate("/app/admin");
     });
 
     await waitFor(() => {

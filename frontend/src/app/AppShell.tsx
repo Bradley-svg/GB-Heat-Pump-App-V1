@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 
 import { useAppConfig, useCurrentUserState } from "./contexts";
 import type { CurrentUser } from "./hooks/use-current-user";
@@ -56,59 +56,36 @@ export function AppShell() {
   );
 
   return (
-    <BrowserRouter
-      basename="/app"
-      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-    >
-      <AppLayout user={user}>
-        <Suspense fallback={<LoadingScreen message="Loading page..." />}>
-          <Routes>
-            <Route index element={<Navigate to={landingPath} replace />} />
-            <Route path="overview" element={<OverviewPage />} />
-            <Route path="compact" element={<CompactDashboardPage />} />
-            <Route path="devices" element={<DevicesPage />} />
-            <Route path="device" element={<DeviceDetailPage />} />
-            <Route path="alerts" element={<AlertsPage />} />
-            <Route
-              path="ops"
-              element={
-                isAdmin ? (
-                  <OpsPage />
-                ) : (
-                  unauthorizedRedirect
-                )
-              }
-            />
-            <Route path="commissioning" element={<CommissioningPage />} />
-            <Route
-              path="admin"
-              element={
-                isAdmin ? (
-                  <AdminPage />
-                ) : (
-                  unauthorizedRedirect
-                )
-              }
-            />
-            <Route
-              path="admin/archive"
-              element={
-                isAdmin ? (
-                  <AdminArchivePage />
-                ) : (
-                  unauthorizedRedirect
-                )
-              }
-            />
-            <Route
-              path="unauthorized"
-              element={<UnauthorizedScreen returnUrl={config.returnDefault} />}
-            />
-            <Route path="*" element={<Navigate to={landingPath} replace />} />
-          </Routes>
-        </Suspense>
-      </AppLayout>
-    </BrowserRouter>
+    <AppLayout user={user}>
+      <Suspense fallback={<LoadingScreen message="Loading page..." />}>
+        <Routes>
+          <Route index element={<Navigate to={landingPath} replace />} />
+          <Route path="overview" element={<OverviewPage />} />
+          <Route path="compact" element={<CompactDashboardPage />} />
+          <Route path="devices" element={<DevicesPage />} />
+          <Route path="device" element={<DeviceDetailPage />} />
+          <Route path="alerts" element={<AlertsPage />} />
+          <Route
+            path="ops"
+            element={isAdmin ? <OpsPage /> : unauthorizedRedirect}
+          />
+          <Route path="commissioning" element={<CommissioningPage />} />
+          <Route
+            path="admin"
+            element={isAdmin ? <AdminPage /> : unauthorizedRedirect}
+          />
+          <Route
+            path="admin/archive"
+            element={isAdmin ? <AdminArchivePage /> : unauthorizedRedirect}
+          />
+          <Route
+            path="unauthorized"
+            element={<UnauthorizedScreen returnUrl={config.returnDefault} />}
+          />
+          <Route path="*" element={<Navigate to={landingPath} replace />} />
+        </Routes>
+      </Suspense>
+    </AppLayout>
   );
 }
 

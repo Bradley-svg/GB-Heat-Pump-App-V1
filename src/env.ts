@@ -52,6 +52,7 @@ export interface Env {
   CLIENT_QUERY_PROFILE?: string;
   CLIENT_QUERY_PROFILE_THRESHOLD_MS?: string;
   ARCHIVE_CACHE_TTL_SECS?: string;
+  PASSWORD_PBKDF2_ITERATIONS?: string;
 }
 
 export type User = {
@@ -369,6 +370,21 @@ const EnvSchema = z
           path: ["OBSERVABILITY_MAX_BYTES"],
           code: z.ZodIssueCode.custom,
           message: "OBSERVABILITY_MAX_BYTES must be a positive integer",
+        });
+      }
+    }
+
+    const passwordIterationsRaw =
+      typeof value.PASSWORD_PBKDF2_ITERATIONS === "string"
+        ? value.PASSWORD_PBKDF2_ITERATIONS.trim()
+        : "";
+    if (passwordIterationsRaw) {
+      const parsed = Number.parseInt(passwordIterationsRaw, 10);
+      if (!Number.isFinite(parsed) || parsed < 50000 || parsed > 500000) {
+        ctx.addIssue({
+          path: ["PASSWORD_PBKDF2_ITERATIONS"],
+          code: z.ZodIssueCode.custom,
+          message: "PASSWORD_PBKDF2_ITERATIONS must be between 50000 and 500000 when set",
         });
       }
     }

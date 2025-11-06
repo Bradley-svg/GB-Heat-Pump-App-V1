@@ -103,5 +103,23 @@ input,select{background:#0e1516;border:1px solid #193a30;color:var(--fg);border-
 .history-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem}
 .history-card{background:#101918;border:1px solid #1b382f;border-radius:.75rem;padding:.6rem .75rem}
 .history-card strong{font-size:16px}
+.auth-shell{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2.5rem 1rem}
+.auth-card{background:var(--card);border:1px solid #163226;border-radius:1.2rem;padding:2rem;max-width:420px;width:100%;display:flex;flex-direction:column;gap:1.25rem;box-shadow:0 22px 60px rgba(0,0,0,0.28)}
+.auth-header{text-align:center;display:flex;flex-direction:column;gap:.35rem}
+.auth-title{margin:0;font-size:26px;font-weight:600}
+.auth-subtitle{margin:0;color:var(--muted);font-size:14px}
+.auth-body{display:flex;flex-direction:column;gap:1rem}
+.auth-form{display:flex;flex-direction:column;gap:.9rem}
+.auth-field{display:flex;flex-direction:column;gap:.35rem;font-size:14px}
+.auth-field span{font-weight:500;color:var(--fg)}
+.auth-error{background:#2a1414;border:1px solid #4a2020;color:var(--err);padding:.65rem .8rem;border-radius:.7rem;font-size:13px}
+.auth-notice{background:#0f1f1a;border:1px solid #1d4032;color:#88f5b8;padding:.65rem .8rem;border-radius:.7rem;font-size:13px}
+.auth-notice.success{border-color:#236f4e;background:#10251d;color:#98ffc7}
+.auth-notice.error{border-color:#4a2020;background:#2a1414;color:var(--err)}
+.auth-alert{background:#2a1414;border:1px solid #4a2020;color:var(--err);padding:.6rem .8rem;border-radius:.7rem;font-size:13px;text-align:center}
+.auth-links{display:flex;justify-content:flex-end;font-size:13px}
+.auth-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem}
+.auth-footer{display:flex;justify-content:center}
+.auth-footer-links{display:flex;justify-content:center;gap:.4rem;font-size:13px;color:var(--muted);flex-wrap:wrap}
+.auth-footer-links .link{font-weight:500}
 @media (max-width:720px){.nav{flex-wrap:wrap;gap:.5rem}.nav .brand{margin-bottom:.25rem}.nav-links{flex-wrap:wrap;width:100%;margin-left:0}.nav-link{padding:.3rem .5rem}.nav .sp{display:none}.grid.kpis{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}}
-

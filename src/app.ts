@@ -2,6 +2,7 @@ import { validateEnv, type Env } from "./env";
 import { ASSETS } from "./assets";
 import { STATIC_BUNDLE, type StaticBundleKey } from "./frontend/static-bundle";
 import { landingFor, requireAccessUser } from "./lib/access";
+import { clearSessionCookie } from "./lib/auth/sessions";
 import { CORS_BASE, maybeHandlePreflight } from "./lib/cors";
 import { HTML_CT, text, withSecurityHeaders, type SecurityHeaderOptions } from "./utils/responses";
 import { handleRequest } from "./router";
@@ -176,6 +177,11 @@ export default {
       }
     };
     const respondUnauthenticated = () => {
+      const clearCookie = clearSessionCookie(env);
+      const attachCookie = (response: Response) => {
+        response.headers.set("Set-Cookie", clearCookie);
+        return response;
+      };
       if (req.method === "GET" || req.method === "HEAD") {
         try {
           const canonicalUrl = canonicalAppRequestUrl(url);
@@ -184,12 +190,14 @@ export default {
             canonicalUrl,
           );
           loginUrl.searchParams.set("redirect_url", canonicalUrl.toString());
-          return applySecurity(Response.redirect(loginUrl.toString(), 302));
+          const redirect = Response.redirect(loginUrl.toString(), 302);
+          return applySecurity(attachCookie(redirect));
         } catch {
           // fall back to 401 below
         }
       }
-      return applySecurity(new Response("Unauthorized", { status: 401 }));
+      const unauthorized = new Response("Unauthorized", { status: 401 });
+      return applySecurity(attachCookie(unauthorized));
     };
 
     if (path === "/") {
@@ -249,7 +257,9 @@ export default {
       const ret = resolveLogoutReturn(url.searchParams.get("return"), env, url);
       const logoutUrl = new URL("/cdn-cgi/access/logout", url);
       logoutUrl.searchParams.set("return", ret);
-      return Response.redirect(logoutUrl.toString(), 302);
+      const redirect = Response.redirect(logoutUrl.toString(), 302);
+      redirect.headers.set("Set-Cookie", clearSessionCookie(env));
+      return redirect;
     }
 
     if (path.startsWith("/app/assets/")) {

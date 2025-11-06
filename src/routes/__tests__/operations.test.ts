@@ -26,6 +26,14 @@ const MIGRATIONS = [
   "migrations/0002_indexes.sql",
   "migrations/0003_operational_entities.sql",
   "migrations/0007_alert_lifecycle.sql",
+  "migrations/0008_device_key_hash_constraint.sql",
+  "migrations/0009_ingest_nonces.sql",
+  "migrations/0010_ops_metrics_device_route_index.sql",
+  "migrations/0011_cron_cursors.sql",
+  "migrations/0012_enforce_foreign_keys.sql",
+  "migrations/0013_dashboard_indexes.sql",
+  "migrations/0014_cache_tokens.sql",
+  "migrations/0015_auth.sql",
 ];
 
 const DEV_SEED = "seeds/dev/seed.sql";
