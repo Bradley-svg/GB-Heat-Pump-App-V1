@@ -16,6 +16,26 @@ The platform now deploys a single Worker (`gb-heat-pump-app-v1`). Key bindings a
 
 ---
 
+### Fleet cache controls
+
+The Worker now caches the expensive fleet dashboards (`/api/client/compact`, `/api/archive/offline`) in `caches.default`. Adjust the following environment variables when deploying:
+
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `CLIENT_COMPACT_CACHE_TTL_SECS` | `45` | TTL (seconds) for cached `/api/client/compact` responses per tenant/admin scope. Increase for calmer dashboards, decrease when freshness is critical. |
+| `ARCHIVE_CACHE_TTL_SECS` | `60` | TTL (seconds) for cached `/api/archive/offline` snapshots. |
+| `CLIENT_QUERY_PROFILE` | `false` | When set to `true`, logs query durations ≥ threshold to help tune indexes/TTL. |
+| `CLIENT_QUERY_PROFILE_THRESHOLD_MS` | `50` | Millisecond threshold used when profiling is enabled. |
+
+Caching is scope-aware (admin vs tenant) and automatically invalidated on deployment while the version constants (`CLIENT_COMPACT_CACHE_VERSION`, `ARCHIVE_CACHE_VERSION`) remain stable. For emergency purges without redeploying:
+
+1. Temporarily set the relevant TTL env var to `0` (or a single-digit value) and redeploy the Worker; caches will expire almost immediately.
+2. Alternatively, bump the version constant in code and redeploy to force a cache miss. Track the change in release notes.
+
+> **Future hook:** when we introduce real-time alert/device mutations, wire those code paths to call `caches.default.delete()` for the scoped keys. Until then rely on short TTLs + redeploy/bump on schema changes.
+
+---
+
 ## 1. Pre-Deployment Checklist
 
 - Confirm the branch is green in **Frontend CI** and **Worker CI**.
