@@ -18,12 +18,43 @@ import { loggerForRequest, type Logger } from "../utils/logging";
 import { recordOpsMetric } from "../lib/ops-metrics";
 import { markRequestMetricsRecorded } from "../lib/request-metrics";
 import { withTransaction } from "../lib/db";
+import {
+  DASHBOARD_CACHE_AREA,
+  bumpDashboardTokens,
+  scopeIdsForProfiles,
+} from "../lib/dashboard-cache";
 
 const DEVICE_KEY_HEADER = "X-GREENBRO-DEVICE-KEY";
 const SIGNATURE_HEADER = "X-GREENBRO-SIGNATURE";
 const TIMESTAMP_HEADER = "X-GREENBRO-TIMESTAMP";
 const INGEST_ROUTE = "/api/ingest";
 const HEARTBEAT_ROUTE = "/api/heartbeat";
+
+async function invalidateDashboardCaches(
+  env: Env,
+  profileId: string | null | undefined,
+  logger: Logger,
+): Promise<void> {
+  const scopeIds = scopeIdsForProfiles([profileId]);
+  try {
+    await bumpDashboardTokens(env, DASHBOARD_CACHE_AREA.clientCompact, scopeIds);
+  } catch (error) {
+    logger.warn("dashboard.cache_invalidation_failed", {
+      area: DASHBOARD_CACHE_AREA.clientCompact,
+      profile_id: profileId,
+      error,
+    });
+  }
+  try {
+    await bumpDashboardTokens(env, DASHBOARD_CACHE_AREA.archiveOffline, scopeIds);
+  } catch (error) {
+    logger.warn("dashboard.cache_invalidation_failed", {
+      area: DASHBOARD_CACHE_AREA.archiveOffline,
+      profile_id: profileId,
+      error,
+    });
+  }
+}
 
 const textEncoder = new TextEncoder();
 
@@ -414,6 +445,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
       );
     }
   }
+  const effectiveProfileId = devRow.profile_id ?? profileId;
 
   const supply = typeof body.metrics.supplyC === "number" ? body.metrics.supplyC : null;
   const ret = typeof body.metrics.returnC === "number" ? body.metrics.returnC : null;
@@ -519,6 +551,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
     });
 
     const deviceLog = log.with({ device_id: body.device_id });
+    await invalidateDashboardCaches(env, effectiveProfileId, deviceLog);
     await recordOpsMetric(env, INGEST_ROUTE, 200, Date.now() - t0, body.device_id, deviceLog);
     markRequestMetricsRecorded(req);
     deviceLog.info("ingest.telemetry_stored", {
@@ -749,6 +782,7 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
       );
     }
   }
+  const effectiveProfileId = devRow.profile_id ?? profileId;
 
   const limitPerMinute = parsedRateLimit(env);
   if (await isRateLimited(env, HEARTBEAT_ROUTE, body.device_id, limitPerMinute)) {
@@ -780,6 +814,7 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
     });
 
     const deviceLog = log.with({ device_id: body.device_id });
+    await invalidateDashboardCaches(env, effectiveProfileId, deviceLog);
     await recordOpsMetric(env, HEARTBEAT_ROUTE, 200, Date.now() - t0, body.device_id, deviceLog);
     markRequestMetricsRecorded(req);
     deviceLog.info("heartbeat.accepted", { payload_ts: new Date(tsMs).toISOString() });

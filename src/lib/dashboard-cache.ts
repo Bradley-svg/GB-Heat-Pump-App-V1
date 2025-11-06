@@ -38,8 +38,35 @@ export function scopeIdsForProfiles(
 
 type DashboardArea = (typeof DASHBOARD_CACHE_AREA)[keyof typeof DASHBOARD_CACHE_AREA];
 
+let cacheTableReady = false;
+
+async function ensureCacheTable(env: Env): Promise<void> {
+  if (cacheTableReady) {
+    return;
+  }
+  await env.DB
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS cache_tokens (
+        cache_area TEXT NOT NULL,
+        cache_scope TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (cache_area, cache_scope)
+      )`,
+    )
+    .run();
+  await env.DB
+    .prepare(
+      `CREATE INDEX IF NOT EXISTS ix_cache_tokens_area_scope
+         ON cache_tokens(cache_area, cache_scope)`,
+    )
+    .run();
+  cacheTableReady = true;
+}
+
 async function ensureTokens(env: Env, area: DashboardArea, scopes: string[]): Promise<void> {
   if (!scopes.length) return;
+  await ensureCacheTable(env);
   const now = nowISO();
   const stmt = env.DB.prepare(
     `INSERT OR IGNORE INTO cache_tokens (cache_area, cache_scope, version, updated_at)

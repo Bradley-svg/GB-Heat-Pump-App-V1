@@ -29,6 +29,8 @@ The Worker now caches the expensive fleet dashboards (`/api/client/compact`, `/a
 
 Alert lifecycle/comment mutations automatically bump the cache token for the affected profile and the global admin scope. Subsequent reads re-compute cache keys and fetch fresh data without relying on TTL expiry. When adding new mutation surfaces (e.g., device state transitions), hook them into the same helper (`invalidateClientDashboardCache`) so dashboards stay consistent.
 
+Successful ingest and heartbeat requests now invalidate the same cache scopes (admin + device profile) so fleet/offline dashboards reflect the latest device state immediately after telemetry flows.
+
 Caching is scope-aware (admin vs tenant) and automatically invalidated on deployment while the version constants (`CLIENT_COMPACT_CACHE_VERSION`, `ARCHIVE_CACHE_VERSION`) remain stable. For emergency purges without redeploying:
 
 1. Temporarily set the relevant TTL env var to `0` (or a single-digit value) and redeploy the Worker; caches will expire almost immediately.
