@@ -68,6 +68,7 @@ Checks covered authentication, access control, input validation, logging, and CO
 - [ ] Introduce an explicit deployment-mode flag that controls the dev access shim.
 - [ ] Design and implement an IP-level throttle in front of ingest/heartbeat routes.
 - [ ] Document the new guardrails in contributor guidelines to prevent regressions.
+- [ ] Monitor Miniflare release notes so the `undici` override can be removed once patched upstream.
 
 ---
 **Assumptions** • Cloudflare Access is the primary auth mechanism • `APP_BASE_URL` can point to non-local hosts in staging • D1 is the only persistence layer for ingest metrics  \

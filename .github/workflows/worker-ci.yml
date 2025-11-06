@@ -21,8 +21,48 @@ on:
       - ".github/workflows/worker-ci.yml"
 
 jobs:
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate audit reports
+        run: |
+          npm audit --omit=dev --json > audit-prod.json
+          npm audit --json > audit-full.json
+
+      - name: Evaluate audit results
+        run: |
+          node "$GITHUB_WORKSPACE/scripts/ci/check-audit.mjs" --file audit-prod.json --threshold high --label "worker prod"
+          node "$GITHUB_WORKSPACE/scripts/ci/check-audit.mjs" --file audit-full.json --threshold critical --label "worker all"
+
+      - name: Upload audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-worker
+          path: |
+            audit-prod.json
+            audit-full.json
+
   worker:
     runs-on: ubuntu-latest
+    needs: dependency-audit
 
     steps:
       - name: Checkout
