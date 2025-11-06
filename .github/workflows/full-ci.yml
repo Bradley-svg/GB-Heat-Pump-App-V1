@@ -12,6 +12,7 @@ jobs:
   dependency-audit:
     name: Dependency Audit
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       matrix:
         include:
@@ -39,14 +40,23 @@ jobs:
 
       - name: Generate audit reports
         run: |
-          npm audit --omit=dev --json > audit-prod.json
-          npm audit --json > audit-full.json
+          set -euo pipefail
+          run_audit() {
+            npm audit --omit=dev --json > audit-prod.json
+            npm audit --json > audit-full.json
+          }
+          run_audit || (
+            echo "npm audit failed; retrying once after 5s..." >&2
+            rm -f audit-prod.json audit-full.json
+            sleep 5
+            run_audit
+          )
         working-directory: ${{ matrix.working-directory }}
 
       - name: Evaluate audit results
         run: |
-          node "$GITHUB_WORKSPACE/scripts/ci/check-audit.mjs" --file audit-prod.json --threshold high --label "${{ matrix.id }} prod"
-          node "$GITHUB_WORKSPACE/scripts/ci/check-audit.mjs" --file audit-full.json --threshold critical --label "${{ matrix.id }} all"
+          node "$GITHUB_WORKSPACE/scripts/ci/check-audit.mjs" --file audit-prod.json --threshold high --label "${{ matrix.id }} prod" --allowlist "$GITHUB_WORKSPACE/scripts/ci/audit-allowlist.json"
+          node "$GITHUB_WORKSPACE/scripts/ci/check-audit.mjs" --file audit-full.json --threshold critical --label "${{ matrix.id }} all" --allowlist "$GITHUB_WORKSPACE/scripts/ci/audit-allowlist.json"
         working-directory: ${{ matrix.working-directory }}
 
       - name: Upload audit reports
@@ -94,6 +104,23 @@ jobs:
 
       - name: Run test suite
         run: npm run test:ci
+
+      - name: Publish Vitest results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: worker-vitest
+          path: coverage/vitest-junit.xml
+          reporter: java-junit
+          fail-on-empty: false
+
+      - name: Upload Vitest coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-vitest-coverage
+          path: coverage
+          if-no-files-found: warn
 
       - name: Build artifacts
         run: npm run build

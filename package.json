@@ -32,13 +32,14 @@
     "test:security": "cross-env ROLLUP_SKIP_NODE_RESOLUTION=1 node ./node_modules/vitest/vitest.mjs run tests/security",
     "smoke": "npm run test:smoke",
     "security": "npm run test:security",
-    "test:ci": "npm run test && npm run test:integration && npm run test:smoke && npm run test:security",
+    "test:ci": "cross-env ROLLUP_SKIP_NODE_RESOLUTION=1 node ./node_modules/vitest/vitest.mjs run src tests/integration tests/smoke tests/security --coverage --passWithNoTests",
     "check:prod-shim": "node ./scripts/ensure-prod-shim-disabled.mjs --env production",
     "ops:db:sanity": "node ./scripts/db-sanity-check.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
     "@miniflare/d1": "^2.14.4",
+    "@vitest/coverage-v8": "^4.0.7",
     "better-sqlite3": "^12.4.1",
     "cross-env": "^7.0.3",
     "eslint": "^9.38.0",

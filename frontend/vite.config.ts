@@ -2,6 +2,9 @@ import { defineConfig } from "vite";
 import type { UserConfigExport } from "vite";
 import react from "@vitejs/plugin-react";
 
+const isCi = Boolean(process.env.CI ?? process.env.GITHUB_ACTIONS);
+const enableCoverage = isCi || process.env.VITEST_COVERAGE === "true";
+
 // https://vite.dev/config/
 const config = {
   plugins: [react()],
@@ -26,7 +29,21 @@ const config = {
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],
+      reportsDirectory: "coverage",
+      enabled: enableCoverage,
     },
+    reporters: isCi
+      ? [
+          "default",
+          [
+            "junit",
+            {
+              outputFile: "coverage/vitest-junit.xml",
+              suiteName: "frontend-tests",
+            },
+          ],
+        ]
+      : ["default"],
   },
 };
 
