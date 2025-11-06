@@ -2,6 +2,7 @@ import { Router } from "itty-router";
 
 import { registerAdminRoutes } from "./router/admin";
 import { registerDeviceRoutes } from "./router/devices";
+import { withAccess } from "./router/access";
 import type { AppRouter } from "./router/params";
 import { withParam } from "./router/params";
 import { registerMetricsRoutes } from "./router/metrics";
@@ -45,26 +46,36 @@ registerTelemetryRoutes(router);
 registerAdminRoutes(router);
 
 router
-  .get("/api/me", (req, env) => handleMe(req, env))
-  .get("/api/fleet/summary", (req, env) => handleFleetSummary(req, env))
-  .get("/api/fleet/admin-overview", (req, env) => handleFleetAdminOverview(req, env))
-  .get("/api/client/compact", (req, env) => handleClientCompact(req, env))
-  .get("/api/alerts", (req, env) => handleListAlertRecords(req, env))
-  .post("/api/alerts", (req, env) => handleCreateAlertRecord(req, env))
+  .get("/api/me", withAccess((req, env) => handleMe(req, env)))
+  .get("/api/fleet/summary", withAccess((req, env) => handleFleetSummary(req, env)))
+  .get(
+    "/api/fleet/admin-overview",
+    withAccess((req, env) => handleFleetAdminOverview(req, env)),
+  )
+  .get("/api/client/compact", withAccess((req, env) => handleClientCompact(req, env)))
+  .get("/api/alerts", withAccess((req, env) => handleListAlertRecords(req, env)))
+  .post("/api/alerts", withAccess((req, env) => handleCreateAlertRecord(req, env)))
   .patch(
     "/api/alerts/:id",
-    withParam("id", (req, env, alertId) => handleUpdateAlertRecord(req, env, alertId)),
+    withAccess(
+      withParam("id", (req, env, alertId) => handleUpdateAlertRecord(req, env, alertId)),
+    ),
   )
   .post(
     "/api/alerts/:id/comments",
-    withParam("id", (req, env, alertId) => handleCreateAlertComment(req, env, alertId)),
+    withAccess(
+      withParam("id", (req, env, alertId) => handleCreateAlertComment(req, env, alertId)),
+    ),
   )
-  .get("/api/alerts/recent", (req, env) => handleAlertsFeed(req, env))
-  .get("/api/commissioning/checklist", (req, env) => handleCommissioning(req, env))
-  .get("/api/commissioning/runs", (req, env) => handleListCommissioningRuns(req, env))
-  .post("/api/commissioning/runs", (req, env) => handleCreateCommissioningRun(req, env))
-  .get("/api/archive/offline", (req, env) => handleArchive(req, env))
-  .post("/api/observability/client-errors", (req, env) => handleClientErrorReport(req, env))
+  .get("/api/alerts/recent", withAccess((req, env) => handleAlertsFeed(req, env)))
+  .get("/api/commissioning/checklist", withAccess((req, env) => handleCommissioning(req, env)))
+  .get("/api/commissioning/runs", withAccess((req, env) => handleListCommissioningRuns(req, env)))
+  .post("/api/commissioning/runs", withAccess((req, env) => handleCreateCommissioningRun(req, env)))
+  .get("/api/archive/offline", withAccess((req, env) => handleArchive(req, env)))
+  .post(
+    "/api/observability/client-errors",
+    withAccess((req, env) => handleClientErrorReport(req, env)),
+  )
   .post(
     "/api/ingest/:profile",
     withParam("profile", (req, env, profile) => handleIngest(req, env, profile)),

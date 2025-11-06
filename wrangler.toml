@@ -21,6 +21,7 @@ APP_ASSET_BASE = "https://pub-3f14c9b10881423a97f40e12402d4b03.r2.dev/app/assets
 ALLOWED_PREFIXES = "brand/"
 TELEMETRY_RETENTION_DAYS = "90"
 RETENTION_BACKUP_PREFIX = "data-retention"
+ENVIRONMENT = "production"
 # Ingest controls are provided via `wrangler secret put` per environment:
 #   INGEST_ALLOWED_ORIGINS
 #   INGEST_RATE_LIMIT_PER_MIN
@@ -67,6 +68,7 @@ preview_bucket_name = "greenbro-telemetry-archive-dev"
   [env.local.vars]
   APP_BASE_URL = "http://127.0.0.1:8787/app"
   APP_API_BASE = "http://127.0.0.1:8787"
+  ENVIRONMENT = "development"
   # Enable the Access shim for local Miniflare sessions (adjust as needed).
   ALLOW_DEV_ACCESS_SHIM = "true"
   DEV_ALLOW_USER = '{"email":"local-admin@example.com","roles":["admin"],"clientIds":["profile-west"]}'

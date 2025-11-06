@@ -64,8 +64,8 @@ Checks covered authentication, access control, input validation, logging, and CO
 
 ## Follow-up Checklist
 
-- [ ] Add the centralised `withAccess` wrapper and migrate existing `/api/*` registrations.
-- [ ] Introduce an explicit deployment-mode flag that controls the dev access shim.
+- [x] Add the centralised `withAccess` wrapper and migrate existing `/api/*` registrations.
+- [x] Introduce an explicit deployment-mode flag that controls the dev access shim.
 - [ ] Design and implement an IP-level throttle in front of ingest/heartbeat routes.
 - [ ] Document the new guardrails in contributor guidelines to prevent regressions.
 - [ ] Monitor Miniflare release notes so the `undici` override can be removed once patched upstream.

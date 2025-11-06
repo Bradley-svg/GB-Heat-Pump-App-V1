@@ -8,9 +8,19 @@ const devUserCache = new WeakMap<
   Env,
   { rawUser: string | null; rawFlag: string | null; user: User | null }
 >();
+const requestUserCache = new WeakMap<Request, User | null>();
 const DISABLED_TOKENS = new Set(["0", "false", "off", "no"]);
 const ENABLED_TOKENS = new Set(["1", "true", "on", "yes"]);
 const ALLOWED_ROLES: ReadonlyArray<User["roles"][number]> = ["admin", "client", "contractor"];
+const DEV_SHIM_ENVIRONMENTS = new Set(["development", "dev", "local"]);
+
+function cacheRequestUser(req: Request, user: User | null) {
+  requestUserCache.set(req, user);
+}
+
+function getCachedRequestUser(req: Request): User | null | undefined {
+  return requestUserCache.get(req);
+}
 
 export function getJwks(env: Env) {
   const url = env.ACCESS_JWKS_URL;
@@ -102,11 +112,18 @@ function resolveDevUser(env: Env): User | null {
 }
 
 export async function requireAccessUser(req: Request, env: Env): Promise<User | null> {
+  const cached = getCachedRequestUser(req);
+  if (cached !== undefined) {
+    return cached;
+  }
+
   const jwt = req.headers.get("Cf-Access-Jwt-Assertion");
   if (jwt) {
     try {
       const { payload } = await jwtVerify(jwt, getJwks(env), { audience: env.ACCESS_AUD });
-      return deriveUserFromClaims(payload as JWTPayload);
+      const user = deriveUserFromClaims(payload as JWTPayload);
+      cacheRequestUser(req, user);
+      return user;
     } catch (error) {
       const log = loggerForRequest(req, { scope: "access" });
       const decoded = safeDecodeJwt(jwt);
@@ -134,11 +151,42 @@ export async function requireAccessUser(req: Request, env: Env): Promise<User | 
         logFields.sanitized_email = sanitizedEmail;
       }
       log.warn("access.jwt_verify_failed", logFields);
-      return null;
     }
   }
 
-  return resolveDevUser(env);
+  const environment =
+    typeof env.ENVIRONMENT === "string" ? env.ENVIRONMENT.trim().toLowerCase() : "";
+  const environmentAllowsShim = environment.length > 0 && DEV_SHIM_ENVIRONMENTS.has(environment);
+  const hasShimFlag =
+    typeof env.ALLOW_DEV_ACCESS_SHIM === "string" &&
+    env.ALLOW_DEV_ACCESS_SHIM.trim().length > 0 &&
+    ENABLED_TOKENS.has(env.ALLOW_DEV_ACCESS_SHIM.trim().toLowerCase());
+
+  if (hasShimFlag && !environmentAllowsShim) {
+    loggerForRequest(req, { scope: "access" }).warn("access.dev_shim_blocked", {
+      environment: environment || null,
+    });
+    cacheRequestUser(req, null);
+    return null;
+  }
+
+  if (!environmentAllowsShim) {
+    cacheRequestUser(req, null);
+    return null;
+  }
+
+  const devUser = resolveDevUser(env);
+  if (devUser) {
+    loggerForRequest(req, { scope: "access" }).info("access.dev_shim_used", {
+      email: devUser.email,
+      environment,
+    });
+    cacheRequestUser(req, devUser);
+    return devUser;
+  }
+
+  cacheRequestUser(req, null);
+  return null;
 }
 
 export function userIsAdmin(user: User) {

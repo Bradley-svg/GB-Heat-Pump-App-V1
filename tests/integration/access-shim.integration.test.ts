@@ -21,6 +21,7 @@ describe("Access dev shim", () => {
       APP_BASE_URL: "http://127.0.0.1:8787/app",
       DEV_ALLOW_USER: '{"email":"shim@example.com","roles":["admin"],"clientIds":["profile-west"]}',
       ALLOW_DEV_ACCESS_SHIM: "true",
+      ENVIRONMENT: "development",
     });
     try {
       const response = await handleMe(new Request("https://example.com/api/me"), env);
@@ -43,6 +44,7 @@ describe("Access dev shim", () => {
       APP_BASE_URL: "http://127.0.0.1:8787/app",
       DEV_ALLOW_USER: '{"email":"shim@example.com","roles":["admin"]}',
       ALLOW_DEV_ACCESS_SHIM: "true",
+      ENVIRONMENT: "development",
     });
     try {
       const response = await handleMe(

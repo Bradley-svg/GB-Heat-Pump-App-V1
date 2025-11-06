@@ -6,6 +6,7 @@ export interface Env {
   ACCESS_AUD: string;
   APP_BASE_URL: string;
   RETURN_DEFAULT: string;
+  ENVIRONMENT?: string;
   DEV_ALLOW_USER?: string;
   ALLOW_DEV_ACCESS_SHIM?: string;
   APP_API_BASE?: string;
@@ -55,6 +56,7 @@ export class EnvValidationError extends Error {
 const HTTP_SCHEMES = new Set(["http:", "https:"]);
 const ABSOLUTE_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
 const LOCAL_FLAG_VALUES = new Set(["1", "true", "yes", "on"]);
+const DEV_SHIM_ENVIRONMENTS = new Set(["development", "dev", "local"]);
 
 function isHttpUrl(candidate: string): boolean {
   try {
@@ -185,10 +187,14 @@ const EnvSchema = z
       typeof value.ALLOW_DEV_ACCESS_SHIM === "string"
         ? value.ALLOW_DEV_ACCESS_SHIM.trim().toLowerCase()
         : "";
-    const allowShim =
+    const allowShimFlag =
       normalizedAllowShim.length > 0 && LOCAL_FLAG_VALUES.has(normalizedAllowShim);
     const hasDevUser =
       typeof value.DEV_ALLOW_USER === "string" && value.DEV_ALLOW_USER.trim().length > 0;
+    const rawEnvironment =
+      typeof value.ENVIRONMENT === "string" ? value.ENVIRONMENT.trim().toLowerCase() : "";
+    const environmentAllowsShim =
+      rawEnvironment.length > 0 && DEV_SHIM_ENVIRONMENTS.has(rawEnvironment);
     const appBaseLower = appBase.toLowerCase();
     const appBaseIsLocal =
       appBaseLower.startsWith("http://localhost") ||
@@ -196,7 +202,15 @@ const EnvSchema = z
       appBaseLower.startsWith("http://0.0.0.0") ||
       appBaseLower.startsWith("http://[::1]");
 
-    if (allowShim && !appBaseIsLocal) {
+    if (allowShimFlag && !environmentAllowsShim) {
+      ctx.addIssue({
+        path: ["ALLOW_DEV_ACCESS_SHIM"],
+        code: z.ZodIssueCode.custom,
+        message: "ALLOW_DEV_ACCESS_SHIM requires ENVIRONMENT to be one of development, dev, local, test",
+      });
+    }
+
+    if (allowShimFlag && !appBaseIsLocal) {
       ctx.addIssue({
         path: ["ALLOW_DEV_ACCESS_SHIM"],
         code: z.ZodIssueCode.custom,
@@ -205,7 +219,7 @@ const EnvSchema = z
       });
     }
 
-    const isLocalEnv = hasDevUser || appBaseIsLocal;
+    const isLocalEnv = hasDevUser || appBaseIsLocal || environmentAllowsShim;
 
     if (!ingestOriginsRaw) {
       if (isLocalEnv) {

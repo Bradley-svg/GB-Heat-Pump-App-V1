@@ -63,6 +63,7 @@ export async function createWorkerEnv(overrides: Partial<Env> = {}): Promise<Wor
     INGEST_ALLOWED_ORIGINS: "https://devices.test",
     INGEST_RATE_LIMIT_PER_MIN: "120",
     INGEST_SIGNATURE_TOLERANCE_SECS: "300",
+    ENVIRONMENT: "test",
   };
 
   const env: Env = { ...baseEnv, ...overrides, DB };

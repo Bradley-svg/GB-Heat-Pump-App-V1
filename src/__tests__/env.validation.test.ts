@@ -24,6 +24,7 @@ function createEnv(overrides: Partial<Env> = {}): Env {
     INGEST_ALLOWED_ORIGINS: "https://devices.example.com",
     INGEST_RATE_LIMIT_PER_MIN: "120",
     INGEST_SIGNATURE_TOLERANCE_SECS: "300",
+    ENVIRONMENT: "test",
   } satisfies Partial<Env>;
   return { ...base, ...overrides } as Env;
 }
@@ -92,11 +93,21 @@ describe("validateEnv", () => {
     expect(() => validateEnv(env)).toThrowError(/ALLOW_DEV_ACCESS_SHIM/);
   });
 
+  it("fails when ALLOW_DEV_ACCESS_SHIM is enabled without an allowed ENVIRONMENT", () => {
+    const env = createEnv({
+      ALLOW_DEV_ACCESS_SHIM: "true",
+      ENVIRONMENT: "production",
+      APP_BASE_URL: "http://127.0.0.1:8787/app",
+    });
+    expect(() => validateEnv(env)).toThrowError(/ALLOW_DEV_ACCESS_SHIM/);
+  });
+
   it("allows ALLOW_DEV_ACCESS_SHIM when APP_BASE_URL points to localhost", () => {
     const env = createEnv({
       APP_BASE_URL: "http://127.0.0.1:8787/app",
       ALLOW_DEV_ACCESS_SHIM: "true",
       DEV_ALLOW_USER: JSON.stringify({ email: "local@example.com", roles: ["admin"] }),
+      ENVIRONMENT: "development",
     });
     expect(() => validateEnv(env)).not.toThrow();
   });
