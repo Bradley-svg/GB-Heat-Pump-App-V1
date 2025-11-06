@@ -1,4 +1,5 @@
-import { createRemoteJWKSet, decodeJwt, jwtVerify, JWTPayload } from "jose";
+import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
+import type { JWTPayload } from "jose";
 import { deriveUserFromClaims, landingFor } from "../rbac";
 import type { Env, User } from "../env";
 import { loggerForRequest } from "../utils/logging";

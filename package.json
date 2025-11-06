@@ -22,7 +22,8 @@
     "cron:deploy": "wrangler triggers deploy",
     "typecheck": "tsc --noEmit",
     "build": "npm run frontend:build && wrangler deploy --dry-run --outdir ./dist",
-    "lint": "npm run frontend:lint",
+    "lint": "npm run lint:worker && npm run frontend:lint",
+    "lint:worker": "eslint --max-warnings=0 src scripts",
     "test": "cross-env ROLLUP_SKIP_NODE_RESOLUTION=1 node ./node_modules/vitest/vitest.mjs run src",
     "publish:r2": "node ./scripts/publish-r2-assets.mjs",
     "ops:r2:bootstrap": "node ./scripts/bootstrap-app-static.mjs",
@@ -36,12 +37,15 @@
     "ops:db:sanity": "node ./scripts/db-sanity-check.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "^9.36.0",
     "@miniflare/d1": "^2.14.4",
     "better-sqlite3": "^12.4.1",
     "cross-env": "^7.0.3",
+    "eslint": "^9.38.0",
     "jsdom": "^27.1.0",
     "rollup": "4.52.5",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.2",
     "vitest": "^4.0.7",
     "wrangler": "^4.45.4"
   },

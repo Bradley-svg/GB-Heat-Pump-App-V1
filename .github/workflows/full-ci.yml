@@ -89,8 +89,8 @@ jobs:
       - name: Typecheck worker
         run: npm run typecheck
 
-      - name: Lint frontend
-        run: npm run frontend:lint
+      - name: Run lint
+        run: npm run lint
 
       - name: Run test suite
         run: npm run test:ci

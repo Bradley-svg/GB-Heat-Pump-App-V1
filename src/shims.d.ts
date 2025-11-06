@@ -5,7 +5,7 @@ declare global {
   interface D1PreparedStatement {
     bind(...values: any[]): D1PreparedStatement;
     first<T = any>(): Promise<T | null>;
-    run<T = any>(): Promise<{ success: boolean } & Record<string, any>>;
+    run(): Promise<{ success: boolean } & Record<string, any>>;
     all<T = any>(): Promise<{ results?: T[] } & Record<string, any>>;
   }
   interface D1Database {

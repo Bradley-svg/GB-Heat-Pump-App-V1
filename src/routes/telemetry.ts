@@ -29,11 +29,11 @@ import {
 type TelemetryIncludeFlags = TelemetryLatestBatchInput["include"];
 type TelemetryFeatureMode = "refactor" | "legacy" | "compare";
 
-const METRICS_WITH_EXTENTS = new Set<Readonly<typeof TELEMETRY_ALLOWED_METRICS>[number]>([
-  "deltaT",
-  "thermalKW",
-  "cop",
-]);
+const METRICS_WITH_EXTENTS = new Set<typeof TELEMETRY_ALLOWED_METRICS[number]>(
+  TELEMETRY_ALLOWED_METRICS.filter(
+    (metric) => metric === "deltaT" || metric === "thermalKW" || metric === "cop",
+  ),
+);
 export const DEFAULT_CARRY_FORWARD_MINUTES = 30;
 
 export function resolveCarryForwardLimitMs(env: Env): number {

@@ -91,21 +91,23 @@ describe("createApiClient url joining", () => {
 });
 
 describe("createApiClient credentials", () => {
-  const originalFetch = global.fetch;
+  const originalFetch = globalThis.fetch;
   const okResponse = JSON.stringify({ ok: true });
+  let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
 
   beforeEach(() => {
-    global.fetch = vi.fn().mockResolvedValue(
+    fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(okResponse, {
         status: 200,
         headers: { "content-type": "application/json" },
       }),
-    ) as typeof fetch;
+    );
+    globalThis.fetch = fetchMock;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    global.fetch = originalFetch;
+    globalThis.fetch = originalFetch;
   });
 
   const baseConfig = {
@@ -117,7 +119,7 @@ describe("createApiClient credentials", () => {
   it("defaults credentials to include", async () => {
     const client = createApiClient(baseConfig);
     await client.get("/devices");
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenCalledWith(
       "https://api.example.com/devices",
       expect.objectContaining({ credentials: "include" }),
     );
@@ -126,7 +128,7 @@ describe("createApiClient credentials", () => {
   it("respects explicit credential overrides", async () => {
     const client = createApiClient(baseConfig);
     await client.get("/devices", { credentials: "omit" });
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenCalledWith(
       "https://api.example.com/devices",
       expect.objectContaining({ credentials: "omit" }),
     );

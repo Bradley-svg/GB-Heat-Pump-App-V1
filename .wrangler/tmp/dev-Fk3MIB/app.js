@@ -274,8 +274,8 @@ var ZodIssueCode = util.arrayToEnum([
   "not_finite"
 ]);
 var quotelessJson = /* @__PURE__ */ __name((obj) => {
-  const json4 = JSON.stringify(obj, null, 2);
-  return json4.replace(/"([^"]+)":/g, "$1:");
+  const json3 = JSON.stringify(obj, null, 2);
+  return json3.replace(/"([^"]+)":/g, "$1:");
 }, "quotelessJson");
 var ZodError = class _ZodError extends Error {
   static {
@@ -5900,11 +5900,11 @@ var RemoteJWKSet = class {
       headers.set("User-Agent", USER_AGENT);
       this._options.headers = Object.fromEntries(headers.entries());
     }
-    this._pendingFetch || (this._pendingFetch = fetch_jwks_default(this._url, this._timeoutDuration, this._options).then((json4) => {
-      this._local = createLocalJWKSet(json4);
+    this._pendingFetch || (this._pendingFetch = fetch_jwks_default(this._url, this._timeoutDuration, this._options).then((json3) => {
+      this._local = createLocalJWKSet(json3);
       if (this._cache) {
         this._cache.uat = Date.now();
-        this._cache.jwks = json4;
+        this._cache.jwks = json3;
       }
       this._jwksTimestamp = Date.now();
       this._pendingFetch = void 0;
@@ -7740,7 +7740,7 @@ async function handleLatest(req, env, deviceId) {
     ).bind(resolvedId, ...user.clientIds).first();
   }
   if (!row) return json({ error: "Not found" }, { status: 404 });
-  let outwardDeviceId = presentDeviceId(resolvedId, isAdmin);
+  const outwardDeviceId = presentDeviceId(resolvedId, isAdmin);
   let latest = row;
   if (!isAdmin) {
     const { device_id: _drop, ...rest } = row;
@@ -9244,11 +9244,11 @@ function dedupePreserveOrder(requested, extra) {
 __name(dedupePreserveOrder, "dedupePreserveOrder");
 
 // src/routes/telemetry.ts
-var METRICS_WITH_EXTENTS2 = /* @__PURE__ */ new Set([
-  "deltaT",
-  "thermalKW",
-  "cop"
-]);
+var METRICS_WITH_EXTENTS2 = new Set(
+  TELEMETRY_ALLOWED_METRICS.filter(
+    (metric) => metric === "deltaT" || metric === "thermalKW" || metric === "cop"
+  )
+);
 var DEFAULT_CARRY_FORWARD_MINUTES = 30;
 function resolveCarryForwardLimitMs(env) {
   const raw = typeof env.TELEMETRY_CARRY_MAX_MINUTES === "string" ? env.TELEMETRY_CARRY_MAX_MINUTES.trim() : "";
@@ -12846,8 +12846,8 @@ function resolveAppConfig(env) {
 }
 __name(resolveAppConfig, "resolveAppConfig");
 function serializeAppConfig(config) {
-  const json4 = JSON.stringify(config);
-  return json4.replace(JSON_HTML_SAFE_CHARS, (char) => JSON_HTML_SAFE_REPLACEMENTS[char] ?? char);
+  const json3 = JSON.stringify(config);
+  return json3.replace(JSON_HTML_SAFE_CHARS, (char) => JSON_HTML_SAFE_REPLACEMENTS[char] ?? char);
 }
 __name(serializeAppConfig, "serializeAppConfig");
 
@@ -13009,7 +13009,7 @@ function notFound() {
 }
 __name(notFound, "notFound");
 function normalizeKey(pathname) {
-  let key = pathname.replace(/^\/+/, "");
+  const key = pathname.replace(/^\/+/, "");
   if (!key) throw new Error("empty_key");
   if (key.split("/").some((segment) => segment === "..")) {
     throw new Error("invalid_key");
@@ -13348,7 +13348,7 @@ function isTruthy(value) {
 }
 __name(isTruthy, "isTruthy");
 function sanitizePrefix(prefix) {
-  const trimmed = prefix.trim().replace(/^[\/]+|[\/]+$/g, "");
+  const trimmed = prefix.trim().replace(/^\/+|\/+$/g, "");
   return trimmed ? trimmed : "data-retention";
 }
 __name(sanitizePrefix, "sanitizePrefix");

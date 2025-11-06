@@ -164,7 +164,7 @@ function isTruthy(value: string | undefined): boolean {
 }
 
 function sanitizePrefix(prefix: string): string {
-  const trimmed = prefix.trim().replace(/^[\/]+|[\/]+$/g, "");
+  const trimmed = prefix.trim().replace(/^\/+|\/+$/g, "");
   return trimmed ? trimmed : "data-retention";
 }
 

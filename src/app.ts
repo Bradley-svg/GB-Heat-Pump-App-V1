@@ -3,13 +3,7 @@ import { ASSETS } from "./assets";
 import { STATIC_BUNDLE, type StaticBundleKey } from "./frontend/static-bundle";
 import { landingFor, requireAccessUser } from "./lib/access";
 import { CORS_BASE, maybeHandlePreflight } from "./lib/cors";
-import {
-  HTML_CT,
-  json,
-  text,
-  withSecurityHeaders,
-  type SecurityHeaderOptions,
-} from "./utils/responses";
+import { HTML_CT, text, withSecurityHeaders, type SecurityHeaderOptions } from "./utils/responses";
 import { handleRequest } from "./router";
 import { systemLogger } from "./utils/logging";
 import { resolveAppConfig, serializeAppConfig } from "./app-config";

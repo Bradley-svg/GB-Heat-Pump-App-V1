@@ -46,7 +46,7 @@ export async function handleLatest(req: Request, env: Env, deviceId: string) {
 
   if (!row) return json({ error: "Not found" }, { status: 404 });
 
-  let outwardDeviceId = presentDeviceId(resolvedId, isAdmin);
+  const outwardDeviceId = presentDeviceId(resolvedId, isAdmin);
   let latest = row;
   if (!isAdmin) {
     const { device_id: _drop, ...rest } = row;

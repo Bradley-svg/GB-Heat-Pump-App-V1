@@ -104,7 +104,7 @@ describe("OpsPage", () => {
   });
 
   it("schedules periodic refreshes and reuses the API client", async () => {
-    const timeoutSpy = vi.spyOn(global, "setTimeout");
+    const timeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const getMock = vi.fn().mockResolvedValue(sampleResponse);
     const api = createApiClientMock({ get: getMock });
 
@@ -112,9 +112,14 @@ describe("OpsPage", () => {
       renderWithApi(<OpsPage />, api);
 
       expect(await screen.findByText(/Requests observed/i)).toBeInTheDocument();
-      const refreshCall = timeoutSpy.mock.calls.find(([, delay]) => delay === 60_000);
-      expect(refreshCall).toBeDefined();
-      const [callback] = refreshCall as [() => void, number];
+      const refreshCall = timeoutSpy.mock.calls.find(
+        (call): call is [() => void, number] =>
+          typeof call[0] === "function" && typeof call[1] === "number" && call[1] === 60_000,
+      );
+      if (!refreshCall) {
+        throw new Error("Expected refresh timer to be scheduled with a 60s delay.");
+      }
+      const [callback] = refreshCall;
 
       await act(async () => {
         callback();
