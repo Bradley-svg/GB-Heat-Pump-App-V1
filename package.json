@@ -42,7 +42,7 @@
     "jsdom": "^27.1.0",
     "rollup": "4.52.5",
     "typescript": "^5.9.3",
-    "vitest": "^1.6.0",
+    "vitest": "^4.0.7",
     "wrangler": "^4.45.1"
   },
   "dependencies": {

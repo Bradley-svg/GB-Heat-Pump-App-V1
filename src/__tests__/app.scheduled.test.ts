@@ -44,14 +44,17 @@ function createScheduledEnv(
     device_id: row.device_id,
   }));
   let cursorValue: string | null = null;
-  const bindCalls: Array<{ sql: string; args: unknown[] }> = [];
+  const normalizeSql = (query: string) => query.replace(/\s+/g, " ").trim();
+  const bindCalls: Array<{ sql: string; normalized: string; args: unknown[] }> = [];
   const run = vi.fn(async () => ({ success: true, meta: { changes: 0 } }));
 
   const prepare = vi.fn((sql: string) => {
-    if (sql.startsWith("DELETE FROM ingest_nonces")) {
+    const normalized = normalizeSql(sql);
+
+    if (normalized.startsWith("DELETE FROM ingest_nonces")) {
       return {
         bind: (...args: unknown[]) => {
-          bindCalls.push({ sql, args });
+          bindCalls.push({ sql, normalized, args });
           return {
             run: async () => {
               await run();
@@ -62,10 +65,10 @@ function createScheduledEnv(
       } as StatementMock;
     }
 
-    if (sql.includes("SELECT COUNT(*) AS cnt FROM devices")) {
+    if (normalized.includes("SELECT COUNT(*) AS cnt FROM devices")) {
       return {
         bind: (...args: unknown[]) => {
-          bindCalls.push({ sql, args });
+          bindCalls.push({ sql, normalized, args });
           return {
             first: async () => ({ cnt: rows.length }),
           };
@@ -73,10 +76,10 @@ function createScheduledEnv(
       } as unknown as StatementMock;
     }
 
-    if (sql.includes("SELECT rowid, device_id FROM devices")) {
+    if (normalized.includes("SELECT rowid, device_id FROM devices")) {
       return {
         bind: (...args: unknown[]) => {
-          bindCalls.push({ sql, args });
+          bindCalls.push({ sql, normalized, args });
           const [, cursorArg, limitArg] = args;
           const cursor = Number(cursorArg ?? 0);
           const limit = Number(limitArg ?? rows.length);
@@ -88,37 +91,37 @@ function createScheduledEnv(
       } as unknown as StatementMock;
     }
 
-    if (sql.startsWith("UPDATE devices SET online=0")) {
+    if (normalized.startsWith("UPDATE devices SET online=0")) {
       return {
         bind: (...args: unknown[]) => {
-          bindCalls.push({ sql, args });
+          bindCalls.push({ sql, normalized, args });
           return { run };
         },
       } as StatementMock;
     }
 
-    if (sql.startsWith("UPDATE latest_state SET online=0")) {
+    if (normalized.startsWith("UPDATE latest_state SET online=0")) {
       return {
         bind: (...args: unknown[]) => {
-          bindCalls.push({ sql, args });
+          bindCalls.push({ sql, normalized, args });
           return { run };
         },
       } as StatementMock;
     }
 
-    if (sql.startsWith("INSERT INTO ops_metrics")) {
+    if (normalized.startsWith("INSERT INTO ops_metrics")) {
       return {
         bind: (...args: unknown[]) => {
-          bindCalls.push({ sql, args });
+          bindCalls.push({ sql, normalized, args });
           return { run };
         },
       } as StatementMock;
     }
 
-    if (sql.startsWith("SELECT cursor FROM cron_cursors")) {
+    if (normalized.startsWith("SELECT cursor FROM cron_cursors")) {
       return {
         bind: (...args: unknown[]) => {
-          bindCalls.push({ sql, args });
+          bindCalls.push({ sql, normalized, args });
           return {
             first: async () => ({ cursor: cursorValue }),
           };
@@ -126,20 +129,20 @@ function createScheduledEnv(
       } as unknown as StatementMock;
     }
 
-    if (sql.startsWith("DELETE FROM cron_cursors")) {
+    if (normalized.startsWith("DELETE FROM cron_cursors")) {
       return {
         bind: (...args: unknown[]) => {
-          bindCalls.push({ sql, args });
+          bindCalls.push({ sql, normalized, args });
           cursorValue = null;
           return { run };
         },
       } as StatementMock;
     }
 
-    if (sql.startsWith("INSERT INTO cron_cursors")) {
+    if (normalized.startsWith("INSERT INTO cron_cursors")) {
       return {
         bind: (...args: unknown[]) => {
-          bindCalls.push({ sql, args });
+          bindCalls.push({ sql, normalized, args });
           cursorValue = String(args[1]);
           return { run };
         },
@@ -181,7 +184,7 @@ describe("app.scheduled", () => {
 
     expect(bindCalls.length).toBeGreaterThanOrEqual(2);
     const countBind = bindCalls.find((entry) =>
-      entry.sql.includes("SELECT COUNT(*) AS cnt FROM devices"),
+      entry.normalized.includes("SELECT COUNT(*) AS cnt FROM devices"),
     );
     expect(typeof countBind?.args?.[0]).toBe("number");
     expect(countBind?.args?.[0]).toBeCloseTo(120 / 86400, 10);
@@ -202,7 +205,7 @@ describe("app.scheduled", () => {
 
     expect(bindCalls.length).toBeGreaterThanOrEqual(2);
     const countBind = bindCalls.find((entry) =>
-      entry.sql.includes("SELECT COUNT(*) AS cnt FROM devices"),
+      entry.normalized.includes("SELECT COUNT(*) AS cnt FROM devices"),
     );
     expect(typeof countBind?.args?.[0]).toBe("number");
     expect(countBind?.args?.[0]).toBeCloseTo(270 / 86400, 10);

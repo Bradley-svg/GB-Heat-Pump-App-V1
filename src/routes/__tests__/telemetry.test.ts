@@ -19,7 +19,14 @@ const ROOT = path.resolve(__dirname, "../../..");
 const MIGRATIONS = [
   "migrations/0001_init.sql",
   "migrations/0002_indexes.sql",
-  "migrations/0003_operational_entities.sql",\n  "migrations/0004_ops_metrics_window.sql",\n  "migrations/0005_ops_metrics_rate_limit_index.sql",\n  "migrations/0007_alert_lifecycle.sql",\n  "migrations/0008_device_key_hash_constraint.sql",\n  "migrations/0009_ingest_nonces.sql",\n  "migrations/0010_ops_metrics_device_route_index.sql",\n  "migrations/0011_cron_cursors.sql",
+  "migrations/0003_operational_entities.sql",
+  "migrations/0004_ops_metrics_window.sql",
+  "migrations/0005_ops_metrics_rate_limit_index.sql",
+  "migrations/0007_alert_lifecycle.sql",
+  "migrations/0008_device_key_hash_constraint.sql",
+  "migrations/0009_ingest_nonces.sql",
+  "migrations/0010_ops_metrics_device_route_index.sql",
+  "migrations/0011_cron_cursors.sql",
 ];
 
 const SEED = "seeds/dev/seed.sql";

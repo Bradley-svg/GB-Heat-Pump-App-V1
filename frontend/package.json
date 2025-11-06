@@ -28,7 +28,7 @@
     "@types/node": "^24.6.0",
     "@types/react": "^19.1.16",
     "@types/react-dom": "^19.1.9",
-    "@vitest/coverage-v8": "^2.1.5",
+    "@vitest/coverage-v8": "^4.0.7",
     "axe-core": "^4.10.0",
     "eslint-plugin-jest-dom": "^5.4.0",
     "eslint-plugin-react": "^7.37.5",
@@ -43,7 +43,7 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.2",
     "vite": "^7.1.7",
-    "vitest": "^2.1.5",
+    "vitest": "^4.0.7",
     "vitest-axe": "^0.1.0"
   }
 }
