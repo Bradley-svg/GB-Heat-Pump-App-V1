@@ -73,5 +73,8 @@
     "@rollup/rollup-win32-ia32-msvc": "^4.52.5",
     "@rollup/rollup-win32-x64-gnu": "^4.52.5",
     "@rollup/rollup-win32-x64-msvc": "^4.52.5"
+  },
+  "overrides": {
+    "undici": "^5.29.0"
   }
 }
