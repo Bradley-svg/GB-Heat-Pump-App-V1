@@ -48,6 +48,10 @@ export interface Env {
   LOG_REDACT_CF_RAY?: string;
   OBSERVABILITY_MAX_BYTES?: string;
   TELEMETRY_CARRY_MAX_MINUTES?: string;
+  CLIENT_COMPACT_CACHE_TTL_SECS?: string;
+  CLIENT_QUERY_PROFILE?: string;
+  CLIENT_QUERY_PROFILE_THRESHOLD_MS?: string;
+  ARCHIVE_CACHE_TTL_SECS?: string;
 }
 
 export type User = {

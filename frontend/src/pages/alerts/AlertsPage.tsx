@@ -3,177 +3,25 @@ import { useEffect, useMemo, useState } from "react";
 import { useApiClient, useCurrentUserState } from "../../app/contexts";
 import { Page } from "../../components";
 import { formatNumber, formatRelative } from "../../utils/format";
-import type { AlertRecord, AlertComment } from "../../types/api";
+import type { AlertRecord } from "../../types/api";
 import {
   listAlertRecords,
   updateAlertLifecycle,
   createAlertComment,
   type AlertLifecycleActionPayload,
 } from "../../services/alerts";
-import { ApiError } from "../../services/api-client";
+import {
+  applyCommentOptimistic,
+  applyLifecycleOptimistic,
+  extractErrorMessage,
+  normalizeAssigneeInput,
+  optionalString,
+} from "./utils";
+import type { ActionDialogState, DialogAction } from "./types";
+import { ActionDialog } from "./components/ActionDialog";
+import { AlertsList } from "./components/AlertsList";
 
 type AsyncState = "loading" | "error" | "ready";
-type DialogAction = "acknowledge" | "assign" | "resolve" | "comment";
-
-interface ActionDialogState {
-  action: DialogAction;
-  alertId: string;
-  comment: string;
-  assignee?: string;
-}
-
-interface OptimisticOptions {
-  actorEmail: string;
-}
-
-function tempId() {
-  return `tmp-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`;
-}
-
-function cloneComments(comments: AlertComment[]): AlertComment[] {
-  return comments.map((comment) => ({ ...comment }));
-}
-
-function optionalString(value: string | null | undefined): string | undefined {
-  if (value === null || value === undefined) return undefined;
-  const trimmed = value.trim();
-  return trimmed ? trimmed : undefined;
-}
-
-function normalizeAssigneeInput(value: string | null | undefined): string | null | undefined {
-  if (value === undefined) return undefined;
-  const trimmed = optionalString(value);
-  return trimmed ?? null;
-}
-
-function formatAssigneeMetadata(value: unknown): string {
-  if (value === null) return "Unassigned";
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  return JSON.stringify(value);
-}
-
-function applyLifecycleOptimistic(
-  alert: AlertRecord,
-  payload: AlertLifecycleActionPayload,
-  options: OptimisticOptions,
-): AlertRecord {
-  const now = new Date().toISOString();
-  const copy: AlertRecord = {
-    ...alert,
-    status: alert.status,
-    acknowledged_at: alert.acknowledged_at,
-    resolved_at: alert.resolved_at,
-    resolved_by: alert.resolved_by,
-    assigned_to: alert.assigned_to,
-    updated_at: now,
-    comments: cloneComments(alert.comments),
-  };
-
-  const pendingComment = (action: AlertComment["action"], body: string | null, metadata: Record<string, unknown> | null) => ({
-    comment_id: tempId(),
-    alert_id: alert.alert_id,
-    action,
-    author_id: options.actorEmail,
-    author_email: options.actorEmail,
-    body,
-    metadata,
-    created_at: now,
-    pending: true as const,
-  });
-
-  switch (payload.action) {
-    case "acknowledge": {
-      if (copy.status !== "resolved") {
-        copy.status = "acknowledged";
-      }
-      copy.acknowledged_at = now;
-      const normalizedAssignee = normalizeAssigneeInput(payload.assignee);
-      if (normalizedAssignee !== undefined) {
-        copy.assigned_to = normalizedAssignee;
-      }
-      const commentBody = optionalString(payload.comment);
-      const metadata =
-        normalizedAssignee !== undefined ? { assignee: normalizedAssignee } : null;
-      if (commentBody || metadata) {
-        copy.comments = [
-          ...copy.comments,
-          pendingComment(
-            "acknowledge",
-            commentBody ?? null,
-            metadata,
-          ),
-        ];
-      }
-      break;
-    }
-    case "assign": {
-      const assignee = normalizeAssigneeInput(payload.assignee) ?? null;
-      copy.assigned_to = assignee;
-      const commentBody = optionalString(payload.comment);
-      const metadata = { assignee };
-      if (commentBody || metadata) {
-        copy.comments = [
-          ...copy.comments,
-          pendingComment("assign", commentBody ?? null, metadata),
-        ];
-      }
-      break;
-    }
-    case "resolve": {
-      copy.status = "resolved";
-      copy.resolved_at = now;
-      copy.resolved_by = options.actorEmail;
-      copy.acknowledged_at ??= now;
-      const commentBody = optionalString(payload.comment);
-      if (commentBody) {
-        copy.comments = [
-          ...copy.comments,
-          pendingComment("resolve", commentBody, null),
-        ];
-      }
-      break;
-    }
-  }
-
-  return copy;
-}
-
-function applyCommentOptimistic(alert: AlertRecord, comment: string, actorEmail: string): AlertRecord {
-  const now = new Date().toISOString();
-  return {
-    ...alert,
-    updated_at: now,
-    comments: [
-      ...cloneComments(alert.comments),
-      {
-        comment_id: tempId(),
-        alert_id: alert.alert_id,
-        action: "comment",
-        author_id: actorEmail,
-        author_email: actorEmail,
-        body: comment,
-        metadata: null,
-        created_at: now,
-        pending: true,
-      },
-    ],
-  };
-}
-
-function extractErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    const body = error.body as { error?: string } | null;
-    if (body?.error) {
-      return body.error;
-    }
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "Request failed";
-}
 
 export default function AlertsPage() {
   const api = useApiClient();
@@ -241,6 +89,7 @@ export default function AlertsPage() {
   function closeDialog() {
     setDialog(null);
   }
+  const isDialogPending = dialog ? isAlertPending(dialog.alertId) : false;
 
   async function performLifecycleAction(alert: AlertRecord, payload: AlertLifecycleActionPayload) {
     const previous = alerts;
@@ -324,6 +173,23 @@ export default function AlertsPage() {
     }
   }
 
+  function handleOpenDialog(action: DialogAction, target: AlertRecord) {
+    if (action === "assign" || action === "acknowledge") {
+      setDialog({
+        action,
+        alertId: target.alert_id,
+        comment: "",
+        assignee: target.assigned_to ?? "",
+      });
+      return;
+    }
+    setDialog({
+      action,
+      alertId: target.alert_id,
+      comment: "",
+    });
+  }
+
   if (state === "loading") {
     return (
       <Page title="Alerts">
@@ -366,210 +232,25 @@ export default function AlertsPage() {
       {actionError ? <div className="card callout error">{actionError}</div> : null}
 
       {dialog && dialogAlert ? (
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">
-              {dialog.action === "assign"
-                ? "Assign Alert"
-                : dialog.action === "acknowledge"
-                ? "Acknowledge Alert"
-                : dialog.action === "resolve"
-                ? "Resolve Alert"
-                : "Add Comment"}
-            </div>
-            <button className="button subtle" onClick={closeDialog} type="button">
-              Cancel
-            </button>
-          </div>
-          <div className="stack">
-            <div>
-              <div className="muted">{dialogAlert.device_id}</div>
-              <div>{dialogAlert.summary ?? dialogAlert.alert_type}</div>
-            </div>
-            {dialog.action === "assign" || dialog.action === "acknowledge" ? (
-              <label className="stack compact">
-                <span className="muted">Assignee (optional)</span>
-                <input
-                  type="text"
-                  value={dialog.assignee ?? ""}
-                  onChange={(event) =>
-                    setDialog({ ...dialog, assignee: event.target.value })
-                  }
-                />
-              </label>
-            ) : null}
-            <label className="stack compact">
-              <span className="muted">
-                {dialog.action === "comment" ? "Comment" : "Comment (optional)"}
-              </span>
-              <textarea
-                rows={4}
-                value={dialog.comment}
-                onChange={(event) => setDialog({ ...dialog, comment: event.target.value })}
-              />
-            </label>
-            <div className="actions">
-              <button
-                className="button primary"
-                type="button"
-                onClick={() => {
-                  void submitDialog();
-                }}
-                disabled={
-                  isAlertPending(dialog.alertId) ||
-                  (dialog.action === "comment" && !optionalString(dialog.comment))
-                }
-              >
-                Confirm
-              </button>
-              <button className="button subtle" type="button" onClick={closeDialog}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+        <ActionDialog
+          dialog={dialog}
+          alert={dialogAlert}
+          pending={isDialogPending}
+          onCancel={closeDialog}
+          onChangeAssignee={(value) => setDialog({ ...dialog, assignee: value })}
+          onChangeComment={(value) => setDialog({ ...dialog, comment: value })}
+          onConfirm={() => {
+            void submitDialog();
+          }}
+        />
       ) : null}
 
       <div className="stack">
-        {alerts.length ? (
-          alerts.map((alert) => {
-            const disabled = isAlertPending(alert.alert_id);
-            return (
-              <div key={alert.alert_id} className="card">
-                <div className="card-header">
-                  <div>
-                    <div className="card-title">{alert.device_id}</div>
-                    {alert.site ? <div className="subdued">{alert.site}</div> : null}
-                    <div className="muted">
-                      {alert.alert_type} - {alert.severity.toUpperCase()}
-                    </div>
-                  </div>
-                  <span className={`pill${alert.status === "resolved" ? "" : " warn"}`}>
-                    {alert.status === "open"
-                      ? "Open"
-                      : alert.status === "acknowledged"
-                      ? "Acknowledged"
-                      : "Resolved"}
-                  </span>
-                </div>
-                <div className="stack compact">
-                  {alert.summary ? <div>{alert.summary}</div> : null}
-                  {alert.description ? (
-                    <div className="muted">{alert.description}</div>
-                  ) : null}
-                  <div className="meta">
-                    Created {formatRelative(alert.created_at)}
-                    {alert.acknowledged_at ? ` | Ack ${formatRelative(alert.acknowledged_at)}` : null}
-                    {alert.resolved_at ? ` | Resolved ${formatRelative(alert.resolved_at)}` : null}
-                  </div>
-                  <div className="meta">
-                    Assigned to {alert.assigned_to ?? "Unassigned"}
-                    {alert.resolved_by ? ` | Resolved by ${alert.resolved_by}` : null}
-                  </div>
-
-                  <div className="actions">
-                    <button
-                      className="button subtle"
-                      type="button"
-                      onClick={() =>
-                        setDialog({
-                          action: "acknowledge",
-                          alertId: alert.alert_id,
-                          comment: "",
-                          assignee: alert.assigned_to ?? "",
-                        })
-                      }
-                      disabled={disabled || alert.status === "resolved"}
-                    >
-                      Acknowledge
-                    </button>
-                    <button
-                      className="button subtle"
-                      type="button"
-                      onClick={() =>
-                        setDialog({
-                          action: "assign",
-                          alertId: alert.alert_id,
-                          comment: "",
-                          assignee: alert.assigned_to ?? "",
-                        })
-                      }
-                      disabled={disabled}
-                    >
-                      Assign
-                    </button>
-                    <button
-                      className="button subtle"
-                      type="button"
-                      onClick={() =>
-                        setDialog({
-                          action: "resolve",
-                          alertId: alert.alert_id,
-                          comment: "",
-                        })
-                      }
-                      disabled={disabled || alert.status === "resolved"}
-                    >
-                      Resolve
-                    </button>
-                    <button
-                      className="button subtle"
-                      type="button"
-                      onClick={() =>
-                        setDialog({
-                          action: "comment",
-                          alertId: alert.alert_id,
-                          comment: "",
-                        })
-                      }
-                      disabled={disabled}
-                    >
-                      Comment
-                    </button>
-                  </div>
-
-                  {alert.comments.length ? (
-                    <div className="stack compact">
-                      <div className="muted">History</div>
-                      <ul className="list tight">
-                        {alert.comments.map((comment) => {
-                          const hasAssigneeMetadata =
-                            comment.metadata != null &&
-                            Object.prototype.hasOwnProperty.call(comment.metadata, "assignee");
-                          const metadataAssignee = hasAssigneeMetadata
-                            ? comment.metadata!.assignee
-                            : undefined;
-                          return (
-                            <li key={comment.comment_id} className="list-item">
-                              <div>
-                                <div className="meta">
-                                  {comment.action} -{" "}
-                                  {comment.author_email ?? comment.author_id ?? "unknown"} -{" "}
-                                  {formatRelative(comment.created_at)}
-                                  {comment.pending ? " - pending" : ""}
-                                </div>
-                                {comment.body ? <div>{comment.body}</div> : null}
-                                {hasAssigneeMetadata ? (
-                                  <div className="meta">
-                                    Assignee: {formatAssigneeMetadata(metadataAssignee)}
-                                  </div>
-                                ) : null}
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <div className="card">
-            <div className="empty">No alerts available</div>
-          </div>
-        )}
+        <AlertsList
+          alerts={alerts}
+          isAlertPending={isAlertPending}
+          onAction={handleOpenDialog}
+        />
       </div>
     </Page>
   );
