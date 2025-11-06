@@ -69,7 +69,9 @@ To push them all in one go, export the values in your shell and run `node script
 > wrangler kv:namespace create greenbro-ingest-ip --preview
 > ```
 >
-> Without the binding the Worker falls back to per-isolate memory buckets and the mitigation loses cross-colo coverage.
+> Copy the returned `id`/`preview_id` values into the `[[kv_namespaces]]` block (see `wrangler.toml:84`), replacing the placeholders. Confirm `wrangler deploy --dry-run` succeeds afterwards. Without the binding the Worker falls back to per-isolate memory buckets and the mitigation loses cross-colo coverage.
+
+Once the KV binding is live, add a Datadog/Grafana alert on the `ingest.ip_kv_bucket_failed` log metric so operations can detect namespace outages rapidly.
 
 After provisioning, run a `wrangler deploy --dry-run` to confirm every binding exists without publishing a new version:
 

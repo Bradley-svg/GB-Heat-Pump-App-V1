@@ -67,6 +67,13 @@ binding = "RETENTION_ARCHIVE"
 bucket_name = "greenbro-telemetry-archive"
 preview_bucket_name = "greenbro-telemetry-archive-dev"
 
+[[kv_namespaces]]
+# Replace the placeholder IDs with the production/preview KV namespace IDs returned by
+# `wrangler kv namespace create greenbro-ingest-ip`.
+binding = "INGEST_IP_BUCKETS"
+id = "<replace-with-production-ingest-ip-kv-id>"
+preview_id = "<replace-with-preview-ingest-ip-kv-id>"
+
 [env.local]
   [env.local.vars]
   APP_BASE_URL = "http://127.0.0.1:8787/app"

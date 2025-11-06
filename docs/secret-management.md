@@ -17,6 +17,17 @@ This document captures where the system's sensitive values live, how to provisio
 
 The Worker code reads each secret from the runtime `env` object. No secret values should live in `wrangler.toml`, GitHub, or checked-in source files.
 
+### GitHub Actions variables & secrets (Prompt Bible #24 – Performance Test Plan)
+
+`Perf Smoke` (`.github/workflows/perf-smoke.yml`) reads the target Worker URL and optional Access token from GitHub configuration:
+
+| Name | Type | Purpose | Notes |
+| --- | --- | --- | --- |
+| `PERF_BASE_URL` | Repository variable **or** secret | Base URL for the k6 smoke harness. | Set this to the production Worker origin (for example `https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev`). If unset, the workflow skips automatically. |
+| `PERF_ACCESS_JWT` | Repository secret | Optional Cloudflare Access JWT for authenticated smoke runs. | Issue via `cloudflared access login` or Access service token. Omit when targeting a public staging environment. Rotate whenever Access policies change. |
+
+Document the last rotation timestamp in the release log and update the values whenever the Worker URL or Access application changes.
+
 ## Provisioning With Wrangler
 
 Every deploy runs through a "secrets provisioning" gate:

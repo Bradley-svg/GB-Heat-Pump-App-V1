@@ -34,7 +34,7 @@ Optional: supply `K6_ACCESS_JWT` when hitting Access-protected endpoints.
 See `.github/workflows/perf-smoke.yml`. The workflow uses `grafana/k6-action` to:
 
 1. Run on `main`, nightly at 06:00 UTC, and via manual dispatch.
-2. Read `PERF_BASE_URL` (repository variable/secret) and optional `PERF_ACCESS_JWT`.
+2. Read `PERF_BASE_URL` (repository variable/secret) and optional `PERF_ACCESS_JWT` from GitHub (documented in `docs/secret-management.md`).
 3. Upload the k6 summary as an artifact for audit.
 
 The job is intentionally lightweight (default `vus=1`, `duration=45s`) to catch regressions without saturating production. Adjust `K6_VUS`/`K6_DURATION` via workflow inputs when running heavier rehearsals.
@@ -44,4 +44,3 @@ The job is intentionally lightweight (default `vus=1`, `duration=45s`) to catch 
 - Extend the script to cover `/metrics?format=json` once Access automation supplies JWTs in CI.
 - Feed `gb_perf_health_latency` into Grafana or Datadog dashboards alongside the thresholds from `docs/performance-test-plan.md`.
 - Gate telemetry feature rollouts by comparing smoke run history (Prompt Bible Appendix C Definition of Done).
-
