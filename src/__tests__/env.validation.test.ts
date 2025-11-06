@@ -112,6 +112,28 @@ describe("validateEnv", () => {
     expect(() => validateEnv(env)).not.toThrow();
   });
 
+  it("allows configuring ingest IP rate limit when values are valid", () => {
+    const env = createEnv({
+      INGEST_IP_LIMIT_PER_MIN: "120",
+      INGEST_IP_BLOCK_SECONDS: "30",
+    });
+    expect(() => validateEnv(env)).not.toThrow();
+  });
+
+  it("allows disabling ingest IP rate limit with zero", () => {
+    const env = createEnv({
+      INGEST_IP_LIMIT_PER_MIN: "0",
+    });
+    expect(() => validateEnv(env)).not.toThrow();
+  });
+
+  it("fails when ingest IP rate limit is invalid", () => {
+    const env = createEnv({
+      INGEST_IP_LIMIT_PER_MIN: "-1",
+    });
+    expect(() => validateEnv(env)).toThrowError(/INGEST_IP_LIMIT_PER_MIN/);
+  });
+
   it("fails when INGEST_RATE_LIMIT_PER_MIN is missing or invalid", () => {
     const missing = createEnv();
     delete (missing as any).INGEST_RATE_LIMIT_PER_MIN;

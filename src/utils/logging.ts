@@ -311,17 +311,15 @@ function parseSampleRate(raw: string | undefined): number | null {
 export function configureLoggingFromEnv(env: Env) {
   if (configuredFromEnv) return;
   configuredFromEnv = true;
-  const level = parseLogLevel((env as Record<string, unknown>).LOG_LEVEL as string | undefined);
-  const sampleRate = parseSampleRate(
-    (env as Record<string, unknown>).LOG_DEBUG_SAMPLE_RATE as string | undefined,
-  );
+  const level = parseLogLevel(env.LOG_LEVEL);
+  const sampleRate = parseSampleRate(env.LOG_DEBUG_SAMPLE_RATE);
   configureLogging({
     level: level ?? loggingConfig.level,
     debugSampleRate: sampleRate ?? loggingConfig.debugSampleRate,
     redaction: {
-      clientIp: flagEnabled((env as Record<string, unknown>).LOG_REDACT_CLIENT_IP),
-      userAgent: flagEnabled((env as Record<string, unknown>).LOG_REDACT_USER_AGENT),
-      cfRay: flagEnabled((env as Record<string, unknown>).LOG_REDACT_CF_RAY),
+      clientIp: flagEnabled(env.LOG_REDACT_CLIENT_IP),
+      userAgent: flagEnabled(env.LOG_REDACT_USER_AGENT),
+      cfRay: flagEnabled(env.LOG_REDACT_CF_RAY),
     },
   });
 }

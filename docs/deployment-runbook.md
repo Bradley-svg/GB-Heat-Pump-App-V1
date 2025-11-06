@@ -10,7 +10,7 @@ The platform now deploys a single Worker (`gb-heat-pump-app-v1`). Key bindings a
 
 | Worker script | Primary URLs | D1 database (name -> id) | R2 buckets (binding -> name) | Secrets to provision |
 |---------------|--------------|--------------------------|------------------------------|----------------------|
-| `gb-heat-pump-app-v1` | `https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev` | `GREENBRO_DB` -> `ee7ad98b-3629-4985-bd7d-a60c401953a7` | `GB_BUCKET`->`greenbro-brand`; `APP_STATIC`->`greenbro-app-static` | `ACCESS_AUD`, `ACCESS_JWKS_URL` (`https://bradleyayliffl.cloudflareaccess.com/cdn-cgi/access/certs`), `CURSOR_SECRET`, `ASSET_SIGNING_SECRET`, optional `ALLOWED_PREFIXES`, ingestion limits (`INGEST_ALLOWED_ORIGINS`, `INGEST_RATE_LIMIT_PER_MIN=120`, `INGEST_SIGNATURE_TOLERANCE_SECS=300`) |
+| `gb-heat-pump-app-v1` | `https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev` | `GREENBRO_DB` -> `ee7ad98b-3629-4985-bd7d-a60c401953a7` | `GB_BUCKET`->`greenbro-brand`; `APP_STATIC`->`greenbro-app-static` | `ACCESS_AUD`, `ACCESS_JWKS_URL` (`https://bradleyayliffl.cloudflareaccess.com/cdn-cgi/access/certs`), `CURSOR_SECRET`, `ASSET_SIGNING_SECRET`, optional `ALLOWED_PREFIXES`, ingestion limits (`INGEST_ALLOWED_ORIGINS`, `INGEST_RATE_LIMIT_PER_MIN=120`, `INGEST_SIGNATURE_TOLERANCE_SECS=300`, `INGEST_IP_LIMIT_PER_MIN`, `INGEST_IP_BLOCK_SECONDS`) |
 
 > `ACCESS_AUD` values are managed in Cloudflare Access and stored only via `wrangler secret put`. Rotate/update them alongside the Access application policies described in `docs/platform-setup-guide.md`.
 
@@ -21,7 +21,7 @@ The platform now deploys a single Worker (`gb-heat-pump-app-v1`). Key bindings a
 - Confirm the branch is green in **Frontend CI** and **Worker CI**.
 - Review pending migrations: `npm run migrate:list`.
 - Ensure required secrets are set on the Worker (`wrangler secret put ...`).
-- Replace any placeholder secrets (e.g. `CURSOR_SECRET`, `ACCESS_AUD`, `ASSET_SIGNING_SECRET`, `INGEST_ALLOWED_ORIGINS`, `INGEST_RATE_LIMIT_PER_MIN`, `INGEST_SIGNATURE_TOLERANCE_SECS`) with strong values stored in the password manager before the first production deploy.
+- Replace any placeholder secrets (e.g. `CURSOR_SECRET`, `ACCESS_AUD`, `ASSET_SIGNING_SECRET`, `INGEST_ALLOWED_ORIGINS`, `INGEST_RATE_LIMIT_PER_MIN`, `INGEST_SIGNATURE_TOLERANCE_SECS`, `INGEST_IP_LIMIT_PER_MIN`, `INGEST_IP_BLOCK_SECONDS`) with strong values stored in the password manager before the first production deploy.
 - Verify Cloudflare credentials (`npx wrangler whoami`) and select the right account.
 - Verify retention archive readiness: confirm R2 buckets (`npx wrangler r2 bucket list | rg telemetry-archive`), check the `RETENTION_ARCHIVE` binding in `wrangler.toml`, and run `npx vitest run src/jobs/__tests__/retention.test.ts --reporter verbose` to ensure backups log before deletions.
 - Bootstrap SPA assets: `npm run ops:r2:bootstrap -- --env production` (or run `npm run frontend:build && npm run publish:r2 -- --env production`). The helper writes `dist/app-static-manifest.json`; attach it to the release ticket.

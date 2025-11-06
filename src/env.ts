@@ -24,6 +24,8 @@ export interface Env {
   INGEST_DEDUP_WINDOW_MINUTES?: string;
   INGEST_SIGNATURE_TOLERANCE_SECS: string;
   INGEST_FAILURE_LIMIT_PER_MIN?: string;
+  INGEST_IP_LIMIT_PER_MIN?: string;
+  INGEST_IP_BLOCK_SECONDS?: string;
   TELEMETRY_RETENTION_DAYS?: string;
   TELEMETRY_REFACTOR_MODE?: string;
   RETENTION_BACKUP_PREFIX?: string;
@@ -183,6 +185,14 @@ const EnvSchema = z
       typeof value.INGEST_SIGNATURE_TOLERANCE_SECS === "string"
         ? value.INGEST_SIGNATURE_TOLERANCE_SECS.trim()
         : "";
+    const ingestIpLimitRaw =
+      typeof value.INGEST_IP_LIMIT_PER_MIN === "string"
+        ? value.INGEST_IP_LIMIT_PER_MIN.trim()
+        : "";
+    const ingestIpBlockRaw =
+      typeof value.INGEST_IP_BLOCK_SECONDS === "string"
+        ? value.INGEST_IP_BLOCK_SECONDS.trim()
+        : "";
     const normalizedAllowShim =
       typeof value.ALLOW_DEV_ACCESS_SHIM === "string"
         ? value.ALLOW_DEV_ACCESS_SHIM.trim().toLowerCase()
@@ -229,6 +239,36 @@ const EnvSchema = z
           path: ["INGEST_ALLOWED_ORIGINS"],
           code: z.ZodIssueCode.custom,
           message: "INGEST_ALLOWED_ORIGINS must be configured for non-local environments",
+        });
+      }
+    }
+
+    if (ingestIpLimitRaw) {
+      const parsed = Number.parseInt(ingestIpLimitRaw, 10);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        ctx.addIssue({
+          path: ["INGEST_IP_LIMIT_PER_MIN"],
+          code: z.ZodIssueCode.custom,
+          message: "INGEST_IP_LIMIT_PER_MIN must be zero or a positive integer when set",
+        });
+      }
+      if (parsed > 0 && ingestIpBlockRaw) {
+        const block = Number.parseInt(ingestIpBlockRaw, 10);
+        if (!Number.isFinite(block) || block <= 0) {
+          ctx.addIssue({
+            path: ["INGEST_IP_BLOCK_SECONDS"],
+            code: z.ZodIssueCode.custom,
+            message: "INGEST_IP_BLOCK_SECONDS must be a positive integer when set",
+          });
+        }
+      }
+    } else if (ingestIpBlockRaw) {
+      const block = Number.parseInt(ingestIpBlockRaw, 10);
+      if (!Number.isFinite(block) || block <= 0) {
+        ctx.addIssue({
+          path: ["INGEST_IP_BLOCK_SECONDS"],
+          code: z.ZodIssueCode.custom,
+          message: "INGEST_IP_BLOCK_SECONDS must be a positive integer when set",
         });
       }
     }

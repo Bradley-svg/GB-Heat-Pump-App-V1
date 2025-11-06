@@ -28,6 +28,8 @@ ENVIRONMENT = "production"
 #   INGEST_FAILURE_LIMIT_PER_MIN
 #   INGEST_SIGNATURE_TOLERANCE_SECS
 INGEST_FAILURE_LIMIT_PER_MIN = "60"
+INGEST_IP_LIMIT_PER_MIN = "240"
+INGEST_IP_BLOCK_SECONDS = "60"
 
 # Ops thresholds (override per-env if needed)
 HEARTBEAT_INTERVAL_SECS = "30"        # expected device heartbeat period
@@ -69,6 +71,8 @@ preview_bucket_name = "greenbro-telemetry-archive-dev"
   APP_BASE_URL = "http://127.0.0.1:8787/app"
   APP_API_BASE = "http://127.0.0.1:8787"
   ENVIRONMENT = "development"
+  INGEST_IP_LIMIT_PER_MIN = "0"
+  INGEST_IP_BLOCK_SECONDS = "60"
   # Enable the Access shim for local Miniflare sessions (adjust as needed).
   ALLOW_DEV_ACCESS_SHIM = "true"
   DEV_ALLOW_USER = '{"email":"local-admin@example.com","roles":["admin"],"clientIds":["profile-west"]}'

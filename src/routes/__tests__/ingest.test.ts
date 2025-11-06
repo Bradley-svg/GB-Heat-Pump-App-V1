@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../../env";
 import { handleIngest } from "../ingest";
 import * as deviceModule from "../../lib/device";
+import { __resetIpRateLimiterForTests } from "../../lib/ip-rate-limit";
 import { hmacSha256Hex } from "../../utils";
 
 const DEVICE_KEY_HASH = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -46,6 +47,8 @@ function baseEnv(overrides: Partial<Env> = {}): Env {
     INGEST_ALLOWED_ORIGINS: "*",
     INGEST_RATE_LIMIT_PER_MIN: "120",
     INGEST_SIGNATURE_TOLERANCE_SECS: "300",
+    INGEST_IP_LIMIT_PER_MIN: "0",
+    INGEST_IP_BLOCK_SECONDS: "60",
     ...overrides,
   };
 }
@@ -90,6 +93,7 @@ afterEach(() => {
   verifyDeviceKeyMock.mockReset();
   claimDeviceIfUnownedMock.mockReset();
   vi.clearAllMocks();
+  __resetIpRateLimiterForTests();
 });
 
 describe("handleIngest", () => {
@@ -504,6 +508,33 @@ describe("handleIngest", () => {
   const body = (await res.json()) as any;
   expect(body.error).toBe("Rate limit exceeded");
   expect(opsRun).toHaveBeenCalled();
+  });
+
+  it("rate limits by client IP before reading payloads", async () => {
+    const env = baseEnv({
+      INGEST_IP_LIMIT_PER_MIN: "1",
+      INGEST_IP_BLOCK_SECONDS: "120",
+    });
+
+    const buildRequest = () =>
+      new Request("https://example.com/api/ingest/test", {
+        method: "POST",
+        body: "{bad-json",
+        headers: {
+          "content-type": "application/json",
+          "cf-connecting-ip": "203.0.113.10",
+        },
+      });
+
+    const first = await handleIngest(buildRequest(), env, "test");
+    expect(first.status).toBe(400);
+
+    const second = await handleIngest(buildRequest(), env, "test");
+    expect(second.status).toBe(429);
+    const payload = (await second.json()) as { error: string };
+    expect(payload.error).toBe("Rate limit exceeded");
+    expect(second.headers.get("Retry-After")).toBe("120");
+    expect(verifyDeviceKeyMock).not.toHaveBeenCalled();
   });
 
   it("throttles repeated failures when failure limit is exceeded", async () => {

@@ -2,6 +2,7 @@ import type { Env } from "../env";
 import { claimDeviceIfUnowned, verifyDeviceKey } from "../lib/device";
 import { json } from "../utils/responses";
 import { evaluateCors, withCors } from "../lib/cors";
+import { checkIpRateLimit } from "../lib/ip-rate-limit";
 import {
   parseAndCheckTs,
   nowISO,
@@ -235,6 +236,24 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
       level: "warn",
     });
     return json({ error: "Origin not allowed" }, { status: 403 });
+  }
+
+  const ipDecision = checkIpRateLimit(req, env, INGEST_ROUTE);
+  if (ipDecision?.limited) {
+    await logAndRecordEarlyExit(req, env, INGEST_ROUTE, 429, t0, log, "ingest.ip_rate_limited", {
+      fields: {
+        reason: "ip_rate_limited",
+        client_ip: ipDecision.ip,
+        limit_per_minute: ipDecision.limit,
+        retry_after_seconds: ipDecision.retryAfterSeconds,
+      },
+      level: "warn",
+    });
+    const rateResponse = json({ error: "Rate limit exceeded" }, { status: 429 });
+    if (ipDecision.retryAfterSeconds != null) {
+      rateResponse.headers.set("Retry-After", String(ipDecision.retryAfterSeconds));
+    }
+    return withCors(req, env, rateResponse, cors);
   }
 
   let rawBodyText: string;
@@ -552,6 +571,24 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
       level: "warn",
     });
     return json({ error: "Origin not allowed" }, { status: 403 });
+  }
+
+  const ipDecision = checkIpRateLimit(req, env, HEARTBEAT_ROUTE);
+  if (ipDecision?.limited) {
+    await logAndRecordEarlyExit(req, env, HEARTBEAT_ROUTE, 429, t0, log, "heartbeat.ip_rate_limited", {
+      fields: {
+        reason: "ip_rate_limited",
+        client_ip: ipDecision.ip,
+        limit_per_minute: ipDecision.limit,
+        retry_after_seconds: ipDecision.retryAfterSeconds,
+      },
+      level: "warn",
+    });
+    const rateResponse = json({ error: "Rate limit exceeded" }, { status: 429 });
+    if (ipDecision.retryAfterSeconds != null) {
+      rateResponse.headers.set("Retry-After", String(ipDecision.retryAfterSeconds));
+    }
+    return withCors(req, env, rateResponse, cors);
   }
 
   let rawBodyText: string;

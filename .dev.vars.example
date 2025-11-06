@@ -6,6 +6,8 @@ ACCESS_JWKS_URL=https://example.cloudflareaccess.com/cdn-cgi/access/certs
 INGEST_ALLOWED_ORIGINS=http://127.0.0.1:8787
 INGEST_RATE_LIMIT_PER_MIN=120
 INGEST_SIGNATURE_TOLERANCE_SECS=300
+INGEST_IP_LIMIT_PER_MIN=0
+INGEST_IP_BLOCK_SECONDS=60
 # Local dev environments should explicitly declare their deployment mode.
 ENVIRONMENT=development
 # ASSET_SIGNING_SECRET=only-if-testing-signed-assets

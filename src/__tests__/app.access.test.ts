@@ -20,6 +20,9 @@ function createEnv(overrides: Partial<Env> = {}): Env {
     INGEST_ALLOWED_ORIGINS: "https://devices.example.com",
     INGEST_RATE_LIMIT_PER_MIN: "120",
     INGEST_SIGNATURE_TOLERANCE_SECS: "300",
+    INGEST_IP_LIMIT_PER_MIN: "0",
+    INGEST_IP_BLOCK_SECONDS: "60",
+    ENVIRONMENT: "test",
     ...overrides,
   } as Env;
 }
@@ -53,6 +56,7 @@ describe("app.fetch access enforcement", () => {
       APP_BASE_URL: "http://127.0.0.1:8787/app",
       DEV_ALLOW_USER: JSON.stringify({ email: "dev@example.com", roles: ["admin"] }),
       ALLOW_DEV_ACCESS_SHIM: "true",
+      ENVIRONMENT: "development",
     });
     const res = await app.fetch(new Request("https://example.com/app/overview"), env);
 

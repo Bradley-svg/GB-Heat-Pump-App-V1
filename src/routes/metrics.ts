@@ -25,6 +25,7 @@ export async function handleMetrics(req: Request, env: Env) {
     return validationErrorResponse(paramsResult.error);
   }
   const formatParam = paramsResult.data.format;
+  const isDashboardFormat = (formatParam as string | undefined) === "dashboard";
 
   const now = Date.now();
   const windowStart = opsMetricsWindowStart(now);
@@ -68,7 +69,7 @@ export async function handleMetrics(req: Request, env: Env) {
 
   const metricsPayload = formatMetricsJson(deviceSummary, opsRows);
 
-  if (formatParam === "dashboard") {
+  if (isDashboardFormat) {
     const dashboard = buildDashboardPayload(metricsPayload);
     return json({
       ...dashboard,
@@ -79,10 +80,7 @@ export async function handleMetrics(req: Request, env: Env) {
     });
   }
 
-  const format = pickMetricsFormat(
-    formatParam === "dashboard" ? undefined : formatParam,
-    req.headers.get("accept") ?? "",
-  );
+  const format = pickMetricsFormat(formatParam, req.headers.get("accept") ?? "");
 
   if (format === "json") {
     return json({

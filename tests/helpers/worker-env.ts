@@ -63,6 +63,8 @@ export async function createWorkerEnv(overrides: Partial<Env> = {}): Promise<Wor
     INGEST_ALLOWED_ORIGINS: "https://devices.test",
     INGEST_RATE_LIMIT_PER_MIN: "120",
     INGEST_SIGNATURE_TOLERANCE_SECS: "300",
+    INGEST_IP_LIMIT_PER_MIN: "0",
+    INGEST_IP_BLOCK_SECONDS: "60",
     ENVIRONMENT: "test",
   };
 
