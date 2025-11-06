@@ -72,7 +72,7 @@ The JSON payload also surfaces real time indicators:
 - `ops_summary.top_server_error_routes` (top 5 offenders)
 - `ops_summary.slow_routes` (routes breaching latency threshold)
 
-> **Alerting (Prompt Bible #6 — Risk Register):** configure a Datadog/Grafana monitor for `ingest.ip_kv_bucket_failed`. Trigger whenever the count exceeds 0 inside a five-minute window so KV binding regressions surface before ingest traffic degrades. Tag with `service:gb-workers` and route to the platform on-call rotation.
+> **Alerting (Prompt Bible #6 — Risk Register):** For a zero-cost option, the repo includes `.github/workflows/kv-fallback-monitor.yml`, which runs `scripts/check-ingest-kv-fallback.sh` on a 30-minute schedule. Populate `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` repository secrets and the job will fail (and notify) whenever `ingest.ip_kv_bucket_failed` appears in recent logs. If you later adopt Datadog/Grafana, mirror the same condition (count > 0/5 min) tagged `service:gb-workers`.
 
 These fields are designed to feed dashboards or alerting pipelines without additional joins.
 

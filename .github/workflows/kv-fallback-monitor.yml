@@ -1,0 +1,27 @@
+name: KV Fallback Monitor
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
+
+jobs:
+  tail-logs:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          npm install wrangler@^4.45.0
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: Monitor ingest KV fallback
+        run: |
+          npx wrangler --version
+          bash scripts/check-ingest-kv-fallback.sh 60 gb-heat-pump-app-v1 production
