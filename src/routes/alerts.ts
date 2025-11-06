@@ -34,7 +34,25 @@ import {
   type AlertCommentRecord,
 } from "../lib/alerts-store";
 import { createAuditEntry } from "../lib/audit-store";
-import { loggerForRequest } from "../utils/logging";
+import {
+  DASHBOARD_CACHE_AREA,
+  bumpDashboardTokens,
+  scopeIdsForProfiles,
+} from "../lib/dashboard-cache";
+import { loggerForRequest, type Logger } from "../utils/logging";
+
+async function invalidateClientDashboardCache(
+  env: Env,
+  profileId: string | null,
+  logger: Logger,
+): Promise<void> {
+  try {
+    const scopeIds = scopeIdsForProfiles([profileId]);
+    await bumpDashboardTokens(env, DASHBOARD_CACHE_AREA.clientCompact, scopeIds);
+  } catch (error) {
+    logger.warn("alerts.cache_invalidation_failed", { profile_id: profileId, error });
+  }
+}
 
 export async function handleAlertsFeed(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
@@ -338,6 +356,7 @@ export async function handleCreateAlertRecord(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
 
+  const logger = loggerForRequest(req, { route: "/api/alerts" });
   const scope = buildDeviceScope(user, "a");
   if (scope.empty && !scope.isAdmin) {
     return json({ error: "Forbidden" }, { status: 403 });
@@ -412,6 +431,8 @@ export async function handleCreateAlertRecord(req: Request, env: Env) {
     presentAlertRecord(result.alert, env, scope, meta, []),
   ]);
 
+  await invalidateClientDashboardCache(env, result.alert.profile_id ?? null, logger);
+
   return json({ ok: true, alert }, { status: 201 });
 }
 
@@ -419,6 +440,7 @@ export async function handleUpdateAlertRecord(req: Request, env: Env, alertId: s
   const user = await requireAccessUser(req, env);
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
 
+  const logger = loggerForRequest(req, { route: "/api/alerts" });
   const scope = buildDeviceScope(user, "a");
   if (scope.empty && !scope.isAdmin) {
     return json({ error: "Forbidden" }, { status: 403 });
@@ -474,6 +496,8 @@ export async function handleUpdateAlertRecord(req: Request, env: Env, alertId: s
 
   await recordAlertAudit(env, req, user.email, `alert.${body.action}`, updatedAlert, auditExtras);
 
+  await invalidateClientDashboardCache(env, updatedAlert.profile_id ?? null, logger);
+
   return json({
     ok: true,
     alert: presented,
@@ -485,6 +509,7 @@ export async function handleCreateAlertComment(req: Request, env: Env, alertId: 
   const user = await requireAccessUser(req, env);
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
 
+  const logger = loggerForRequest(req, { route: "/api/alerts" });
   const scope = buildDeviceScope(user, "a");
   if (scope.empty && !scope.isAdmin) {
     return json({ error: "Forbidden" }, { status: 403 });
@@ -533,6 +558,8 @@ export async function handleCreateAlertComment(req: Request, env: Env, alertId: 
   await recordAlertAudit(env, req, user.email, "alert.commented", refreshed, {
     comment_id: commentRecord.comment_id,
   });
+
+  await invalidateClientDashboardCache(env, refreshed.profile_id ?? null, logger);
 
   return json({
     ok: true,

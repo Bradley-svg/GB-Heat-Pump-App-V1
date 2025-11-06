@@ -8,6 +8,11 @@ import { ArchiveQuerySchema } from "../schemas/archive";
 import { validationErrorResponse } from "../utils/validation";
 import { maskTelemetryNumber } from "../telemetry";
 import { loggerForRequest, type Logger } from "../utils/logging";
+import {
+  DASHBOARD_CACHE_AREA,
+  getDashboardTokenSignature,
+  scopeIdsForProfiles,
+} from "../lib/dashboard-cache";
 
 const ARCHIVE_CACHE_VERSION = 1;
 const TRUE_TOKENS = new Set(["1", "true", "yes", "on"]);
@@ -36,8 +41,13 @@ function resolveScopeCacheKey(scope: ReturnType<typeof buildDeviceScope>): strin
   return `tenant:${tokens.join(",")}`;
 }
 
-function buildArchiveCacheKey(scopeKey: string, offlineHours: number, days: number): string {
-  return `archive:v${ARCHIVE_CACHE_VERSION}:${scopeKey}:h${offlineHours}:d${days}`;
+function buildArchiveCacheKey(
+  scopeKey: string,
+  tokenSignature: string,
+  offlineHours: number,
+  days: number,
+): string {
+  return `archive:v${ARCHIVE_CACHE_VERSION}:t${tokenSignature}:${scopeKey}:h${offlineHours}:d${days}`;
 }
 
 function resolveArchiveCacheTtl(env: Env): number {
@@ -130,7 +140,15 @@ export async function handleArchive(req: Request, env: Env) {
   }
 
   const scopeKey = resolveScopeCacheKey(scope);
-  const cacheKey = buildArchiveCacheKey(scopeKey, offlineHours, days);
+  const profileIds =
+    scope.isAdmin || scope.empty ? [] : (scope.bind ?? []).map((value) => String(value));
+  const scopeIds = scopeIdsForProfiles(profileIds);
+  const tokenSignature = await getDashboardTokenSignature(
+    env,
+    DASHBOARD_CACHE_AREA.archiveOffline,
+    scopeIds,
+  );
+  const cacheKey = buildArchiveCacheKey(scopeKey, tokenSignature, offlineHours, days);
   const cacheTtl = resolveArchiveCacheTtl(env);
 
   if (scopeKey !== "empty") {

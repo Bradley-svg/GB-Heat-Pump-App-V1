@@ -8,6 +8,11 @@ import { ClientCompactQuerySchema } from "../schemas/client";
 import { validationErrorResponse } from "../utils/validation";
 import { maskTelemetryNumber } from "../telemetry";
 import { loggerForRequest, type Logger } from "../utils/logging";
+import {
+  DASHBOARD_CACHE_AREA,
+  getDashboardTokenSignature,
+  scopeIdsForProfiles,
+} from "../lib/dashboard-cache";
 
 const CLIENT_COMPACT_CACHE_VERSION = 1;
 const TRUE_TOKENS = new Set(["1", "true", "yes", "on"]);
@@ -32,8 +37,13 @@ function resolveScopeCacheKey(scope: ReturnType<typeof buildDeviceScope>): strin
   return `tenant:${tokens.join(",")}`;
 }
 
-function buildClientCompactCacheKey(scopeKey: string, hours: number, lowDeltaT: number): string {
-  return `client-compact:v${CLIENT_COMPACT_CACHE_VERSION}:${scopeKey}:h${hours}:d${lowDeltaT}`;
+function buildClientCompactCacheKey(
+  scopeKey: string,
+  tokenSignature: string,
+  hours: number,
+  lowDeltaT: number,
+): string {
+  return `client-compact:v${CLIENT_COMPACT_CACHE_VERSION}:t${tokenSignature}:${scopeKey}:h${hours}:d${lowDeltaT}`;
 }
 
 function resolveClientCompactCacheTtl(env: Env): number {
@@ -170,7 +180,15 @@ export async function handleClientCompact(req: Request, env: Env) {
   }
 
   const scopeKey = resolveScopeCacheKey(scope);
-  const cacheKey = buildClientCompactCacheKey(scopeKey, hours, lowDeltaT);
+  const profileIds =
+    scope.isAdmin || scope.empty ? [] : (scope.bind ?? []).map((value) => String(value));
+  const scopeIds = scopeIdsForProfiles(profileIds);
+  const tokenSignature = await getDashboardTokenSignature(
+    env,
+    DASHBOARD_CACHE_AREA.clientCompact,
+    scopeIds,
+  );
+  const cacheKey = buildClientCompactCacheKey(scopeKey, tokenSignature, hours, lowDeltaT);
   const cacheTtl = resolveClientCompactCacheTtl(env);
 
   if (scopeKey !== "empty") {

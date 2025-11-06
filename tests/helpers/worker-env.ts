@@ -24,6 +24,8 @@ const MIGRATION_FILES = [
   "0009_ingest_nonces.sql",
   "0010_ops_metrics_device_route_index.sql",
   "0011_cron_cursors.sql",
+  "0013_dashboard_indexes.sql",
+  "0014_cache_tokens.sql",
   "schema-indexes.sql",
 ];
 

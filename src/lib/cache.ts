@@ -78,3 +78,23 @@ export async function writeJsonCache(
     logger?.warn("cache.write_failed", { key, error });
   }
 }
+
+interface DeleteCacheOptions {
+  logger?: Logger;
+}
+
+export async function deleteCacheKey(
+  key: string,
+  { logger }: DeleteCacheOptions = {},
+): Promise<void> {
+  const cache = getDefaultCache();
+  if (!cache) {
+    return;
+  }
+  const request = buildCacheRequest(key);
+  try {
+    await cache.delete(request);
+  } catch (error) {
+    logger?.warn("cache.delete_failed", { key, error });
+  }
+}
