@@ -72,6 +72,8 @@ The JSON payload also surfaces real time indicators:
 - `ops_summary.top_server_error_routes` (top 5 offenders)
 - `ops_summary.slow_routes` (routes breaching latency threshold)
 
+> **Alerting (Prompt Bible #6 — Risk Register):** configure a Datadog/Grafana monitor for `ingest.ip_kv_bucket_failed`. Trigger whenever the count exceeds 0 inside a five-minute window so KV binding regressions surface before ingest traffic degrades. Tag with `service:gb-workers` and route to the platform on-call rotation.
+
 These fields are designed to feed dashboards or alerting pipelines without additional joins.
 
 ### Sample queries

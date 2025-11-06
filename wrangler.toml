@@ -72,7 +72,7 @@ preview_bucket_name = "greenbro-telemetry-archive-dev"
 # `wrangler kv namespace create greenbro-ingest-ip`.
 binding = "INGEST_IP_BUCKETS"
 id = "a5ea436cc7854b0a8ce5bab3e3551455"
-preview_id = "<preview-namespace-id>"
+preview_id = "623e877af5934787b541a5711fe2151c"
 
 [env.local]
   [env.local.vars]
