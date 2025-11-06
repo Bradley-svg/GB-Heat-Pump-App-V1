@@ -29,7 +29,6 @@
     "test:integration": "cross-env ROLLUP_SKIP_NODE_RESOLUTION=1 node ./node_modules/vitest/vitest.mjs run tests/integration",
     "test:smoke": "cross-env ROLLUP_SKIP_NODE_RESOLUTION=1 node ./node_modules/vitest/vitest.mjs run tests/smoke",
     "test:security": "cross-env ROLLUP_SKIP_NODE_RESOLUTION=1 node ./node_modules/vitest/vitest.mjs run tests/security",
-
     "smoke": "npm run test:smoke",
     "security": "npm run test:security",
     "test:ci": "npm run test && npm run test:integration && npm run test:smoke && npm run test:security",
@@ -39,12 +38,12 @@
   "devDependencies": {
     "@miniflare/d1": "^2.14.4",
     "better-sqlite3": "^12.4.1",
-    "jsdom": "^27.1.0",
     "cross-env": "^7.0.3",
+    "jsdom": "^27.1.0",
     "rollup": "4.52.5",
     "typescript": "^5.9.3",
     "vitest": "^4.0.7",
-    "wrangler": "^4.45.1"
+    "wrangler": "^4.45.4"
   },
   "dependencies": {
     "itty-router": "^5.0.1",
