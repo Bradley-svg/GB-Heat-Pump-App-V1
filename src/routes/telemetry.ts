@@ -34,6 +34,21 @@ const METRICS_WITH_EXTENTS = new Set<Readonly<typeof TELEMETRY_ALLOWED_METRICS>[
   "thermalKW",
   "cop",
 ]);
+export const DEFAULT_CARRY_FORWARD_MINUTES = 30;
+
+export function resolveCarryForwardLimitMs(env: Env): number {
+  const raw =
+    typeof env.TELEMETRY_CARRY_MAX_MINUTES === "string"
+      ? env.TELEMETRY_CARRY_MAX_MINUTES.trim()
+      : "";
+  if (raw) {
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed * 60 * 1000;
+    }
+  }
+  return DEFAULT_CARRY_FORWARD_MINUTES * 60 * 1000;
+}
 
 export async function handleTelemetryLatestBatch(req: Request, env: Env, ctx?: ExecutionContext) {
   const mode = getTelemetryFeatureMode(env);
@@ -213,6 +228,7 @@ export async function handleTelemetrySeries(req: Request, env: Env, ctx?: Execut
   const { config } = result;
   const rows = await fetchTelemetrySeries(env, config);
 
+  const carryForwardLimitMs = resolveCarryForwardLimitMs(env);
   const series = buildSeriesResponse(rows, {
     startMs: config.startMs,
     endMs: config.endMs,
@@ -221,6 +237,7 @@ export async function handleTelemetrySeries(req: Request, env: Env, ctx?: Execut
     fillMode: config.fillMode,
     isAdmin: userIsAdmin(user),
     tenantPrecision: config.tenantPrecision,
+    carryForwardLimitMs,
   });
 
   const response = json({
@@ -260,10 +277,20 @@ interface BuildSeriesOptions {
   fillMode: "carry" | "none";
   isAdmin: boolean;
   tenantPrecision: number;
+  carryForwardLimitMs: number;
 }
 
 function buildSeriesResponse(rows: TelemetrySeriesRow[], options: BuildSeriesOptions) {
-  const { startMs, endMs, bucketMs, metrics, fillMode, isAdmin, tenantPrecision } = options;
+  const {
+    startMs,
+    endMs,
+    bucketMs,
+    metrics,
+    fillMode,
+    isAdmin,
+    tenantPrecision,
+    carryForwardLimitMs,
+  } = options;
 
   const map = new Map<number, TelemetrySeriesRow>();
   for (const row of rows) {
@@ -273,45 +300,56 @@ function buildSeriesResponse(rows: TelemetrySeriesRow[], options: BuildSeriesOpt
   const startBucket = Math.floor(startMs / bucketMs) * bucketMs;
   const endBucket = Math.floor(endMs / bucketMs) * bucketMs;
 
-  const buckets: TelemetrySeriesRow[] = [];
+  const buckets: Array<{ row: TelemetrySeriesRow; stale: boolean }> = [];
 
   if (fillMode === "carry") {
     let current = startBucket;
     let lastValues: Record<string, number | null> | null = null;
+    let lastRealBucketMs: number | null = null;
 
     while (current <= endBucket) {
       const row = map.get(current);
       if (row) {
-        buckets.push(row);
+        buckets.push({ row, stale: false });
+        lastRealBucketMs = current;
         lastValues = captureLastValues(row);
       } else if (lastValues) {
-        buckets.push({
-          bucket_start_ms: current,
-          sample_count: 0,
-          avg_deltaT: lastValues.deltaT,
-          min_deltaT: lastValues.deltaT,
-          max_deltaT: lastValues.deltaT,
-          avg_thermalKW: lastValues.thermalKW,
-          min_thermalKW: lastValues.thermalKW,
-          max_thermalKW: lastValues.thermalKW,
-          avg_cop: lastValues.cop,
-          min_cop: lastValues.cop,
-          max_cop: lastValues.cop,
-          avg_supplyC: lastValues.supplyC,
-          avg_returnC: lastValues.returnC,
-          avg_flowLps: lastValues.flowLps,
-          avg_powerKW: lastValues.powerKW,
-        });
+        if (lastRealBucketMs === null || current - lastRealBucketMs > carryForwardLimitMs) {
+          lastValues = null;
+          lastRealBucketMs = null;
+        } else {
+          const syntheticRow: TelemetrySeriesRow = {
+            bucket_start_ms: current,
+            sample_count: 0,
+            avg_deltaT: lastValues.deltaT,
+            min_deltaT: lastValues.deltaT,
+            max_deltaT: lastValues.deltaT,
+            avg_thermalKW: lastValues.thermalKW,
+            min_thermalKW: lastValues.thermalKW,
+            max_thermalKW: lastValues.thermalKW,
+            avg_cop: lastValues.cop,
+            min_cop: lastValues.cop,
+            max_cop: lastValues.cop,
+            avg_supplyC: lastValues.supplyC,
+            avg_returnC: lastValues.returnC,
+            avg_flowLps: lastValues.flowLps,
+            avg_powerKW: lastValues.powerKW,
+          };
+          buckets.push({ row: syntheticRow, stale: true });
+        }
       }
       current += bucketMs;
     }
   } else {
-    buckets.push(...rows);
+    for (const row of rows) {
+      buckets.push({ row, stale: false });
+    }
   }
 
-  return buckets.map((row) => ({
+  return buckets.map(({ row, stale }) => ({
     bucket_start: new Date(row.bucket_start_ms).toISOString(),
     sample_count: row.sample_count,
+    stale,
     values: buildMetricValues(row, metrics, isAdmin, tenantPrecision),
   }));
 }

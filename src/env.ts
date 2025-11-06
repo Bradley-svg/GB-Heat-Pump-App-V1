@@ -33,6 +33,7 @@ export interface Env {
   LOG_REDACT_USER_AGENT?: string;
   LOG_REDACT_CF_RAY?: string;
   OBSERVABILITY_MAX_BYTES?: string;
+  TELEMETRY_CARRY_MAX_MINUTES?: string;
 }
 
 export type User = {
@@ -294,6 +295,21 @@ const EnvSchema = z
           path: ["OBSERVABILITY_MAX_BYTES"],
           code: z.ZodIssueCode.custom,
           message: "OBSERVABILITY_MAX_BYTES must be a positive integer",
+        });
+      }
+    }
+
+    const carryForwardRaw =
+      typeof value.TELEMETRY_CARRY_MAX_MINUTES === "string"
+        ? value.TELEMETRY_CARRY_MAX_MINUTES.trim()
+        : "";
+    if (carryForwardRaw) {
+      const parsed = Number.parseInt(carryForwardRaw, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        ctx.addIssue({
+          path: ["TELEMETRY_CARRY_MAX_MINUTES"],
+          code: z.ZodIssueCode.custom,
+          message: "TELEMETRY_CARRY_MAX_MINUTES must be a positive integer",
         });
       }
     }

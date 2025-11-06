@@ -330,7 +330,10 @@ export default function DeviceDetailPage() {
                       {displayHistory.map((row) => (
                         <tr key={row.bucket_start}>
                           <td>{formatDate(row.bucket_start)}</td>
-                          <td>{row.sample_count}</td>
+                          <td>
+                            {row.sample_count}
+                            {row.stale ? " (stale)" : ""}
+                          </td>
                           <td>{formatNumber(metricAvg(row, "supplyC"), 1)}</td>
                           <td>{formatNumber(metricAvg(row, "returnC"), 1)}</td>
                           <td>{formatNumber(metricAvg(row, "thermalKW"), 2)}</td>
@@ -362,6 +365,7 @@ function getMetricText(value: unknown): string {
 }
 
 function metricAvg(entry: TelemetrySeriesEntry, metric: TelemetryMetric): number | null {
+  if (entry.stale) return null;
   const value = entry.values?.[metric];
   const avg = value?.avg;
   return typeof avg === "number" && Number.isFinite(avg) ? avg : null;

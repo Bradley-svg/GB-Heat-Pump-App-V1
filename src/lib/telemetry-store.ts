@@ -111,7 +111,9 @@ export async function fetchLatestTelemetryBatch(
       WHERE ${where}
     `;
 
-    const result = await env.DB.prepare(query).bind(...bind).all<TelemetryLatestRow>();
+    const result = await env.DB.prepare(query)
+      .bind(...bind)
+      .all<TelemetryLatestRow>();
     rows.push(...(result.results ?? []));
   }
 
@@ -123,8 +125,15 @@ export async function fetchTelemetrySeries(
   config: TelemetrySeriesQueryConfig,
 ): Promise<TelemetrySeriesRow[]> {
   const query = buildSeriesSql(config.whereClause);
-  const bindings = [config.bucketMs, config.startMs, config.endMs, ...config.bindings];
-  const rows = await env.DB.prepare(query).bind(...bindings).all<TelemetrySeriesRow>();
+  const bindings = [
+    config.bucketMs,
+    config.startMs,
+    config.endMs,
+    ...config.bindings,
+  ];
+  const rows = await env.DB.prepare(query)
+    .bind(...bindings)
+    .all<TelemetrySeriesRow>();
   return rows.results ?? [];
 }
 
@@ -157,16 +166,23 @@ function buildSeriesSql(whereClause: string): string {
         AVG(deltaT) AS avg_deltaT,
         MIN(deltaT) AS min_deltaT,
         MAX(deltaT) AS max_deltaT,
+        SUM(CASE WHEN deltaT IS NOT NULL THEN 1 ELSE 0 END) AS deltaT_count,
         AVG(thermalKW) AS avg_thermalKW,
         MIN(thermalKW) AS min_thermalKW,
         MAX(thermalKW) AS max_thermalKW,
+        SUM(CASE WHEN thermalKW IS NOT NULL THEN 1 ELSE 0 END) AS thermalKW_count,
         AVG(cop) AS avg_cop,
         MIN(cop) AS min_cop,
         MAX(cop) AS max_cop,
+        SUM(CASE WHEN cop IS NOT NULL THEN 1 ELSE 0 END) AS cop_count,
         AVG(supplyC) AS avg_supplyC,
         AVG(returnC) AS avg_returnC,
         AVG(flowLps) AS avg_flowLps,
-        AVG(powerKW) AS avg_powerKW
+        AVG(powerKW) AS avg_powerKW,
+        SUM(CASE WHEN supplyC IS NOT NULL THEN 1 ELSE 0 END) AS supplyC_count,
+        SUM(CASE WHEN returnC IS NOT NULL THEN 1 ELSE 0 END) AS returnC_count,
+        SUM(CASE WHEN flowLps IS NOT NULL THEN 1 ELSE 0 END) AS flowLps_count,
+        SUM(CASE WHEN powerKW IS NOT NULL THEN 1 ELSE 0 END) AS powerKW_count
       FROM scoped
       GROUP BY bucket_start_ms, device_id
     ),
@@ -174,19 +190,19 @@ function buildSeriesSql(whereClause: string): string {
       SELECT
         bucket_start_ms,
         SUM(sample_count) AS sample_count,
-        SUM(avg_deltaT * sample_count) / NULLIF(SUM(CASE WHEN avg_deltaT IS NOT NULL THEN sample_count ELSE 0 END), 0) AS avg_deltaT,
+        SUM(avg_deltaT * deltaT_count) / NULLIF(SUM(deltaT_count), 0) AS avg_deltaT,
         MIN(min_deltaT) AS min_deltaT,
         MAX(max_deltaT) AS max_deltaT,
-        SUM(avg_thermalKW * sample_count) / NULLIF(SUM(CASE WHEN avg_thermalKW IS NOT NULL THEN sample_count ELSE 0 END), 0) AS avg_thermalKW,
+        SUM(avg_thermalKW * thermalKW_count) / NULLIF(SUM(thermalKW_count), 0) AS avg_thermalKW,
         MIN(min_thermalKW) AS min_thermalKW,
         MAX(max_thermalKW) AS max_thermalKW,
-        SUM(avg_cop * sample_count) / NULLIF(SUM(CASE WHEN avg_cop IS NOT NULL THEN sample_count ELSE 0 END), 0) AS avg_cop,
+        SUM(avg_cop * cop_count) / NULLIF(SUM(cop_count), 0) AS avg_cop,
         MIN(min_cop) AS min_cop,
         MAX(max_cop) AS max_cop,
-        SUM(avg_supplyC * sample_count) / NULLIF(SUM(CASE WHEN avg_supplyC IS NOT NULL THEN sample_count ELSE 0 END), 0) AS avg_supplyC,
-        SUM(avg_returnC * sample_count) / NULLIF(SUM(CASE WHEN avg_returnC IS NOT NULL THEN sample_count ELSE 0 END), 0) AS avg_returnC,
-        SUM(avg_flowLps * sample_count) / NULLIF(SUM(CASE WHEN avg_flowLps IS NOT NULL THEN sample_count ELSE 0 END), 0) AS avg_flowLps,
-        SUM(avg_powerKW * sample_count) / NULLIF(SUM(CASE WHEN avg_powerKW IS NOT NULL THEN sample_count ELSE 0 END), 0) AS avg_powerKW
+        SUM(avg_supplyC * supplyC_count) / NULLIF(SUM(supplyC_count), 0) AS avg_supplyC,
+        SUM(avg_returnC * returnC_count) / NULLIF(SUM(returnC_count), 0) AS avg_returnC,
+        SUM(avg_flowLps * flowLps_count) / NULLIF(SUM(flowLps_count), 0) AS avg_flowLps,
+        SUM(avg_powerKW * powerKW_count) / NULLIF(SUM(powerKW_count), 0) AS avg_powerKW
       FROM per_device
       GROUP BY bucket_start_ms
     )

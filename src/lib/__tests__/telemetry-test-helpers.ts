@@ -54,13 +54,13 @@ export async function insertTelemetrySamples(
   deviceId: string,
   samples: Array<{
     ts: number;
-    deltaT: number;
-    thermalKW: number;
-    cop: number;
-    supplyC: number;
-    returnC: number;
-    flowLps: number;
-    powerKW: number;
+    deltaT?: number | null;
+    thermalKW?: number | null;
+    cop?: number | null;
+    supplyC?: number | null;
+    returnC?: number | null;
+    flowLps?: number | null;
+    powerKW?: number | null;
   }>,
 ) {
   for (const sample of samples) {
@@ -72,14 +72,14 @@ export async function insertTelemetrySamples(
         deviceId,
         sample.ts,
         JSON.stringify({
-          supplyC: sample.supplyC,
-          returnC: sample.returnC,
-          flowLps: sample.flowLps,
-          powerKW: sample.powerKW,
+          supplyC: sample.supplyC ?? null,
+          returnC: sample.returnC ?? null,
+          flowLps: sample.flowLps ?? null,
+          powerKW: sample.powerKW ?? null,
         }),
-        sample.deltaT,
-        sample.thermalKW,
-        sample.cop,
+        sample.deltaT ?? null,
+        sample.thermalKW ?? null,
+        sample.cop ?? null,
         JSON.stringify({ mode: "heating" }),
       )
       .run();

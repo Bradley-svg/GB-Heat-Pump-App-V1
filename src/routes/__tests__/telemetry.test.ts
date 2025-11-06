@@ -7,7 +7,11 @@ import { D1Database, D1DatabaseAPI } from "@miniflare/d1";
 
 import type { Env, User } from "../../env";
 import * as accessModule from "../../lib/access";
-import { handleTelemetryLatestBatch, handleTelemetrySeries } from "../telemetry";
+import {
+  handleTelemetryLatestBatch,
+  handleTelemetrySeries,
+  resolveCarryForwardLimitMs,
+} from "../telemetry";
 import { sealCursorId } from "../../lib/cursor";
 
 const requireAccessUserMock = vi.spyOn(accessModule, "requireAccessUser");
@@ -166,6 +170,7 @@ describe("telemetry routes", () => {
       expect(payload.scope).toMatchObject({ type: "device", device_id: "dev-1001" });
       expect(Array.isArray(payload.series)).toBe(true);
       expect(payload.series[0].sample_count).toBe(2);
+      expect(payload.series[0].stale).toBe(false);
       expect(payload.series[0].values.thermalKW.avg).toBeCloseTo(4.5, 5);
       expect(payload.series[0].values.deltaT.min).toBeCloseTo(5, 5);
       expect(payload.series[0].values.deltaT.max).toBeCloseTo(6, 5);
@@ -184,6 +189,51 @@ describe("telemetry routes", () => {
       );
       const response = await handleTelemetrySeries(request, env);
       expect(response.status).toBe(403);
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("flags carried buckets as stale and stops once the carry horizon is exceeded", async () => {
+    const { env, sqlite } = createTestEnv();
+    requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
+
+    try {
+      const base = Date.UTC(2025, 0, 1, 12, 0, 0);
+      const carryLimit = resolveCarryForwardLimitMs(env);
+      await insertTelemetrySamples(env, "dev-1001", [
+        {
+          ts: base,
+          deltaT: 7,
+          thermalKW: 5,
+          cop: 3.2,
+          supplyC: 48,
+          returnC: 40,
+          flowLps: 0.3,
+          powerKW: 1.4,
+        },
+      ]);
+
+      const start = new Date(base).toISOString();
+      const end = new Date(base + carryLimit + 3 * 60_000).toISOString();
+      const request = new Request(
+        `https://example.com/api/telemetry/series?scope=device&device=dev-1001&interval=1m&fill=carry&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+      );
+
+      const response = await handleTelemetrySeries(request, env);
+      expect(response.status).toBe(200);
+      const payload = (await response.json()) as any;
+
+      expect(payload.series.length).toBe(Math.floor(carryLimit / 60_000) + 1);
+      const firstBucket = payload.series[0];
+      expect(firstBucket.stale).toBe(false);
+      const lastBucket = payload.series[payload.series.length - 1];
+      expect(lastBucket.stale).toBe(true);
+      expect(new Date(lastBucket.bucket_start).getTime()).toBe(base + carryLimit);
+      const beyond = payload.series.find(
+        (entry: any) => new Date(entry.bucket_start).getTime() > base + carryLimit,
+      );
+      expect(beyond).toBeUndefined();
     } finally {
       sqlite.close();
     }

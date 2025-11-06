@@ -122,23 +122,23 @@ describe("telemetry-store", () => {
       },
       {
         ts: base + 20_000,
-        deltaT: 10,
-        thermalKW: 6,
-        cop: 3.6,
-        supplyC: 47,
-        returnC: 40,
-        flowLps: 0.3,
-        powerKW: 1.4,
+        deltaT: null,
+        thermalKW: null,
+        cop: null,
+        supplyC: null,
+        returnC: null,
+        flowLps: null,
+        powerKW: null,
       },
       {
         ts: base + 30_000,
-        deltaT: 12,
-        thermalKW: 7,
-        cop: 3.8,
-        supplyC: 48,
-        returnC: 41,
-        flowLps: 0.32,
-        powerKW: 1.5,
+        deltaT: null,
+        thermalKW: null,
+        cop: null,
+        supplyC: null,
+        returnC: null,
+        flowLps: null,
+        powerKW: null,
       },
     ]);
 
@@ -155,9 +155,11 @@ describe("telemetry-store", () => {
     expect(rows).toHaveLength(1);
     const [row] = rows;
     expect(row.sample_count).toBe(4);
-    expect(row.avg_deltaT).toBeCloseTo(8, 5);
-    expect(row.avg_thermalKW).toBeCloseTo((2 + 5 + 6 + 7) / 4, 5);
-    expect(row.avg_supplyC).toBeCloseTo((40 + 46 + 47 + 48) / 4, 5);
-    expect(row.avg_returnC).toBeCloseTo((38 + 39 + 40 + 41) / 4, 5);
+    expect(row.avg_deltaT).toBeCloseTo(5, 5);
+    expect(row.avg_thermalKW).toBeCloseTo((2 + 5) / 2, 5);
+    expect(row.avg_supplyC).toBeCloseTo((40 + 46) / 2, 5);
+    expect(row.avg_returnC).toBeCloseTo((38 + 39) / 2, 5);
+    expect(row.avg_flowLps).toBeCloseTo((0.25 + 0.28) / 2, 5);
+    expect(row.avg_powerKW).toBeCloseTo((1.2 + 1.3) / 2, 5);
   });
 });

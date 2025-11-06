@@ -89,6 +89,17 @@ describe("DeviceDetailPage telemetry integration", () => {
           cop: { avg: 3.1 },
         },
       },
+      {
+        bucket_start: "2025-01-02T08:50:00.000Z",
+        sample_count: 0,
+        stale: true,
+        values: {
+          supplyC: { avg: 45.4 },
+          returnC: { avg: 39.6 },
+          thermalKW: { avg: 4.5 },
+          cop: { avg: 3.15 },
+        },
+      },
     ],
   };
 
@@ -139,9 +150,10 @@ describe("DeviceDetailPage telemetry integration", () => {
 
     const table = screen.getByRole("table");
     const rows = within(table).getAllByRole("row");
-    expect(rows).toHaveLength(3); // header + 2 data rows
-    expect(within(rows[1]).getByText("3")).toBeInTheDocument();
-    expect(within(rows[1]).getByText("4.4")).toBeInTheDocument();
+    expect(rows).toHaveLength(4); // header + 3 data rows (latest may be stale)
+    expect(within(rows[1]).getByText(/0 \(stale\)/i)).toBeInTheDocument();
+    expect(within(rows[2]).getByText("3")).toBeInTheDocument();
+    expect(within(rows[2]).getByText("4.4")).toBeInTheDocument();
   });
 
   it("shows an error state when telemetry requests fail", async () => {

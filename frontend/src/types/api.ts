@@ -132,6 +132,7 @@ export interface TelemetrySeriesMetricValue {
 export interface TelemetrySeriesEntry {
   bucket_start: string;
   sample_count: number;
+  stale?: boolean;
   values: Record<string, TelemetrySeriesMetricValue>;
 }
 
