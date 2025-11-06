@@ -71,8 +71,8 @@ preview_bucket_name = "greenbro-telemetry-archive-dev"
 # Replace the placeholder IDs with the production/preview KV namespace IDs returned by
 # `wrangler kv namespace create greenbro-ingest-ip`.
 binding = "INGEST_IP_BUCKETS"
-id = "<replace-with-production-ingest-ip-kv-id>"
-preview_id = "<replace-with-preview-ingest-ip-kv-id>"
+id = "a5ea436cc7854b0a8ce5bab3e3551455"
+preview_id = "<preview-namespace-id>"
 
 [env.local]
   [env.local.vars]
