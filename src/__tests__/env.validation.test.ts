@@ -2,6 +2,7 @@ import type { D1PreparedStatement } from "@cloudflare/workers-types";
 import { describe, expect, it } from "vitest";
 
 import { validateEnv, EnvValidationError, type Env } from "../env";
+import { createTestKvNamespace } from "../../tests/helpers/kv";
 
 function createEnv(overrides: Partial<Env> = {}): Env {
   const preparedStatement = {
@@ -25,6 +26,7 @@ function createEnv(overrides: Partial<Env> = {}): Env {
     INGEST_RATE_LIMIT_PER_MIN: "120",
     INGEST_SIGNATURE_TOLERANCE_SECS: "300",
     ENVIRONMENT: "test",
+    INGEST_IP_BUCKETS: createTestKvNamespace(),
   } satisfies Partial<Env>;
   return { ...base, ...overrides } as Env;
 }

@@ -12,7 +12,7 @@
 - **Ingest/Heartbeat:** Background traffic simulating 5k devices @ 30s heartbeat to observe D1 contention while API tests run.
 
 ## Tooling
-- [k6](https://k6.io/) scripts in `ops/perf/` (to be added) for HTTP load with Cloudflare Access JWT injection.
+- [k6](https://k6.io/) scripts in `ops/perf/` (see `ops/perf/smoke.js`) for HTTP load with Cloudflare Access JWT injection.
 - SQLite-backed replay harness (existing Vitest integration tests) for deterministic diff checks.
 - Datadog dashboards for live latency/error monitoring; Cloudflare Analytics for request outcome validation.
 

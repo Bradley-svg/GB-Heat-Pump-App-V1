@@ -38,6 +38,7 @@
 - **Observability**: `loggerForRequest` attaches route metadata; shadow mismatches log with structured diffs. Ops metrics capture latency and status for dashboards.
 - **Limits**: `resolveCarryForwardLimitMs` caps carry-forward to `TELEMETRY_CARRY_MAX_MINUTES` (default 30). Need guard rails for maximum device tokens (e.g., 200) and time range (e.g., 168h).
 - **Resilience**: Compare mode uses `ctx.waitUntil` to avoid blocking responses; legacy fallback ensures service continuity if refactor path throws.
+- **Rollout guardrails**: Production stays in `TELEMETRY_REFACTOR_MODE=compare` until the parity review recorded in `docs/deployment-runbook.md` signs off.
 - **SLOs**: Target <250 ms P95 for latest batch (50 devices) and <500 ms for 24h series (10 metrics). Track via Ops metrics and Datadog dashboards.
 - **Error Handling**: Validation errors return 400 with structured details; unauthorized requests short-circuit at guard; D1 failures propagate 500 with redacted context.
 
@@ -55,3 +56,4 @@ Assumptions • D1 remains single region with sufficient capacity • SPA can ha
 Open Questions • Do we need percentile aggregates beyond avg/min/max? • Should carry-forward vary per metric? • Is there appetite for edge caching latest batches?  
 Risks • Compare-mode log volume during rollout • D1 hot partitions on large fleets • Masking regressions leaking sensitive telemetry  
 Next 3 Actions • Define max request envelope (devices, hours, metrics) and enforce in schemas • Benchmark D1 queries with synthetic fleet sizes • Instrument Datadog dashboards for new metrics before rollout
+

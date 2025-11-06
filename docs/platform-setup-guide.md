@@ -62,6 +62,15 @@ wrangler secret put ASSET_SIGNING_SECRET             # optional unless issuing s
 
 To push them all in one go, export the values in your shell and run `node scripts/bind-cloudflare-secrets.mjs --env <name>`; the helper pipes each value into `wrangler secret put` and validates numeric fields before handing them to Wrangler.
 
+> **New (Prompt Bible #15 – Scalability Plan):** provision a KV namespace for the global ingest IP throttle. Create production and preview namespaces, then map them to `INGEST_IP_BUCKETS` in `wrangler.toml`:
+>
+> ```bash
+> wrangler kv:namespace create greenbro-ingest-ip
+> wrangler kv:namespace create greenbro-ingest-ip --preview
+> ```
+>
+> Without the binding the Worker falls back to per-isolate memory buckets and the mitigation loses cross-colo coverage.
+
 After provisioning, run a `wrangler deploy --dry-run` to confirm every binding exists without publishing a new version:
 
 ```bash

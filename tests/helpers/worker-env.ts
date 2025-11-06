@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { D1Database as MiniflareD1Database, D1DatabaseAPI } from "@miniflare/d1";
 
 import type { Env } from "../../src/env";
+import { createTestKvNamespace } from "./kv";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -66,6 +67,7 @@ export async function createWorkerEnv(overrides: Partial<Env> = {}): Promise<Wor
     INGEST_IP_LIMIT_PER_MIN: "0",
     INGEST_IP_BLOCK_SECONDS: "60",
     ENVIRONMENT: "test",
+    INGEST_IP_BUCKETS: createTestKvNamespace(),
   };
 
   const env: Env = { ...baseEnv, ...overrides, DB };

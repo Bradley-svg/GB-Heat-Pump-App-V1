@@ -12,8 +12,10 @@
 **Interactions**
 - withAccess guard → Telemetry Latest Batch / Series Handlers → Telemetry Access Resolver → Telemetry Store → Response Presenter → Observability logging/metrics.
 - Telemetry Feature Modes orchestrate legacy comparison in parallel, feeding results back into logging for mismatch triage.
+- Production deployments keep `TELEMETRY_REFACTOR_MODE=compare` until the parity review in `docs/deployment-runbook.md` signs off, so the refactor continues shadowing legacy payloads.
 
 Assumptions • Current D1 schema remains authoritative for telemetry data • SPA consumes JSON contracts documented in `docs/telemetry-api-design.md` • Cloudflare Worker execution time stays within current limits  
 Open Questions • Should we introduce KV caching for device token lookups? • What threshold triggers turning off compare mode logs? • Do contractors need trimmed metric sets beyond current masking?  
 Risks • Shadow comparisons could flood logs if schema diverges • Long series windows may exhaust D1 read limits • Missing caching might cause latency spikes under fleet growth  
 Next 3 Actions • Finalize carry-forward heuristics per profile cadence • Prototype KV/Durable Object cache for token→device lookups • Schedule load test of series endpoint at projected fleet size
+

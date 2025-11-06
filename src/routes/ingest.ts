@@ -238,7 +238,7 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
     return json({ error: "Origin not allowed" }, { status: 403 });
   }
 
-  const ipDecision = checkIpRateLimit(req, env, INGEST_ROUTE);
+  const ipDecision = await checkIpRateLimit(req, env, INGEST_ROUTE);
   if (ipDecision?.limited) {
     await logAndRecordEarlyExit(req, env, INGEST_ROUTE, 429, t0, log, "ingest.ip_rate_limited", {
       fields: {
@@ -573,7 +573,7 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
     return json({ error: "Origin not allowed" }, { status: 403 });
   }
 
-  const ipDecision = checkIpRateLimit(req, env, HEARTBEAT_ROUTE);
+  const ipDecision = await checkIpRateLimit(req, env, HEARTBEAT_ROUTE);
   if (ipDecision?.limited) {
     await logAndRecordEarlyExit(req, env, HEARTBEAT_ROUTE, 429, t0, log, "heartbeat.ip_rate_limited", {
       fields: {

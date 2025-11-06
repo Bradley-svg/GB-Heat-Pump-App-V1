@@ -24,6 +24,7 @@ The platform now deploys a single Worker (`gb-heat-pump-app-v1`). Key bindings a
 - Replace any placeholder secrets (e.g. `CURSOR_SECRET`, `ACCESS_AUD`, `ASSET_SIGNING_SECRET`, `INGEST_ALLOWED_ORIGINS`, `INGEST_RATE_LIMIT_PER_MIN`, `INGEST_SIGNATURE_TOLERANCE_SECS`, `INGEST_IP_LIMIT_PER_MIN`, `INGEST_IP_BLOCK_SECONDS`) with strong values stored in the password manager before the first production deploy.
 - Verify Cloudflare credentials (`npx wrangler whoami`) and select the right account.
 - Verify retention archive readiness: confirm R2 buckets (`npx wrangler r2 bucket list | rg telemetry-archive`), check the `RETENTION_ARCHIVE` binding in `wrangler.toml`, and run `npx vitest run src/jobs/__tests__/retention.test.ts --reporter verbose` to ensure backups log before deletions.
+- Confirm telemetry rollout mode: production deployments must keep `TELEMETRY_REFACTOR_MODE=compare` until the parity review sign-off is captured (see _Telemetry parity review_).
 - Bootstrap SPA assets: `npm run ops:r2:bootstrap -- --env production` (or run `npm run frontend:build && npm run publish:r2 -- --env production`). The helper writes `dist/app-static-manifest.json`; attach it to the release ticket.
 - Confirm the SPA bucket is populated: `npx wrangler r2 object list APP_STATIC/app --limit 5 --env production`. Investigate if the list is empty before shipping.
 
@@ -103,6 +104,7 @@ Cron schedules in `wrangler.toml` (under `[triggers]`) deploy automatically with
 - **Smoke tests**: `npm run test:smoke`.
 - **Security scans**: `npm run test:security`.
 - **API spot checks**: Use the HTTP client recipes in `docs/telemetry-api-design.md`.
+- **Telemetry parity review**: Export `telemetry.refactor.shadow_mismatch` counters from Datadog within one business day, document the comparison in the release ticket, and only flip `TELEMETRY_REFACTOR_MODE` to `refactor` once the review is signed off.
 - **Metrics**: Validate Grafana/Analytics dashboards show traffic for the new version ID.
 - **Alerting**: Leave the deploy channel quiet for at least twice the cron interval (10 minutes for the 5-minute offline cron) to ensure no alarms fire.
 

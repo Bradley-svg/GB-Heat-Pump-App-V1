@@ -1,5 +1,15 @@
 import { z } from "zod";
 
+interface KvNamespace {
+  get(key: string, options?: { type: "text" | "json" | "arrayBuffer" }): Promise<any>;
+  put(
+    key: string,
+    value: string,
+    options?: { expiration?: number; expirationTtl?: number; metadata?: unknown },
+  ): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+
 export interface Env {
   DB: D1Database;
   ACCESS_JWKS_URL: string;
@@ -26,6 +36,7 @@ export interface Env {
   INGEST_FAILURE_LIMIT_PER_MIN?: string;
   INGEST_IP_LIMIT_PER_MIN?: string;
   INGEST_IP_BLOCK_SECONDS?: string;
+  INGEST_IP_BUCKETS?: KvNamespace;
   TELEMETRY_RETENTION_DAYS?: string;
   TELEMETRY_REFACTOR_MODE?: string;
   RETENTION_BACKUP_PREFIX?: string;
@@ -261,6 +272,11 @@ const EnvSchema = z
             message: "INGEST_IP_BLOCK_SECONDS must be a positive integer when set",
           });
         }
+      }
+      if (parsed > 0 && !value.INGEST_IP_BUCKETS && !isLocalEnv) {
+        console.warn(
+          "INGEST_IP_LIMIT_PER_MIN is enabled without an INGEST_IP_BUCKETS binding; falling back to in-memory token buckets per isolate.",
+        );
       }
     } else if (ingestIpBlockRaw) {
       const block = Number.parseInt(ingestIpBlockRaw, 10);

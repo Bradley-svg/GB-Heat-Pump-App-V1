@@ -66,12 +66,13 @@ Checks covered authentication, access control, input validation, logging, and CO
 
 - [x] Add the centralised `withAccess` wrapper and migrate existing `/api/*` registrations.
 - [x] Introduce an explicit deployment-mode flag that controls the dev access shim.
-- [ ] Design and implement an IP-level throttle in front of ingest/heartbeat routes.
+- [x] Implement an IP-level throttle in front of ingest/heartbeat routes (KV-backed `INGEST_IP_BUCKETS` namespace).
 - [ ] Document the new guardrails in contributor guidelines to prevent regressions.
 - [ ] Monitor Miniflare release notes so the `undici` override can be removed once patched upstream.
 
 ---
-**Assumptions** • Cloudflare Access is the primary auth mechanism • `APP_BASE_URL` can point to non-local hosts in staging • D1 is the only persistence layer for ingest metrics  \
-**Open Questions** • Should contractors have narrower scopes for ingest telemetry? • Are there existing KV namespaces available for token buckets?  \
-**Risks** • Missing wrapper adoption by future routes • Ops overhead of maintaining additional rate-limit storage • Potential shim enablement in staging during incidents  \
-**Next 3 Actions** • Prototype `withAccess` helper • Draft deployment-mode guard for `resolveDevUser` • Evaluate KV/Durable Object options for ingest throttling
+**Assumptions** - Cloudflare Access is the primary auth mechanism - `APP_BASE_URL` may point to non-local hosts in staging - D1 remains the persistence layer for ingest metrics
+**Open Questions** - Should contractors have narrower scopes for ingest telemetry? - Are additional KV namespaces required for region-specific limits?
+**Risks** - Missing wrapper adoption by future routes - Ops overhead of maintaining additional rate-limit storage - Potential shim enablement in staging during incidents
+**Next 3 Actions** - Document the `INGEST_IP_BUCKETS` provisioning steps in contributor onboarding - Add alerting on `ingest.ip_kv_bucket_failed` warnings so fallbacks surface quickly - Re-evaluate Durable Object vs. KV once ingest volume growth data is available
+

@@ -5,6 +5,7 @@ import { handleIngest } from "../ingest";
 import * as deviceModule from "../../lib/device";
 import { __resetIpRateLimiterForTests } from "../../lib/ip-rate-limit";
 import { hmacSha256Hex } from "../../utils";
+import { createTestKvNamespace } from "../../../tests/helpers/kv";
 
 const DEVICE_KEY_HASH = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const DEVICE_KEY_HEADER = "X-GREENBRO-DEVICE-KEY";
@@ -49,6 +50,7 @@ function baseEnv(overrides: Partial<Env> = {}): Env {
     INGEST_SIGNATURE_TOLERANCE_SECS: "300",
     INGEST_IP_LIMIT_PER_MIN: "0",
     INGEST_IP_BLOCK_SECONDS: "60",
+    INGEST_IP_BUCKETS: createTestKvNamespace(),
     ...overrides,
   };
 }

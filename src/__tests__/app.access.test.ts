@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import app from "../app";
 import type { Env } from "../env";
+import { createTestKvNamespace } from "../../tests/helpers/kv";
 
 function createEnv(overrides: Partial<Env> = {}): Env {
   const statement = {
@@ -23,6 +24,7 @@ function createEnv(overrides: Partial<Env> = {}): Env {
     INGEST_IP_LIMIT_PER_MIN: "0",
     INGEST_IP_BLOCK_SECONDS: "60",
     ENVIRONMENT: "test",
+    INGEST_IP_BUCKETS: createTestKvNamespace(),
     ...overrides,
   } as Env;
 }

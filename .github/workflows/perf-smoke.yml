@@ -1,0 +1,58 @@
+name: Perf Smoke
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      vus:
+        description: "Number of virtual users"
+        required: false
+        default: "1"
+      duration:
+        description: "Test duration (e.g. 45s, 2m)"
+        required: false
+        default: "45s"
+
+env:
+  PERF_BASE_URL: ${{ secrets.PERF_BASE_URL != '' && secrets.PERF_BASE_URL || vars.PERF_BASE_URL }}
+  PERF_ACCESS_JWT: ${{ secrets.PERF_ACCESS_JWT }}
+
+jobs:
+  smoke:
+    name: k6 Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine execution guard
+        id: guard
+        run: |
+          if [ -z "${PERF_BASE_URL}" ]; then
+            echo "K6 base URL not configured; skipping smoke test."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run k6 smoke
+        if: steps.guard.outputs.skip != 'true'
+        uses: grafana/k6-action@v0.2.0
+        with:
+          filename: ops/perf/smoke.js
+          summary-export: k6-smoke-summary.json
+        env:
+          K6_BASE_URL: ${{ env.PERF_BASE_URL }}
+          K6_ACCESS_JWT: ${{ env.PERF_ACCESS_JWT }}
+          K6_VUS: ${{ github.event.inputs.vus || '1' }}
+          K6_DURATION: ${{ github.event.inputs.duration || '45s' }}
+
+      - name: Upload k6 summary
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-smoke-summary
+          path: k6-smoke-summary.json
+          if-no-files-found: warn
