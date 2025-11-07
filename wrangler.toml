@@ -124,12 +124,12 @@ database_id = "ee7ad98b-3629-4985-bd7d-a60c401953a7"
 
 [[env.production.kv_namespaces]]
 binding = "INGEST_IP_BUCKETS"
-id = "a5ea436cc7854b0a8ce5bab3e3551455"
+id = "fe26ff4c2f884bfdb43a27814b139046"
 preview_id = "623e877af5934787b541a5711fe2151c"
 
 [[env.production.kv_namespaces]]
 binding = "AUTH_IP_BUCKETS"
-id = "9d1a0f8cbe2545afa46a9d12dfe7c4b3"
+id = "1fe35e38017042a0bdbb551e68b5823e"
 preview_id = "6c84b7f2da474d1f9efc3a8c2a1be4d5"
 
 [[env.production.r2_buckets]]
