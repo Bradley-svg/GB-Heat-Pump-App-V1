@@ -3,7 +3,7 @@ module.exports = {
   setupFilesAfterEnv: ["<rootDir>/tests/setup.ts"],
   collectCoverageFrom: ["src/components/**/*.tsx", "src/theme/**/*.tsx"],
   coverageThreshold: {
-    global: { statements: 60, branches: 45, functions: 60, lines: 60 },
+    global: { statements: 80, branches: 55, functions: 85, lines: 85 },
   },
   transformIgnorePatterns: [],
 };

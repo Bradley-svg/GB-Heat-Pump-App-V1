@@ -12,14 +12,14 @@ module.exports = {
     "@typescript-eslint/explicit-module-boundary-types": "off",
     "prettier/prettier": "error",
     "import/order": [
-      "warn",
+      "error",
       {
         groups: [["builtin", "external"], ["internal"], ["parent", "sibling", "index"]],
         "newlines-between": "always",
         alphabetize: { order: "asc", caseInsensitive: true }
       }
     ],
-    "react-native/no-inline-styles": "warn",
+    "react-native/no-inline-styles": "error",
     "no-void": ["error", { allowAsStatement: true }]
   },
 };

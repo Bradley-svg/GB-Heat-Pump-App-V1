@@ -77,3 +77,16 @@ jest.mock("react-native/Libraries/Animated/Animated", () => {
   };
   return { __esModule: true, default: AnimatedMock, ...AnimatedMock };
 });
+
+jest.mock("react-native/Libraries/Animated/nodes/AnimatedObject", () => ({}));
+
+jest.mock("react-native/Libraries/Modal/Modal", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+  return ({ children, visible }: { children: React.ReactNode; visible: boolean }) =>
+    (visible ? React.createElement(View, null, children) : null);
+});
+
+jest.mock("react-native/Libraries/Animated/createAnimatedComponent", () => {
+  return (Component: React.ComponentType) => Component;
+});

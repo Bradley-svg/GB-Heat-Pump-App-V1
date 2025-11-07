@@ -13,6 +13,9 @@
       "bundleIdentifier": "com.greenbro.mobile"
     },
     "android": { "package": "com.greenbro.mobile" },
-    "web": { "bundler": "metro" }
+    "web": { "bundler": "metro" },
+    "extra": {
+      "apiBase": "https://app.greenbro.com"
+    }
   }
 }

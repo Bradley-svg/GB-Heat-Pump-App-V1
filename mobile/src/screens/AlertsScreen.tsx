@@ -76,6 +76,7 @@ export const AlertsScreen: React.FC<AlertsScreenProps> = ({ onShowToast }) => {
             return (
               <Pressable
                 key={option}
+                testID={`severity-${option.toLowerCase()}`}
                 onPress={() => setSeverity(option)}
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
