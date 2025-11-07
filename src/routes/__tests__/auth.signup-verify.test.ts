@@ -237,6 +237,55 @@ describe("signup + email verification", () => {
     }
   });
 
+  it("enforces cooldown even when older verification rows exist", async () => {
+    const { env, dispose } = await createWorkerEnv({
+      EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS: "900",
+    });
+    try {
+      const payload = {
+        email: "duplicate-verifications@example.com",
+        password: "Duplicate123!",
+        firstName: "Duplicate",
+        lastName: "Tester",
+      };
+      const signupReq = new Request("https://app.test/api/auth/signup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      await handleSignup(signupReq, env);
+
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      await env.DB
+        .prepare(
+          `UPDATE email_verifications
+              SET created_at = ?1
+            WHERE user_id = (SELECT id FROM users WHERE email = ?2)`,
+        )
+        .bind(twoHoursAgo, payload.email.toLowerCase())
+        .run();
+
+      mockedSendVerification.mockClear();
+      const resendReq = new Request("https://app.test/api/auth/verify/resend", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: payload.email }),
+      });
+
+      const first = await handleResendVerification(resendReq, env);
+      expect(first.status).toBe(202);
+      expect(mockedSendVerification).toHaveBeenCalledTimes(1);
+
+      const second = await handleResendVerification(resendReq, env);
+      expect(second.status).toBe(429);
+      expect(await second.json()).toEqual({
+        error: expect.stringMatching(/wait/i),
+      });
+    } finally {
+      dispose();
+    }
+  });
+
   it("throttles resend attempts within the cooldown window", async () => {
     const { env, dispose } = await createWorkerEnv({
       EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS: "600",

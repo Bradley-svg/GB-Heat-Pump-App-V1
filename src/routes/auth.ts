@@ -453,7 +453,13 @@ export async function handleResendVerification(req: Request, env: Env) {
 
   const cooldownSeconds = resolveVerificationResendCooldown(env);
   const existingVerification = await env.DB
-    .prepare(`SELECT created_at FROM email_verifications WHERE user_id = ?1`)
+    .prepare(
+      `SELECT created_at
+         FROM email_verifications
+        WHERE user_id = ?1
+        ORDER BY datetime(created_at) DESC
+        LIMIT 1`,
+    )
     .bind(userRow.id)
     .first<{ created_at: string }>();
   if (existingVerification?.created_at) {
