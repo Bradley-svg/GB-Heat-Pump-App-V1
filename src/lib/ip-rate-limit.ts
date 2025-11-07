@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import type { KvNamespace } from "../env";
 import { systemLogger } from "../utils/logging";
 
 const MEMORY_BUCKETS = new Map<string, MemoryBucket>();
@@ -33,22 +34,32 @@ export interface IpRateLimitResult {
 
 let lastCleanup = Date.now();
 
+export interface RateLimitOptions {
+  limitEnvKey?: keyof Env;
+  blockEnvKey?: keyof Env;
+  kvBindingKey?: keyof Env;
+  defaultLimit?: number;
+  defaultBlockSeconds?: number;
+}
+
 export async function checkIpRateLimit(
   req: Request,
   env: Env,
   route: string,
+  options?: RateLimitOptions,
 ): Promise<IpRateLimitResult | null> {
-  const config = resolveConfig(env);
+  const config = resolveConfig(env, options);
   if (!config) return null;
   const ip = extractClientIp(req);
   if (!ip) return null;
 
   const key = `${route}:${ip}`;
   const now = Date.now();
+  const kvBinding = resolveKvBinding(env, options);
 
-  if (env.INGEST_IP_BUCKETS) {
+  if (kvBinding) {
     try {
-      const kvResult = await checkKvRateLimit(env.INGEST_IP_BUCKETS, key, ip, config, now);
+      const kvResult = await checkKvRateLimit(kvBinding, key, ip, config, now);
       if (kvResult) {
         return kvResult;
       }
@@ -63,28 +74,66 @@ export async function checkIpRateLimit(
   return checkMemoryRateLimit(key, ip, config, now);
 }
 
-function resolveConfig(env: Env): IpRateLimitConfig | null {
-  const rawLimit =
-    typeof env.INGEST_IP_LIMIT_PER_MIN === "string"
-      ? env.INGEST_IP_LIMIT_PER_MIN.trim()
-      : "";
-  if (!rawLimit) return null;
-  const capacity = Number.parseInt(rawLimit, 10);
-  if (!Number.isFinite(capacity) || capacity <= 0) return null;
+function resolveConfig(env: Env, options?: RateLimitOptions): IpRateLimitConfig | null {
+  const rawLimit = readStringEnv(
+    env,
+    options?.limitEnvKey,
+    typeof env.INGEST_IP_LIMIT_PER_MIN === "string" ? env.INGEST_IP_LIMIT_PER_MIN : undefined,
+  );
+  let capacity: number | null = null;
+  if (rawLimit) {
+    const parsed = Number.parseInt(rawLimit.trim(), 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      capacity = parsed;
+    } else {
+      return null;
+    }
+  } else if (options?.defaultLimit && options.defaultLimit > 0) {
+    capacity = options.defaultLimit;
+  }
+  if (!capacity) {
+    return null;
+  }
 
-  const rawBlockSeconds =
+  const rawBlockSeconds = readStringEnv(
+    env,
+    options?.blockEnvKey,
     typeof env.INGEST_IP_BLOCK_SECONDS === "string"
-      ? env.INGEST_IP_BLOCK_SECONDS.trim()
-      : "";
-  const blockSeconds = Number.parseInt(rawBlockSeconds || "60", 10);
+      ? env.INGEST_IP_BLOCK_SECONDS
+      : undefined,
+  );
+  const fallbackBlockSeconds = options?.defaultBlockSeconds ?? 60;
+  const blockSeconds = Number.parseInt(rawBlockSeconds || String(fallbackBlockSeconds), 10);
   const blockDurationMs =
-    Number.isFinite(blockSeconds) && blockSeconds > 0 ? blockSeconds * 1000 : 60_000;
+    Number.isFinite(blockSeconds) && blockSeconds > 0
+      ? blockSeconds * 1000
+      : fallbackBlockSeconds * 1000;
 
   return {
     capacity,
     refillIntervalMs: 60_000,
     blockDurationMs,
   };
+}
+
+function readStringEnv(env: Env, key: keyof Env | undefined, fallback?: string): string {
+  if (key) {
+    const value = env[key];
+    if (typeof value === "string") {
+      return value;
+    }
+  }
+  return typeof fallback === "string" ? fallback : "";
+}
+
+function resolveKvBinding(env: Env, options?: RateLimitOptions): KvNamespace | undefined {
+  if (options?.kvBindingKey) {
+    const binding = env[options.kvBindingKey];
+    if (binding && typeof (binding as KvNamespace).get === "function") {
+      return binding as KvNamespace;
+    }
+  }
+  return env.INGEST_IP_BUCKETS;
 }
 
 function extractClientIp(req: Request): string | null {

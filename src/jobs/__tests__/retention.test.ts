@@ -4,7 +4,7 @@ import { runTelemetryRetention } from "../../jobs/retention";
 import { createWorkerEnv } from "../../../tests/helpers/worker-env";
 import { createMockR2Bucket } from "../../../tests/helpers/mock-r2";
 
-function insertTelemetry(env: Awaited<ReturnType<typeof createWorkerEnv>>["env"], row: {
+async function insertTelemetry(env: Awaited<ReturnType<typeof createWorkerEnv>>["env"], row: {
   device_id: string;
   ts: number;
   metrics_json?: string;
@@ -15,6 +15,14 @@ function insertTelemetry(env: Awaited<ReturnType<typeof createWorkerEnv>>["env"]
   status_json?: string | null;
   faults_json?: string | null;
 }) {
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO devices (
+        device_id, profile_id, device_key_hash, site, firmware, map_version, online, last_seen_at
+      ) VALUES (?1, NULL, NULL, NULL, NULL, NULL, 1, CURRENT_TIMESTAMP)`,
+  )
+    .bind(row.device_id)
+    .run();
+
   return env.DB.prepare(
     `INSERT INTO telemetry (device_id, ts, metrics_json, deltaT, thermalKW, cop, cop_quality, status_json, faults_json)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,

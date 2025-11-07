@@ -1,4 +1,5 @@
-import { FormEvent, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { AuthLayout } from "./AuthLayout";
@@ -65,7 +66,12 @@ export function LoginPage() {
         </div>
       }
     >
-      <form className="auth-form" onSubmit={handleSubmit}>
+      <form
+        className="auth-form"
+        onSubmit={(event) => {
+          void handleSubmit(event);
+        }}
+      >
         {error ? <div className="auth-error">{error}</div> : null}
         <label className="auth-field">
           <span>Email</span>

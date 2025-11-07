@@ -179,8 +179,13 @@ export default {
     const respondUnauthenticated = () => {
       const clearCookie = clearSessionCookie(env);
       const attachCookie = (response: Response) => {
-        response.headers.set("Set-Cookie", clearCookie);
-        return response;
+        const headers = new Headers(response.headers);
+        headers.set("Set-Cookie", clearCookie);
+        return new Response(response.body, {
+          headers,
+          status: response.status,
+          statusText: response.statusText,
+        });
       };
       if (req.method === "GET" || req.method === "HEAD") {
         try {

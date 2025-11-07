@@ -67,7 +67,14 @@ export function TopNav({ user, assetBase, logoutReturn }: TopNavProps) {
       </nav>
       <span className="tag">{roles}</span>
       <div className="sp" />
-      <button type="button" className="btn" onClick={handleLogout} disabled={loggingOut}>
+      <button
+        type="button"
+        className="btn"
+        onClick={() => {
+          void handleLogout();
+        }}
+        disabled={loggingOut}
+      >
         {loggingOut ? "Signing out..." : "Logout"}
       </button>
     </header>

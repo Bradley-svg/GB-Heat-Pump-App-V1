@@ -1,6 +1,7 @@
 import type { Env } from "../env";
 import { nowISO } from "../utils";
 import { deleteCacheKey } from "./cache";
+import type { Logger } from "../utils/logging";
 
 export const DASHBOARD_CACHE_AREA = {
   clientCompact: "client-compact",
@@ -126,7 +127,7 @@ export async function bumpDashboardTokens(
 
 export async function deleteDashboardCacheKeys(
   keys: string[],
-  options: { logger?: import("../utils/logging").Logger } = {},
+  options: { logger?: Logger } = {},
 ): Promise<void> {
   for (const key of keys) {
     await deleteCacheKey(key, options);

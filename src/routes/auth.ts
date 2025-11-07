@@ -2,7 +2,8 @@ import { z } from "zod";
 
 import type { Env } from "../env";
 import { json } from "../utils/responses";
-import { loggerForRequest, systemLogger } from "../utils/logging";
+import { loggerForRequest } from "../utils/logging";
+import type { Logger } from "../utils/logging";
 import { nowISO } from "../utils";
 import {
   hashPassword,
@@ -18,6 +19,7 @@ import {
   generateToken,
   hashToken,
 } from "../lib/auth/sessions";
+import { checkIpRateLimit } from "../lib/ip-rate-limit";
 
 const EMAIL_ALREADY_REGISTERED = "Email is already registered";
 const INVALID_CREDENTIALS = "Invalid email or password";
@@ -49,11 +51,10 @@ const resetSchema = z.object({
   password: z.string().min(MIN_PASSWORD_LENGTH),
 });
 
-type SignupInput = z.infer<typeof signupSchema>;
-type LoginInput = z.infer<typeof loginSchema>;
-
 export async function handleSignup(req: Request, env: Env) {
   const log = loggerForRequest(req, { scope: "auth.signup" });
+  const limited = await enforceAuthRateLimit(req, env, "/api/auth/signup", log);
+  if (limited) return limited;
   const body = await readJson(req);
   const parsed = signupSchema.safeParse(body);
   if (!parsed.success) {
@@ -64,7 +65,7 @@ export async function handleSignup(req: Request, env: Env) {
   const email = input.email.toLowerCase();
   const existing = await env.DB.prepare(`SELECT id FROM users WHERE email = ?1`).bind(email).first();
   if (existing) {
-    log.warn("auth.signup.email_exists", { email });
+    log.warn("auth.signup.email_exists", { email: maskEmail(email) });
     return json({ error: EMAIL_ALREADY_REGISTERED }, { status: 409 });
   }
 
@@ -114,7 +115,7 @@ export async function handleSignup(req: Request, env: Env) {
       ),
   ]);
 
-  log.info("auth.signup.success", { user_id: userId, email });
+  log.info("auth.signup.success", { user_id: userId, email: maskEmail(email) });
 
   const { cookie, session } = await createSession(env, userId);
   return json(
@@ -133,6 +134,8 @@ export async function handleSignup(req: Request, env: Env) {
 
 export async function handleLogin(req: Request, env: Env) {
   const log = loggerForRequest(req, { scope: "auth.login" });
+  const limited = await enforceAuthRateLimit(req, env, "/api/auth/login", log);
+  if (limited) return limited;
   const body = await readJson(req);
   const parsed = loginSchema.safeParse(body);
   if (!parsed.success) {
@@ -160,7 +163,7 @@ export async function handleLogin(req: Request, env: Env) {
     .first<DbUserRow>();
 
   if (!userRow) {
-    log.warn("auth.login.unknown_email", { email });
+    log.warn("auth.login.unknown_email", { email: maskEmail(email) });
     return json({ error: INVALID_CREDENTIALS }, { status: 401 });
   }
 
@@ -204,6 +207,9 @@ export async function handleLogout(req: Request, env: Env) {
 }
 
 export async function handleRecover(req: Request, env: Env) {
+  const log = loggerForRequest(req, { scope: "auth.recover" });
+  const limited = await enforceAuthRateLimit(req, env, "/api/auth/recover", log);
+  if (limited) return limited;
   const body = await readJson(req);
   const parsed = recoverSchema.safeParse(body);
   if (!parsed.success) {
@@ -234,15 +240,20 @@ export async function handleRecover(req: Request, env: Env) {
       .bind(tokenHash, user.id, createdAt, expiresAt),
   ]);
 
-  const resetUrl = buildResetUrl(env, token);
-  const log = systemLogger({ scope: "auth.recover" });
-  log.info("auth.password_reset.issued", { user_id: user.id, email, reset_url: resetUrl });
+  const _resetUrl = buildResetUrl(env, token);
+  log.info("auth.password_reset.issued", {
+    user_id: user.id,
+    email: maskEmail(email),
+    reset_token_hash: tokenHash,
+  });
 
   return json({ ok: true });
 }
 
 export async function handleReset(req: Request, env: Env) {
   const log = loggerForRequest(req, { scope: "auth.reset" });
+  const limited = await enforceAuthRateLimit(req, env, "/api/auth/reset", log);
+  if (limited) return limited;
   const body = await readJson(req);
   const parsed = resetSchema.safeParse(body);
   if (!parsed.success) {
@@ -377,4 +388,56 @@ function parseJsonArray(value: string | null): string[] {
   } catch {
     return [];
   }
+}
+
+async function enforceAuthRateLimit(
+  req: Request,
+  env: Env,
+  route: string,
+  log: Logger,
+): Promise<Response | null> {
+  const result = await checkIpRateLimit(req, env, route, {
+    limitEnvKey: "AUTH_IP_LIMIT_PER_MIN",
+    blockEnvKey: "AUTH_IP_BLOCK_SECONDS",
+    kvBindingKey: "AUTH_IP_BUCKETS",
+    defaultLimit: 25,
+    defaultBlockSeconds: 300,
+  });
+  if (result?.limited) {
+    const response = json({ error: "Too many attempts" }, { status: 429 });
+    if (result.retryAfterSeconds != null) {
+      response.headers.set("Retry-After", String(result.retryAfterSeconds));
+    }
+    log.warn("auth.rate_limited", {
+      route,
+      ip: result.ip ?? null,
+      limit_per_minute: result.limit ?? null,
+      retry_after_seconds: result.retryAfterSeconds ?? null,
+    });
+    return response;
+  }
+  return null;
+}
+
+function maskEmail(email: string): string {
+  const trimmed = email?.trim().toLowerCase();
+  if (!trimmed) return "***";
+  const parts = trimmed.split("@");
+  if (parts.length !== 2) {
+    return "***";
+  }
+  const [local, domain] = parts;
+  if (!domain) {
+    return "***";
+  }
+  if (!local) {
+    return `*@${domain}`;
+  }
+  if (local.length === 1) {
+    return `*@${domain}`;
+  }
+  if (local.length === 2) {
+    return `${local[0]}*@${domain}`;
+  }
+  return `${local[0]}***${local.slice(-1)}@${domain}`;
 }

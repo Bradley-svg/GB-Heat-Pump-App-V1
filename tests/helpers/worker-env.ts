@@ -72,6 +72,9 @@ export async function createWorkerEnv(overrides: Partial<Env> = {}): Promise<Wor
     INGEST_IP_BLOCK_SECONDS: "60",
     ENVIRONMENT: "test",
     INGEST_IP_BUCKETS: createTestKvNamespace(),
+    AUTH_IP_LIMIT_PER_MIN: "0",
+    AUTH_IP_BLOCK_SECONDS: "60",
+    AUTH_IP_BUCKETS: createTestKvNamespace(),
   };
 
   const env: Env = { ...baseEnv, ...overrides, DB };

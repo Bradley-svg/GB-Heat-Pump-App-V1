@@ -5,7 +5,6 @@ async function main() {
   const iterations = Number(process.env.PBKDF2_ITERATIONS ?? 120_000);
   const record = await hashPassword(password, { iterations });
   const serialized = serializePasswordHash(record);
-  // eslint-disable-next-line no-console
   console.log(JSON.stringify(serialized, null, 2));
 }
 

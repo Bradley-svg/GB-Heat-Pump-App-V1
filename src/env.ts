@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-interface KvNamespace {
+export interface KvNamespace {
   get(key: string, options?: { type: "text" | "json" | "arrayBuffer" }): Promise<any>;
   put(
     key: string,
@@ -37,6 +37,9 @@ export interface Env {
   INGEST_IP_LIMIT_PER_MIN?: string;
   INGEST_IP_BLOCK_SECONDS?: string;
   INGEST_IP_BUCKETS?: KvNamespace;
+  AUTH_IP_LIMIT_PER_MIN?: string;
+  AUTH_IP_BLOCK_SECONDS?: string;
+  AUTH_IP_BUCKETS?: KvNamespace;
   TELEMETRY_RETENTION_DAYS?: string;
   TELEMETRY_REFACTOR_MODE?: string;
   RETENTION_BACKUP_PREFIX?: string;
@@ -400,6 +403,32 @@ const EnvSchema = z
           path: ["TELEMETRY_CARRY_MAX_MINUTES"],
           code: z.ZodIssueCode.custom,
           message: "TELEMETRY_CARRY_MAX_MINUTES must be a positive integer",
+        });
+      }
+    }
+
+    const authIpLimitRaw =
+      typeof value.AUTH_IP_LIMIT_PER_MIN === "string" ? value.AUTH_IP_LIMIT_PER_MIN.trim() : "";
+    if (authIpLimitRaw) {
+      const parsed = Number.parseInt(authIpLimitRaw, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        ctx.addIssue({
+          path: ["AUTH_IP_LIMIT_PER_MIN"],
+          code: z.ZodIssueCode.custom,
+          message: "AUTH_IP_LIMIT_PER_MIN must be a positive integer",
+        });
+      }
+    }
+
+    const authIpBlockRaw =
+      typeof value.AUTH_IP_BLOCK_SECONDS === "string" ? value.AUTH_IP_BLOCK_SECONDS.trim() : "";
+    if (authIpBlockRaw) {
+      const parsed = Number.parseInt(authIpBlockRaw, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        ctx.addIssue({
+          path: ["AUTH_IP_BLOCK_SECONDS"],
+          code: z.ZodIssueCode.custom,
+          message: "AUTH_IP_BLOCK_SECONDS must be a positive integer",
         });
       }
     }

@@ -1,4 +1,5 @@
-import { FormEvent, useState } from "react";
+import { useState } from "react";
+import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 
 import { AuthLayout } from "./AuthLayout";
@@ -44,7 +45,12 @@ export function ForgotPasswordPage() {
         </div>
       }
     >
-      <form className="auth-form" onSubmit={handleSubmit}>
+      <form
+        className="auth-form"
+        onSubmit={(event) => {
+          void handleSubmit(event);
+        }}
+      >
         {message ? <div className="auth-notice success">{message}</div> : null}
         {error ? <div className="auth-error">{error}</div> : null}
         <label className="auth-field">

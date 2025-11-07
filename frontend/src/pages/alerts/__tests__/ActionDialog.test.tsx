@@ -67,7 +67,7 @@ describe("ActionDialog", () => {
     expect(confirmButton).toBeDisabled();
 
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Looks good" } });
-    expect(confirmButton).not.toBeDisabled();
+    expect(confirmButton).toBeEnabled();
   });
 
   it("handles confirm callback", () => {

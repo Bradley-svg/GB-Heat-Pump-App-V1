@@ -8,6 +8,8 @@ INGEST_RATE_LIMIT_PER_MIN=120
 INGEST_SIGNATURE_TOLERANCE_SECS=300
 INGEST_IP_LIMIT_PER_MIN=0
 INGEST_IP_BLOCK_SECONDS=60
+AUTH_IP_LIMIT_PER_MIN=0
+AUTH_IP_BLOCK_SECONDS=60
 # Local dev environments should explicitly declare their deployment mode.
 ENVIRONMENT=development
 # ASSET_SIGNING_SECRET=only-if-testing-signed-assets
