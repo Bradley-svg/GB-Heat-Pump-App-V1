@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Text, View } from "react-native";
+
 import { useTheme } from "../theme/GBThemeProvider";
 
 type Status = "good" | "warn" | "bad" | "info";
@@ -10,28 +11,41 @@ export interface GBStatusPillProps {
   testID?: string;
 }
 
-export const GBStatusPill: React.FC<GBStatusPillProps> = ({ label, status, testID }) => {
+export const GBStatusPill: React.FC<GBStatusPillProps> = ({
+  label,
+  status,
+  testID,
+}) => {
   const { colors, spacing, radii } = useTheme();
   const tone = getTone(status, colors);
+  const containerStyle = useMemo(
+    () => ({
+      borderRadius: radii.md,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      backgroundColor: tone.bg,
+      borderWidth: 1,
+      borderColor: tone.border,
+    }),
+    [radii.md, spacing.sm, spacing.xs, tone.bg, tone.border],
+  );
+  const textStyle = useMemo(
+    () => ({
+      color: tone.text,
+      fontWeight: "600",
+      fontSize: 13,
+    }),
+    [tone.text],
+  );
 
   return (
     <View
       testID={testID}
       accessible
       accessibilityRole="text"
-      style={{
-        borderRadius: radii.md,
-        paddingHorizontal: spacing.sm,
-        paddingVertical: spacing.xs,
-        backgroundColor: tone.bg,
-        borderWidth: 1,
-        borderColor: tone.border
-      }}
+      style={containerStyle}
     >
-      <Text
-        style={{ color: tone.text, fontWeight: "600", fontSize: 13 }}
-        maxFontSizeMultiplier={1.4}
-      >
+      <Text style={textStyle} maxFontSizeMultiplier={1.4}>
         {label}
       </Text>
     </View>
@@ -40,16 +54,32 @@ export const GBStatusPill: React.FC<GBStatusPillProps> = ({ label, status, testI
 
 const getTone = (
   status: Status,
-  colors: ReturnType<typeof useTheme>["colors"]
+  colors: ReturnType<typeof useTheme>["colors"],
 ): { bg: string; text: string; border: string } => {
   switch (status) {
     case "good":
-      return { bg: "rgba(63, 186, 94, 0.16)", text: colors.success, border: "rgba(63,186,94,0.4)" };
+      return {
+        bg: "rgba(63, 186, 94, 0.16)",
+        text: colors.success,
+        border: "rgba(63,186,94,0.4)",
+      };
     case "warn":
-      return { bg: "rgba(224, 167, 60, 0.16)", text: colors.warning, border: "rgba(224,167,60,0.4)" };
+      return {
+        bg: "rgba(224, 167, 60, 0.16)",
+        text: colors.warning,
+        border: "rgba(224,167,60,0.4)",
+      };
     case "bad":
-      return { bg: "rgba(194, 59, 59, 0.16)", text: colors.error, border: "rgba(194,59,59,0.4)" };
+      return {
+        bg: "rgba(194, 59, 59, 0.16)",
+        text: colors.error,
+        border: "rgba(194,59,59,0.4)",
+      };
     default:
-      return { bg: "rgba(31, 123, 181, 0.16)", text: colors.info, border: "rgba(31,123,181,0.4)" };
+      return {
+        bg: "rgba(31, 123, 181, 0.16)",
+        text: colors.info,
+        border: "rgba(31,123,181,0.4)",
+      };
   }
 };

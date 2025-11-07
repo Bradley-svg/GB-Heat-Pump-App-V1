@@ -7,7 +7,7 @@ test("GBKpiTile renders value, unit, and delta", () => {
   const { getByText } = render(
     <GBThemeProvider>
       <GBKpiTile label="COP" value="4.2" unit="" delta={0.6} />
-    </GBThemeProvider>
+    </GBThemeProvider>,
   );
   expect(getByText("4.2")).toBeTruthy();
   expect(getByText("+0.6")).toBeTruthy();

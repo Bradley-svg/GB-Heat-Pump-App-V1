@@ -4,13 +4,22 @@ module.exports = {
   parserOptions: {
     project: "./tsconfig.json",
     tsconfigRootDir: __dirname,
-    ecmaFeatures: { jsx: true }
+    ecmaFeatures: { jsx: true },
   },
-  extends: ["universe/native", "universe/shared/typescript-analysis"],
+  extends: ["universe/native", "universe/shared/typescript-analysis", "prettier"],
+  plugins: ["prettier", "react-native"],
   rules: {
     "@typescript-eslint/explicit-module-boundary-types": "off",
-    "prettier/prettier": "off",
-    "import/order": "off",
-    "no-void": "off"
-  }
+    "prettier/prettier": "error",
+    "import/order": [
+      "warn",
+      {
+        groups: [["builtin", "external"], ["internal"], ["parent", "sibling", "index"]],
+        "newlines-between": "always",
+        alphabetize: { order: "asc", caseInsensitive: true }
+      }
+    ],
+    "react-native/no-inline-styles": "warn",
+    "no-void": ["error", { allowAsStatement: true }]
+  },
 };

@@ -1,5 +1,9 @@
 import React, { useState } from "react";
-import { NavigationContainer, DarkTheme, DefaultTheme } from "@react-navigation/native";
+import {
+  NavigationContainer,
+  DarkTheme,
+  DefaultTheme,
+} from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import AppNavigator from "./src/navigation/AppNavigator";
@@ -7,14 +11,19 @@ import { GBThemeProvider, useColorScheme } from "./src/theme/GBThemeProvider";
 import { GBToast } from "./src/components/GBToast";
 
 export default function App() {
-  const [toast, setToast] = useState({ visible: false, message: "", type: "success" as
-    "success" | "warn" | "error" });
+  const [toast, setToast] = useState({
+    visible: false,
+    message: "",
+    type: "success" as "success" | "warn" | "error",
+  });
 
   return (
     <GBThemeProvider>
       <SafeAreaProvider>
         <ThemedNavigation
-          onShowToast={(message, type) => setToast({ visible: true, message, type })}
+          onShowToast={(message, type) =>
+            setToast({ visible: true, message, type })
+          }
         />
         <GBToast
           visible={toast.visible}

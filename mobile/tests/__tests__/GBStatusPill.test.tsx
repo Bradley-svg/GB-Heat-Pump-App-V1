@@ -7,7 +7,7 @@ test("GBStatusPill exposes label and accessibility role", () => {
   const { getByText } = render(
     <GBThemeProvider>
       <GBStatusPill label="Healthy" status="good" />
-    </GBThemeProvider>
+    </GBThemeProvider>,
   );
   expect(getByText("Healthy")).toBeTruthy();
 });

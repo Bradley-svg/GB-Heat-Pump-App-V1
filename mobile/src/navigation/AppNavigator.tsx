@@ -1,10 +1,11 @@
-import React from "react";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { MaterialIcons } from "@expo/vector-icons";
-import { useTheme } from "../theme/GBThemeProvider";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import React from "react";
+
+import { AlertsScreen } from "../screens/AlertsScreen";
 import { DashboardScreen } from "../screens/DashboardScreen";
 import { DeviceDetailScreen } from "../screens/DeviceDetailScreen";
-import { AlertsScreen } from "../screens/AlertsScreen";
+import { useTheme } from "../theme/GBThemeProvider";
 
 type RootTabsParamList = {
   Dashboard: undefined;
@@ -29,9 +30,14 @@ const AppNavigator: React.FC<Props> = ({ onShowToast }) => {
         tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: { backgroundColor: colors.surface },
         tabBarIcon: ({ color, size }) => {
-          const icon = route.name === "Dashboard" ? "dashboard" : route.name === "Device" ? "device-hub" : "warning";
+          const icon =
+            route.name === "Dashboard"
+              ? "dashboard"
+              : route.name === "Device"
+                ? "device-hub"
+                : "warning";
           return <MaterialIcons name={icon as any} size={size} color={color} />;
-        }
+        },
       })}
     >
       <Tab.Screen name="Dashboard">

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useMemo } from "react";
 import { Appearance, ColorSchemeName, Platform, ViewStyle } from "react-native";
+
 import tokens from "../../../shared/theme/greenbro.tokens.json";
 
 type Palette = typeof tokens.colors.light;
@@ -18,7 +19,9 @@ const ThemeContext = createContext<Theme | null>(null);
 const mapScheme = (scheme: ColorSchemeName): Palette =>
   scheme === "dark" ? tokens.colors.dark : tokens.colors.light;
 
-export const GBThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const GBThemeProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const scheme = Appearance.getColorScheme();
 
   const value = useMemo<Theme>(
@@ -28,12 +31,14 @@ export const GBThemeProvider: React.FC<{ children: React.ReactNode }> = ({ child
       radii: tokens.radii,
       typeScale: tokens.typeScale,
       motion: tokens.motion,
-      colorScheme: scheme ?? "light"
+      colorScheme: scheme ?? "light",
     }),
-    [scheme]
+    [scheme],
   );
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+  );
 };
 
 export function useTheme(): Theme {
@@ -54,6 +59,6 @@ export function elevation(level: 1 | 2 = 1): ViewStyle {
         shadowColor: "rgba(0,0,0,0.4)",
         shadowOpacity: level === 1 ? 0.12 : 0.18,
         shadowRadius: level === 1 ? 6 : 12,
-        shadowOffset: { width: 0, height: level === 1 ? 3 : 6 }
+        shadowOffset: { width: 0, height: level === 1 ? 3 : 6 },
       };
 }

@@ -1,74 +1,229 @@
-import React, { useState } from "react";
-import { Linking, ScrollView, Text, View } from "react-native";
-import { GBStatusPill } from "../components/GBStatusPill";
-import { GBKpiTile } from "../components/GBKpiTile";
+﻿import { MaterialIcons } from "@expo/vector-icons";
+import React, { useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Linking,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+
 import { GBButton } from "../components/GBButton";
+import { GBKpiTile } from "../components/GBKpiTile";
 import { GBListItem } from "../components/GBListItem";
-import { useTheme } from "../theme/GBThemeProvider";
+import { GBStatusPill } from "../components/GBStatusPill";
+import {
+  useFleetSummary,
+  type FleetSummaryResult,
+} from "../hooks/useFleetSummary";
 import { useHaptics } from "../hooks/useHaptics";
+import { useTheme } from "../theme/GBThemeProvider";
 
-export const DashboardScreen: React.FC<{ onShowToast: (message: string, type: "success" | "warn" | "error") => void }> =
-  ({ onShowToast }) => {
-    const { spacing, colors } = useTheme();
-    const haptic = useHaptics();
-    const [ctaPressed, setCtaPressed] = useState(false);
+interface DashboardScreenProps {
+  onShowToast: (message: string, type: "success" | "warn" | "error") => void;
+}
 
-    const handleCommission = () => {
-      setCtaPressed(true);
-      void haptic("impact");
-      onShowToast("Commissioning workflow created", "success");
-    };
+type DashboardKpi = {
+  label: string;
+  value: string;
+  unit?: string;
+  delta?: number;
+};
+type ThemeSpacing = ReturnType<typeof useTheme>["spacing"];
+type ThemeColors = ReturnType<typeof useTheme>["colors"];
 
-    const handleAlertsLink = () => {
-      void haptic("warning");
-      onShowToast("Opening alerts…", "warn");
-      void Linking.openURL("greenbro://alerts").catch(() => undefined);
-    };
+export const DashboardScreen: React.FC<DashboardScreenProps> = ({
+  onShowToast,
+}) => {
+  const { spacing, colors } = useTheme();
+  const haptic = useHaptics();
+  const [ctaPressed, setCtaPressed] = useState(false);
+  const { data, status, error, refresh } = useFleetSummary({
+    hours: 24,
+    lowDeltaT: 2,
+  });
+  const themedStyles = useMemo(
+    () => createStyles(spacing, colors),
+    [colors, spacing],
+  );
 
-    return (
-      <ScrollView
-        contentContainerStyle={{ padding: spacing.lg }}
-        accessibilityRole="scrollbar"
-        testID="dashboard-scroll"
-      >
-        <View style={{ marginBottom: spacing.lg }}>
-          <GBStatusPill label="Fleet Stable" status="good" />
-          <Text style={{ fontSize: 28, fontWeight: "700", color: colors.text, marginTop: spacing.md }}>
-            Good afternoon, GreenBro Ops
-          </Text>
-          <Text style={{ color: colors.textMuted, marginTop: spacing.xs }}>
-            System health nominal. Tap into Alerts for latest notifications.
-          </Text>
-        </View>
+  const kpis = useMemo(() => deriveKpis(data), [data]);
+  const refreshing = status === "loading" && Boolean(data);
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <GBKpiTile label="Outlet Temp" value="48.2" unit="°C" delta={0.8} />
-          <GBKpiTile label="COP" value="4.6" unit="" delta={-0.2} />
-          <GBKpiTile label="Energy Today" value="312" unit="kWh" delta={10} />
-        </ScrollView>
-
-        <View style={{ marginTop: spacing.xl }}>
-          <GBButton
-            label={ctaPressed ? "Commissioning Started" : "Start Commissioning"}
-            onPress={handleCommission}
-            accessibilityHint="Creates a new commissioning workflow"
-          />
-          <View style={{ height: spacing.sm }} />
-          <GBButton
-            label="View Alerts"
-            variant="ghost"
-            leadingIcon={<Text style={{ color: colors.primary }}>⚠️</Text>}
-            onPress={handleAlertsLink}
-          />
-        </View>
-
-        <View style={{ marginTop: spacing.xl }}>
-          <Text style={{ color: colors.textMuted, fontWeight: "600", marginBottom: spacing.sm }}>
-            Quick Links
-          </Text>
-          <GBListItem title="Fleet Overview" subtitle="Performance snapshots" rightAccessory="chevron" />
-          <GBListItem title="High Priority Alerts" subtitle="3 open issues" rightAccessory="badge" badgeLabel="3" />
-        </View>
-      </ScrollView>
-    );
+  const handleCommission = () => {
+    setCtaPressed(true);
+    void haptic("impact");
+    onShowToast("Commissioning workflow created", "success");
   };
+
+  const handleAlertsLink = () => {
+    void haptic("warning");
+    onShowToast("Opening alerts...", "warn");
+    void Linking.openURL("greenbro://alerts").catch(() => undefined);
+  };
+
+  if (!data && status === "loading") {
+    return (
+      <View style={themedStyles.loadingContainer}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      contentContainerStyle={themedStyles.scrollContent}
+      refreshControl={
+        <RefreshControl
+          tintColor={colors.primary}
+          refreshing={refreshing}
+          onRefresh={refresh}
+          colors={[colors.primary]}
+        />
+      }
+      accessibilityRole="scrollbar"
+      testID="dashboard-scroll"
+    >
+      <View style={themedStyles.header}>
+        <GBStatusPill
+          label={
+            data
+              ? `Fleet ${Math.round(data.kpis.online_pct)}% Online`
+              : "Fleet status unavailable"
+          }
+          status={data && data.kpis.online_pct > 80 ? "good" : "warn"}
+        />
+        <Text style={themedStyles.greeting}>Good afternoon, GreenBro Ops</Text>
+        <Text style={themedStyles.subText}>
+          {error
+            ? "We could not load the latest metrics."
+            : "Telemetry synced from the last 24h window."}
+        </Text>
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        {kpis.map((kpi) => (
+          <GBKpiTile
+            key={kpi.label}
+            label={kpi.label}
+            value={kpi.value}
+            unit={kpi.unit}
+            delta={kpi.delta}
+          />
+        ))}
+      </ScrollView>
+
+      <View style={themedStyles.ctaSection}>
+        <GBButton
+          label={ctaPressed ? "Commissioning Started" : "Start Commissioning"}
+          onPress={handleCommission}
+          accessibilityHint="Creates a new commissioning workflow"
+        />
+        <View style={themedStyles.spacerSm} />
+        <GBButton
+          label="View Alerts"
+          variant="ghost"
+          leadingIcon={
+            <MaterialIcons
+              name="notifications-active"
+              size={20}
+              color={colors.primary}
+              accessibilityElementsHidden
+            />
+          }
+          onPress={handleAlertsLink}
+        />
+      </View>
+
+      <View style={themedStyles.quickLinks}>
+        <Text style={themedStyles.quickLinksLabel}>Quick Links</Text>
+        <GBListItem
+          title="Fleet Overview"
+          subtitle="Performance snapshots"
+          rightAccessory="chevron"
+        />
+        <GBListItem
+          title="High Priority Alerts"
+          subtitle={`${data?.kpis.open_alerts ?? 0} open issues`}
+          rightAccessory="badge"
+          badgeLabel={String(data?.kpis.open_alerts ?? 0)}
+        />
+      </View>
+    </ScrollView>
+  );
+};
+
+function formatNumber(
+  value: number | null | undefined,
+  fractionDigits = 1,
+): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "--";
+  }
+  return Number(value).toFixed(fractionDigits);
+}
+
+function deriveKpis(data: FleetSummaryResult["data"]): DashboardKpi[] {
+  if (!data) {
+    return [
+      { label: "Outlet Temp", value: "--", unit: "°C" },
+      { label: "COP", value: "--" },
+      { label: "Energy Today", value: "--", unit: "kWh" },
+    ];
+  }
+
+  const latestTrend = data.trend[data.trend.length - 1];
+  const primaryDevice = data.top_devices[0];
+
+  return [
+    {
+      label: "Outlet Temp",
+      value: formatNumber(primaryDevice?.deltaT, 1),
+      unit: "°C",
+      delta: undefined,
+    },
+    {
+      label: "COP",
+      value: formatNumber(data.kpis.avg_cop),
+      unit: "",
+      delta: undefined,
+    },
+    {
+      label: "Energy Today",
+      value: formatNumber(latestTrend?.thermalKW ?? null, 1),
+      unit: "kWh",
+      delta: undefined,
+    },
+  ];
+}
+
+const createStyles = (spacing: ThemeSpacing, colors: ThemeColors) =>
+  StyleSheet.create({
+    scrollContent: { padding: spacing.lg },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    header: { marginBottom: spacing.lg },
+    greeting: {
+      fontSize: 28,
+      fontWeight: "700",
+      color: colors.text,
+      marginTop: spacing.md,
+    },
+    subText: {
+      color: colors.textMuted,
+      marginTop: spacing.xs,
+    },
+    ctaSection: { marginTop: spacing.xl },
+    spacerSm: { height: spacing.sm },
+    quickLinks: { marginTop: spacing.xl },
+    quickLinksLabel: {
+      color: colors.textMuted,
+      fontWeight: "600",
+      marginBottom: spacing.sm,
+    },
+  });

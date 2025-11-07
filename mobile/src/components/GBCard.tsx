@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
+
 import { useTheme, elevation } from "../theme/GBThemeProvider";
 
 type Tone = "default" | "muted" | "warning" | "error";
@@ -11,9 +12,32 @@ export interface GBCardProps {
   testID?: string;
 }
 
-export const GBCard: React.FC<GBCardProps> = ({ title, children, tone = "default", testID }) => {
+export const GBCard: React.FC<GBCardProps> = ({
+  title,
+  children,
+  tone = "default",
+  testID,
+}) => {
   const { colors, spacing, radii } = useTheme();
   const palette = tonePalette(tone, colors);
+  const containerStyle = useMemo(
+    () => ({
+      backgroundColor: palette.background,
+      borderRadius: radii.lg,
+      padding: spacing.lg,
+      borderColor: palette.border,
+    }),
+    [palette.background, palette.border, radii.lg, spacing.lg],
+  );
+  const titleStyle = useMemo(
+    () => ({
+      color: palette.title,
+      fontSize: 18,
+      fontWeight: "600",
+      marginBottom: spacing.sm,
+    }),
+    [palette.title, spacing.sm],
+  );
 
   return (
     <View
@@ -22,24 +46,11 @@ export const GBCard: React.FC<GBCardProps> = ({ title, children, tone = "default
       style={[
         styles.container,
         elevation(palette.elevation),
-        {
-          backgroundColor: palette.background,
-          borderRadius: radii.lg,
-          padding: spacing.lg,
-          borderColor: palette.border,
-          borderWidth: 1
-        }
+        containerStyle,
+        styles.containerBorder,
       ]}
     >
-      <Text
-        style={{
-          color: palette.title,
-          fontSize: 18,
-          fontWeight: "600",
-          marginBottom: spacing.sm
-        }}
-        maxFontSizeMultiplier={1.4}
-      >
+      <Text style={titleStyle} maxFontSizeMultiplier={1.4}>
         {title}
       </Text>
       <View>{children}</View>
@@ -49,7 +60,7 @@ export const GBCard: React.FC<GBCardProps> = ({ title, children, tone = "default
 
 const tonePalette = (
   tone: Tone,
-  colors: ReturnType<typeof useTheme>["colors"]
+  colors: ReturnType<typeof useTheme>["colors"],
 ): { background: string; title: string; border: string; elevation: 1 | 2 } => {
   switch (tone) {
     case "muted":
@@ -57,32 +68,33 @@ const tonePalette = (
         background: colors.surfaceMuted,
         title: colors.text,
         border: colors.border,
-        elevation: 1
+        elevation: 1,
       };
     case "warning":
       return {
         background: "rgba(204,138,0,0.12)",
         title: colors.warning,
         border: "rgba(204,138,0,0.32)",
-        elevation: 1
+        elevation: 1,
       };
     case "error":
       return {
         background: "rgba(194,59,59,0.12)",
         title: colors.error,
         border: "rgba(194,59,59,0.32)",
-        elevation: 1
+        elevation: 1,
       };
     default:
       return {
         background: colors.surfaceElevated,
         title: colors.text,
         border: colors.border,
-        elevation: 1
+        elevation: 1,
       };
   }
 };
 
 const styles = StyleSheet.create({
-  container: { marginBottom: 16 }
+  container: { marginBottom: 16 },
+  containerBorder: { borderWidth: 1 },
 });

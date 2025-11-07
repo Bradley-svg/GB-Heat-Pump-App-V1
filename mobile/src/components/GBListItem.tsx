@@ -1,6 +1,7 @@
-import React from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
+import React, { useMemo } from "react";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+
 import { useTheme } from "../theme/GBThemeProvider";
 
 type RightAccessory = "chevron" | "badge" | undefined;
@@ -20,10 +21,50 @@ export const GBListItem: React.FC<GBListItemProps> = ({
   onPress,
   rightAccessory = "chevron",
   badgeLabel,
-  testID
+  testID,
 }) => {
   const { colors, spacing } = useTheme();
   const isPressable = typeof onPress === "function";
+  const containerPadding = useMemo(
+    () => ({
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.lg,
+    }),
+    [spacing.lg, spacing.md],
+  );
+  const titleStyle = useMemo(
+    () => ({
+      color: colors.text,
+      fontSize: 16,
+      fontWeight: "600",
+    }),
+    [colors.text],
+  );
+  const subtitleStyle = useMemo(
+    () => ({
+      color: colors.textMuted,
+      fontSize: 14,
+      marginTop: spacing.xs,
+    }),
+    [colors.textMuted, spacing.xs],
+  );
+  const badgeContainer = useMemo(
+    () => ({
+      backgroundColor: colors.surfaceMuted,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      borderRadius: 999,
+    }),
+    [colors.surfaceMuted, spacing.sm, spacing.xs],
+  );
+  const badgeText = useMemo(
+    () => ({
+      color: colors.text,
+      fontSize: 12,
+      fontWeight: "600",
+    }),
+    [colors.text],
+  );
 
   return (
     <Pressable
@@ -31,39 +72,29 @@ export const GBListItem: React.FC<GBListItemProps> = ({
       accessibilityRole={isPressable ? "button" : "text"}
       onPress={onPress}
       android_ripple={
-        isPressable ? { color: "rgba(57,181,74,0.1)", borderless: false } : undefined
+        isPressable
+          ? { color: "rgba(57,181,74,0.1)", borderless: false }
+          : undefined
       }
       style={({ pressed }) => [
         styles.row,
-        { paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
-        pressed && Platform.OS === "ios"
-          ? { backgroundColor: "rgba(57,181,74,0.08)" }
-          : { backgroundColor: "transparent" }
+        containerPadding,
+        pressed && Platform.OS === "ios" ? styles.iosPressed : null,
       ]}
     >
-      <View style={{ flex: 1 }}>
-        <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600" }} maxFontSizeMultiplier={1.4}>
+      <View style={styles.flex}>
+        <Text style={titleStyle} maxFontSizeMultiplier={1.4}>
           {title}
         </Text>
         {subtitle ? (
-          <Text
-            style={{ color: colors.textMuted, fontSize: 14, marginTop: spacing.xs }}
-            maxFontSizeMultiplier={1.4}
-          >
+          <Text style={subtitleStyle} maxFontSizeMultiplier={1.4}>
             {subtitle}
           </Text>
         ) : null}
       </View>
       {rightAccessory === "badge" && badgeLabel ? (
-        <View
-          style={{
-            backgroundColor: colors.surfaceMuted,
-            paddingHorizontal: spacing.sm,
-            paddingVertical: spacing.xs,
-            borderRadius: 999
-          }}
-        >
-          <Text style={{ color: colors.text, fontSize: 12, fontWeight: "600" }} maxFontSizeMultiplier={1.4}>
+        <View style={badgeContainer}>
+          <Text style={badgeText} maxFontSizeMultiplier={1.4}>
             {badgeLabel}
           </Text>
         </View>
@@ -80,4 +111,8 @@ export const GBListItem: React.FC<GBListItemProps> = ({
   );
 };
 
-const styles = StyleSheet.create({ row: { flexDirection: "row", alignItems: "center" } });
+const styles = StyleSheet.create({
+  row: { flexDirection: "row", alignItems: "center" },
+  flex: { flex: 1 },
+  iosPressed: { backgroundColor: "rgba(57,181,74,0.08)" },
+});
