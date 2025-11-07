@@ -122,10 +122,13 @@ export async function sendEmailVerificationNotification(
   env: Env,
   payload: EmailVerificationNotificationPayload,
 ): Promise<void> {
-  await dispatchUserNotification(
-    "email_verification",
-    env.EMAIL_VERIFICATION_WEBHOOK_URL?.trim() ?? env.PASSWORD_RESET_WEBHOOK_URL?.trim(),
-    env.EMAIL_VERIFICATION_WEBHOOK_SECRET ?? env.PASSWORD_RESET_WEBHOOK_SECRET,
-    payload,
-  );
+  const endpoint = env.EMAIL_VERIFICATION_WEBHOOK_URL?.trim();
+  const secret = env.EMAIL_VERIFICATION_WEBHOOK_SECRET?.trim();
+  if (!endpoint) {
+    throw new Error("EMAIL_VERIFICATION_WEBHOOK_URL is not configured");
+  }
+  if (!secret) {
+    throw new Error("EMAIL_VERIFICATION_WEBHOOK_SECRET is not configured");
+  }
+  await dispatchUserNotification("email_verification", endpoint, secret, payload);
 }

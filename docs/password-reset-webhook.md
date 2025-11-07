@@ -90,4 +90,22 @@ Copy the IDs into `wrangler.toml` (default block + `[env.production]`). Validati
 
 ---
 
+## 6. Email Verification Webhook (new requirement)
+
+Email verification traffic now uses a **dedicated** webhook + secret so we can rotate credentials independently of password resets. The Worker refuses to send verifications unless the following env vars are populated:
+
+```
+EMAIL_VERIFICATION_WEBHOOK_URL=https://hooks.<your-domain>/email-verification
+EMAIL_VERIFICATION_WEBHOOK_SECRET=<min 16 chars, unique per environment>
+```
+
+Provisioning/rotation steps mirror the password reset flow, but call out the secrets separately:
+
+1. Bootstrap preview secrets with unique values (`wrangler secret put EMAIL_VERIFICATION_WEBHOOK_* --env preview`), deploy, and trigger `/api/auth/signup` to confirm the verification email lands.
+2. Repeat for production (use the ticketed rotation checklist so we satisfy Prompt Bible Appendix C “Definition of Done”).
+3. Record the rotation date + operator in the password manager entry for `EMAIL_VERIFICATION_WEBHOOK_SECRET`.
+4. Rollback = re-run `wrangler secret put` with the previous secret and redeploy.
+
+Because verification emails share the same downstream provider, your webhook handler should **validate `x-user-event-signature` with the verification secret**, then enqueue the provider call. Never log or forward the raw verification token outside GreenBro infrastructure.
+
 Keep this playbook next to the deployment runbook. When onboarding new engineers, walk through a full dry run (preview secrets, test email, Datadog dashboard) so they understand the surface area before touching production.

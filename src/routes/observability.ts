@@ -8,6 +8,7 @@ import { json } from "../utils/responses";
 import { validationErrorResponse, validateWithSchema } from "../utils/validation";
 import { checkIpRateLimit } from "../lib/ip-rate-limit";
 import { recordClientEvent } from "../lib/client-events";
+import { maskEmail } from "../utils/mask";
 
 const ROUTE_PATH = "/api/observability/client-errors";
 const EVENTS_ROUTE_PATH = "/api/observability/client-events";
@@ -108,11 +109,12 @@ export async function handleClientEventReport(req: Request, env: Env) {
   const body = parsed.data;
   const log = loggerForRequest(req, { route: EVENTS_ROUTE_PATH });
 
+  const dimension = deriveEventDimension(body.event, body.properties);
   await persistClientEvent(env, {
     event: body.event,
     source: body.source ?? undefined,
     userEmail: user.email,
-    dimension: deriveEventDimension(body.event, body.properties),
+    dimension,
     properties: body.properties ?? null,
   }, log);
 
@@ -122,16 +124,23 @@ export async function handleClientEventReport(req: Request, env: Env) {
       metric_key: "mobile.pending_logout.flush_failed",
       count: 1,
       source: body.source ?? "unknown",
-      user_email: user.email,
+      user_email: maskEmail(user.email),
       reason: typeof body.properties?.message === "string" ? body.properties.message : undefined,
     });
   }
 
+  const propertyKeys =
+    body.properties && typeof body.properties === "object"
+      ? Object.keys(body.properties).slice(0, 10)
+      : [];
+
   log.info("client.event", {
     event: body.event,
     source: body.source ?? "unknown",
-    properties: body.properties ?? {},
-    user_email: user.email,
+    dimension,
+    has_properties: propertyKeys.length > 0,
+    property_keys: propertyKeys,
+    user_email: maskEmail(user.email),
   });
   return json({ ok: true }, { status: 202 });
 }

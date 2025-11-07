@@ -434,11 +434,17 @@ const EnvSchema = z
       typeof value.EMAIL_VERIFICATION_WEBHOOK_URL === "string"
         ? value.EMAIL_VERIFICATION_WEBHOOK_URL.trim()
         : "";
-    if (verificationWebhookRaw && !isHttpUrl(verificationWebhookRaw)) {
+    if (!verificationWebhookRaw) {
       ctx.addIssue({
         path: ["EMAIL_VERIFICATION_WEBHOOK_URL"],
         code: z.ZodIssueCode.custom,
-        message: "EMAIL_VERIFICATION_WEBHOOK_URL must be an absolute http(s) URL when set",
+        message: "EMAIL_VERIFICATION_WEBHOOK_URL must be set",
+      });
+    } else if (!isHttpUrl(verificationWebhookRaw)) {
+      ctx.addIssue({
+        path: ["EMAIL_VERIFICATION_WEBHOOK_URL"],
+        code: z.ZodIssueCode.custom,
+        message: "EMAIL_VERIFICATION_WEBHOOK_URL must be an absolute http(s) URL",
       });
     }
 
@@ -446,11 +452,17 @@ const EnvSchema = z
       typeof value.EMAIL_VERIFICATION_WEBHOOK_SECRET === "string"
         ? value.EMAIL_VERIFICATION_WEBHOOK_SECRET.trim()
         : "";
-    if (verificationWebhookSecretRaw && verificationWebhookSecretRaw.length < 16) {
+    if (!verificationWebhookSecretRaw) {
       ctx.addIssue({
         path: ["EMAIL_VERIFICATION_WEBHOOK_SECRET"],
         code: z.ZodIssueCode.custom,
-        message: "EMAIL_VERIFICATION_WEBHOOK_SECRET must be at least 16 characters when set",
+        message: "EMAIL_VERIFICATION_WEBHOOK_SECRET must be set",
+      });
+    } else if (verificationWebhookSecretRaw.length < 16) {
+      ctx.addIssue({
+        path: ["EMAIL_VERIFICATION_WEBHOOK_SECRET"],
+        code: z.ZodIssueCode.custom,
+        message: "EMAIL_VERIFICATION_WEBHOOK_SECRET must be at least 16 characters",
       });
     }
 

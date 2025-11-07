@@ -8,7 +8,7 @@ import React, {
   useState,
 } from "react";
 
-import { setSessionCookie } from "../services/api-client";
+import { getSessionCookie, setSessionCookie } from "../services/api-client";
 import {
   loginWithCredentials,
   logoutSession,
@@ -18,7 +18,6 @@ import {
   clearSessionCookie,
   loadSessionCookie,
   persistSessionCookie,
-  getCachedSessionCookie,
   persistPendingLogoutCookie,
   loadPendingLogoutCookie,
   clearPendingLogoutCookie,
@@ -131,7 +130,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const logout = useCallback(async () => {
     setStatus("authenticating");
     setError(null);
-    const activeCookie = getCachedSessionCookie();
+    const activeCookie = getSessionCookie();
     try {
       await logoutSession();
       void reportClientEvent("auth.logout.completed", { mode: "server" }, { cookie: activeCookie ?? undefined });

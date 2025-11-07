@@ -194,6 +194,23 @@ export async function handleLogin(req: Request, env: Env) {
   }
 
   if (!userRow.verified_at) {
+    const cooldownSeconds = resolveVerificationResendCooldown(env);
+    const remainingSeconds = await verificationCooldownRemainingSeconds(
+      env,
+      userRow.id,
+      cooldownSeconds,
+    );
+    if (remainingSeconds !== null) {
+      log.warn("auth.login.verification_cooldown", {
+        user_id: userRow.id,
+        cooldown_seconds: cooldownSeconds,
+        remaining_seconds: remainingSeconds,
+      });
+      return json(
+        { error: "Please wait before requesting another verification email." },
+        { status: 429 },
+      );
+    }
     try {
       const verification = await issueEmailVerification(env, userRow.id);
       await sendEmailVerificationNotification(env, {
@@ -264,8 +281,6 @@ export async function handleRecover(req: Request, env: Env) {
   const createdAt = now.toISOString();
   const expiresAt = expires.toISOString();
 
-  await env.DB.prepare(`DELETE FROM password_resets WHERE user_id = ?1`).bind(user.id).run();
-
   const resetUrl = buildResetUrl(env, token);
 
   try {
@@ -283,13 +298,15 @@ export async function handleRecover(req: Request, env: Env) {
     return json({ error: PASSWORD_RESET_DELIVERY_FAILED }, { status: 502 });
   }
 
-  await env.DB
-    .prepare(
-      `INSERT INTO password_resets (token_hash, user_id, created_at, expires_at, used_at)
-       VALUES (?1, ?2, ?3, ?4, NULL)`,
-    )
-    .bind(tokenHash, user.id, createdAt, expiresAt)
-    .run();
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM password_resets WHERE user_id = ?1`).bind(user.id),
+    env.DB
+      .prepare(
+        `INSERT INTO password_resets (token_hash, user_id, created_at, expires_at, used_at)
+         VALUES (?1, ?2, ?3, ?4, NULL)`,
+      )
+      .bind(tokenHash, user.id, createdAt, expiresAt),
+  ]);
 
   log.info("auth.password_reset.issued", {
     user_id: user.id,
@@ -453,28 +470,21 @@ export async function handleResendVerification(req: Request, env: Env) {
   }
 
   const cooldownSeconds = resolveVerificationResendCooldown(env);
-  const existingVerification = await env.DB
-    .prepare(
-      `SELECT created_at
-         FROM email_verifications
-        WHERE user_id = ?1
-        ORDER BY datetime(created_at) DESC
-        LIMIT 1`,
-    )
-    .bind(userRow.id)
-    .first<{ created_at: string }>();
-  if (existingVerification?.created_at) {
-    const createdAtMs = Date.parse(existingVerification.created_at);
-    if (Number.isFinite(createdAtMs) && Date.now() - createdAtMs < cooldownSeconds * 1000) {
-      log.warn("auth.resend.cooldown", {
-        user_id: userRow.id,
-        cooldown_seconds: cooldownSeconds,
-      });
-      return json(
-        { error: "Please wait before requesting another verification email." },
-        { status: 429 },
-      );
-    }
+  const remainingSeconds = await verificationCooldownRemainingSeconds(
+    env,
+    userRow.id,
+    cooldownSeconds,
+  );
+  if (remainingSeconds !== null) {
+    log.warn("auth.resend.cooldown", {
+      user_id: userRow.id,
+      cooldown_seconds: cooldownSeconds,
+      remaining_seconds: remainingSeconds,
+    });
+    return json(
+      { error: "Please wait before requesting another verification email." },
+      { status: 429 },
+    );
   }
 
   try {
@@ -511,6 +521,36 @@ async function readJson(req: Request): Promise<unknown> {
   } catch {
     return null;
   }
+}
+
+async function verificationCooldownRemainingSeconds(
+  env: Env,
+  userId: string,
+  cooldownSeconds: number,
+): Promise<number | null> {
+  const existingVerification = await env.DB
+    .prepare(
+      `SELECT created_at
+         FROM email_verifications
+        WHERE user_id = ?1
+        ORDER BY datetime(created_at) DESC
+        LIMIT 1`,
+    )
+    .bind(userId)
+    .first<{ created_at: string }>();
+  if (!existingVerification?.created_at) {
+    return null;
+  }
+  const createdAtMs = Date.parse(existingVerification.created_at);
+  if (!Number.isFinite(createdAtMs)) {
+    return null;
+  }
+  const elapsedMs = Date.now() - createdAtMs;
+  const cooldownMs = cooldownSeconds * 1000;
+  if (elapsedMs < cooldownMs) {
+    return Math.ceil((cooldownMs - elapsedMs) / 1000);
+  }
+  return null;
 }
 
 function validationError(error: z.ZodError) {

@@ -32,3 +32,9 @@ Document the device/OS combo in the PR description so we can track coverage acro
 
 ## Post-QA monitoring
 - After validating on-device, watch the `signup_flow.resend` funnel in Dashboard/`client.event` logs to ensure resend attempts succeed at expected rates and alert if the metric deviates (per Prompt Bible observability guidance).
+
+## Session handling & logout retries
+- The Expo client now stores `gb_session` cookies **only** inside `SecureStore`; we removed the extra in-memory cache so the raw token isn’t duplicated (Prompt Bible §0 “simple, maintainable solutions”).
+- `api-client` owns the ephemeral cookie that gets attached to `fetch` requests. Any feature that needs to read the cookie (e.g., logout retry queue) must call `getSessionCookie()` instead of reaching back into storage.
+- `AuthContext` subscribes to `AppState` + `NetInfo` so pending logout retries fire immediately when the app foregrounds or connectivity returns—verify the `auth.pending_logout.*` metrics stay flat after QA.
+- Future hardening: if we ever drop Expo’s cookie handling in favor of the platform jars (WebBrowser/AuthSession), update this doc and the logout queue runbook _before_ shipping so operators know how to rotate credentials.

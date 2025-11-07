@@ -105,5 +105,55 @@ describe("handleRecover notifications", () => {
       dispose();
     }
   });
-});
 
+  it("preserves an existing reset token if the webhook fails", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response("failure", { status: 500 }),
+    );
+    globalThis.fetch = fetchMock;
+
+    const { env, dispose } = await createWorkerEnv({
+      PASSWORD_RESET_WEBHOOK_URL: "https://hooks.test/password-reset",
+    });
+    try {
+      const user = await env.DB.prepare(`SELECT id FROM users WHERE email = ?1`)
+        .bind("demo@example.com")
+        .first<{ id: string }>();
+      if (!user?.id) {
+        throw new Error("Seeded user missing");
+      }
+      await env.DB
+        .prepare(
+          `INSERT INTO password_resets (token_hash, user_id, created_at, expires_at, used_at)
+           VALUES (?1, ?2, ?3, ?4, NULL)`,
+        )
+        .bind(
+          "legacy-token-hash",
+          user.id,
+          "2025-11-01T00:00:00.000Z",
+          "2025-11-01T01:00:00.000Z",
+        )
+        .run();
+
+      const req = new Request("https://app.test/api/auth/recover", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "demo@example.com" }),
+      });
+      const res = await handleRecover(req, env);
+      expect(res.status).toBe(502);
+
+      const row = await env.DB.prepare(
+        `SELECT token_hash
+           FROM password_resets pr
+           JOIN users u ON u.id = pr.user_id
+          WHERE u.email = ?1`,
+      )
+        .bind("demo@example.com")
+        .first<{ token_hash: string }>();
+      expect(row?.token_hash).toBe("legacy-token-hash");
+    } finally {
+      dispose();
+    }
+  });
+});

@@ -30,6 +30,10 @@ export function setSessionCookie(cookie?: string) {
     cookie && cookie.trim().length > 0 ? cookie.trim() : undefined;
 }
 
+export function getSessionCookie(): string | undefined {
+  return sessionCookie;
+}
+
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
   const url = new URL(buildApiUrl(path));
   if (query) {

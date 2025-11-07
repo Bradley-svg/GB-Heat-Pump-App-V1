@@ -1,5 +1,5 @@
 import { buildApiUrl } from "../config/app-config";
-import { getCachedSessionCookie } from "./session-storage";
+import { getSessionCookie } from "./api-client";
 
 type EventProperties = Record<string, string | number | boolean | null | undefined>;
 
@@ -18,7 +18,7 @@ export async function reportClientEvent(
     const headers: Record<string, string> = {
       "content-type": "application/json",
     };
-    const cookie = options.cookie ?? getCachedSessionCookie();
+    const cookie = options.cookie ?? getSessionCookie();
     if (cookie) {
       headers.Cookie = cookie;
     }

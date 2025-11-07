@@ -31,6 +31,7 @@ const MIGRATION_FILES = [
   "0016_email_verifications.sql",
   "0017_client_events.sql",
   "0018_backfill_signup_events.sql",
+  "0019_email_verification_cleanup.sql",
   "schema-indexes.sql",
 ];
 
@@ -80,6 +81,8 @@ export async function createWorkerEnv(overrides: Partial<Env> = {}): Promise<Wor
     AUTH_IP_BUCKETS: createTestKvNamespace(),
     PASSWORD_RESET_WEBHOOK_URL: "https://hooks.test/password-reset",
     PASSWORD_RESET_WEBHOOK_SECRET: "dev-reset-secret",
+    EMAIL_VERIFICATION_WEBHOOK_URL: "https://hooks.test/email-verification",
+    EMAIL_VERIFICATION_WEBHOOK_SECRET: "dev-verification-secret",
     EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS: "300",
     CLIENT_EVENT_RETENTION_DAYS: "60",
   };
