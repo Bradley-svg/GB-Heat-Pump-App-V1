@@ -1,7 +1,6 @@
 -- Enforce foreign key constraints across device-scoped tables.
 
 PRAGMA foreign_keys = OFF;
-BEGIN TRANSACTION;
 
 -- Cleanup orphaned rows before re-creating tables with constraints.
 DELETE FROM latest_state WHERE device_id NOT IN (SELECT device_id FROM devices);
@@ -108,7 +107,6 @@ SELECT device_id, ts_ms, expires_at, created_at FROM ingest_nonces;
 DROP TABLE ingest_nonces;
 ALTER TABLE ingest_nonces_new RENAME TO ingest_nonces;
 
-COMMIT;
 PRAGMA foreign_keys = ON;
 
 -- Re-create indexes lost during table rebuilds.
