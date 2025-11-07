@@ -76,6 +76,22 @@ The JSON payload also surfaces real time indicators:
 
 These fields are designed to feed dashboards or alerting pipelines without additional joins.
 
+### Login/Logout throttles (new alerts)
+- `auth.login.verification_cooldown` (warn) – emitted when an unverified user repeatedly logs in before the resend cooldown expires. Create a log-based metric that counts these per minute; page only if the count > 5 for the same tenant to avoid alert fatigue. Datadog example:
+  ```hcl
+  # monitor:greenbro.login.verification_cooldown
+  query   = "sum(last_5m):log(\"service:gb-workers AND msg:auth.login.verification_cooldown\").by(\"tenant\").rollup(sum, 300) > 5"
+  message = "@oncall-app-team Login verification cooldown breached for {{tenant.name}}. Investigate onboarding spam."
+  tags    = ["service:gb-workers","team:app"]
+  ```
+- `auth.pending_logout.flush_failed` (warn + metric fields) – already raised whenever the mobile logout queue fails to drain. Add a Datadog/Splunk alert keyed on `metric_key:mobile.pending_logout.flush_failed` so Ops can react before cookies pile up again:
+  ```
+  search (Splunk):
+  index=workers service=gb-workers metric_key="mobile.pending_logout.flush_failed"
+  | stats sum(count) as failures by source, user_email
+  ```
+- Pair both alerts with the existing `/metrics` dashboard so you can correlate spikes in `signup.resend_error_rate` and `signup.pending_logout_failures` (exposed via `formatMetricsJson`). See Prompt Bible §6 for burn-down prioritization.
+
 ### Sample queries
 
 - Prometheus: `greenbro_ops_server_error_rate > 0.02` (warn), `> 0.05` (critical).

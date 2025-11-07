@@ -108,4 +108,18 @@ Provisioning/rotation steps mirror the password reset flow, but call out the sec
 
 Because verification emails share the same downstream provider, your webhook handler should **validate `x-user-event-signature` with the verification secret**, then enqueue the provider call. Never log or forward the raw verification token outside GreenBro infrastructure.
 
+### Rotation checklist (preview → production)
+1. Generate a new verification secret in the password manager entry `EMAIL_VERIFICATION_WEBHOOK_SECRET` (note the rotation ticket).
+2. Update **preview** (run from repo root in PowerShell for traceability):  
+   ```bash
+   Write-Host \"[preview] rotating verification webhook\" -ForegroundColor Cyan
+   wrangler secret put EMAIL_VERIFICATION_WEBHOOK_URL --env preview
+   wrangler secret put EMAIL_VERIFICATION_WEBHOOK_SECRET --env preview
+   wrangler deploy --env preview
+   ```  
+   Issue a test signup (`curl -XPOST https://<preview>/api/auth/signup …`) and confirm the verification email flows through the new webhook path.
+3. Update **production** with the same commands (swap `--env preview` for `--env production`). As soon as the deploy finishes, call `/api/auth/signup` with a sandbox account and confirm the provider sees the webhook.
+4. Record the rotation (date, operator, ticket) in the password manager entry and archive the previous secret so rollback is possible.
+5. If any step fails, rerun `wrangler secret put` with the previous value and redeploy—per Prompt Bible Appendix C (DoD), log the incident and add a postmortem note.
+
 Keep this playbook next to the deployment runbook. When onboarding new engineers, walk through a full dry run (preview secrets, test email, Datadog dashboard) so they understand the surface area before touching production.
