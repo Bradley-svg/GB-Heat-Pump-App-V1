@@ -59,6 +59,19 @@ function insertOpsMetric(env: Awaited<ReturnType<typeof createWorkerEnv>>["env"]
     .run();
 }
 
+async function insertClientEvent(
+  env: Awaited<ReturnType<typeof createWorkerEnv>>["env"],
+  row: { created_at: string; email: string },
+) {
+  const id = `evt-${Math.random().toString(36).slice(2)}`;
+  await env.DB.prepare(
+    `INSERT INTO client_events (id, created_at, event, source, user_email, dimension, properties)
+     VALUES (?1, ?2, 'signup_flow.result', 'test', ?3, 'pending_verification', '{}')`,
+  )
+    .bind(id, row.created_at, row.email)
+    .run();
+}
+
 describe("runTelemetryRetention", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -83,6 +96,8 @@ describe("runTelemetryRetention", () => {
 
     await insertOpsMetric(env, { ts: oldIso });
     await insertOpsMetric(env, { ts: freshIso });
+    await insertClientEvent(env, { created_at: oldIso, email: "old@example.com" });
+    await insertClientEvent(env, { created_at: freshIso, email: "fresh@example.com" });
 
     const summary = await runTelemetryRetention(env, { now });
 
@@ -104,14 +119,30 @@ describe("runTelemetryRetention", () => {
       .bind(freshIso)
       .first<{ cnt: number }>();
 
+    const oldClientEvents = await env.DB.prepare(
+      `SELECT COUNT(*) AS cnt FROM client_events WHERE user_email = ?1`,
+    )
+      .bind("old@example.com")
+      .first<{ cnt: number }>();
+    const freshClientEvents = await env.DB.prepare(
+      `SELECT COUNT(*) AS cnt FROM client_events WHERE user_email = ?1`,
+    )
+      .bind("fresh@example.com")
+      .first<{ cnt: number }>();
+
     expect(summary.telemetry.deleted).toBe(1);
     expect(summary.opsMetricsDeleted).toBe(1);
+    expect(summary.clientEventsDeleted).toBe(1);
+    expect(summary.clientEventRetentionDays).toBe(60);
 
     expect(oldTelemetry?.cnt ?? 0).toBe(0);
     expect(freshTelemetry?.cnt ?? 0).toBe(1);
 
     expect(oldOps?.cnt ?? 0).toBe(0);
     expect(newOps?.cnt ?? 0).toBe(1);
+
+    expect(oldClientEvents?.cnt ?? 0).toBe(0);
+    expect(freshClientEvents?.cnt ?? 0).toBe(1);
 
     const keys = archive.listKeys();
     expect(keys.length).toBeGreaterThanOrEqual(1);

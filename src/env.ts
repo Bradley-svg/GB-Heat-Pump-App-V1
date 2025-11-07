@@ -61,6 +61,7 @@ export interface Env {
   EMAIL_VERIFICATION_WEBHOOK_URL?: string;
   EMAIL_VERIFICATION_WEBHOOK_SECRET?: string;
   EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS?: string;
+  CLIENT_EVENT_RETENTION_DAYS?: string;
 }
 
 export type User = {
@@ -464,6 +465,21 @@ const EnvSchema = z
           path: ["EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS"],
           code: z.ZodIssueCode.custom,
           message: "EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS must be a positive integer when set",
+        });
+      }
+    }
+
+    const clientEventRetentionRaw =
+      typeof value.CLIENT_EVENT_RETENTION_DAYS === "string" ?
+        value.CLIENT_EVENT_RETENTION_DAYS.trim() :
+        "";
+    if (clientEventRetentionRaw) {
+      const parsed = Number.parseInt(clientEventRetentionRaw, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        ctx.addIssue({
+          path: ["CLIENT_EVENT_RETENTION_DAYS"],
+          code: z.ZodIssueCode.custom,
+          message: "CLIENT_EVENT_RETENTION_DAYS must be a positive integer when set",
         });
       }
     }

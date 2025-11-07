@@ -4,6 +4,7 @@ import { clearCronCursor, readCronCursor, writeCronCursor } from "../lib/cron-cu
 import { systemLogger, type Logger } from "../utils/logging";
 
 const DEFAULT_RETENTION_DAYS = 90;
+const CLIENT_EVENT_RETENTION_DEFAULT_DAYS = 60;
 const MIN_RETENTION_DAYS = 7;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const TELEMETRY_BATCH_SIZE = 250;
@@ -42,6 +43,8 @@ export type RetentionSummary = {
   opsMetricsDeleted: number;
   telemetryHasMore: boolean;
   telemetryCursor: number | null;
+  clientEventsDeleted: number;
+  clientEventRetentionDays: number;
 };
 
 export interface RetentionOptions {
@@ -66,6 +69,9 @@ export async function runTelemetryRetention(env: Env, options: RetentionOptions 
   const retentionDays = parseRetentionDays(env.TELEMETRY_RETENTION_DAYS);
   const cutoffMs = now.getTime() - retentionDays * MS_PER_DAY;
   const cutoffIso = new Date(cutoffMs).toISOString();
+  const clientEventRetentionDays = parseClientEventRetentionDays(env.CLIENT_EVENT_RETENTION_DAYS);
+  const clientEventsCutoffMs = now.getTime() - clientEventRetentionDays * MS_PER_DAY;
+  const clientEventsCutoffIso = new Date(clientEventsCutoffMs).toISOString();
   const jobId = options.jobId ?? generateJobId(now);
 
   const baseLogger = options.logger ?? systemLogger({ task: "data-retention" });
@@ -126,11 +132,18 @@ export async function runTelemetryRetention(env: Env, options: RetentionOptions 
     log: log.with({ table: "ops_metrics" }),
   });
 
+  const clientEventsDeleted = await pruneClientEvents(env, {
+    cutoffIso: clientEventsCutoffIso,
+    dryRun: Boolean(options.dryRun),
+    log: log.with({ table: "client_events" }),
+  });
+
   log.info("retention.completed", {
     telemetry_deleted: telemetrySummary.deleted,
     telemetry_batches: telemetrySummary.batches,
     telemetry_backups: telemetrySummary.backups.length,
     ops_metrics_deleted: opsDeleted,
+    client_events_deleted: clientEventsDeleted,
     telemetry_has_more: telemetrySummary.hasMore,
     telemetry_resume_cursor: telemetrySummary.resumeCursor,
   });
@@ -146,6 +159,8 @@ export async function runTelemetryRetention(env: Env, options: RetentionOptions 
     opsMetricsDeleted: opsDeleted,
     telemetryHasMore: telemetrySummary.hasMore,
     telemetryCursor: telemetrySummary.resumeCursor,
+    clientEventsDeleted,
+    clientEventRetentionDays,
   };
 }
 
@@ -155,6 +170,15 @@ function parseRetentionDays(raw: string | undefined): number {
   if (!Number.isFinite(parsed)) return DEFAULT_RETENTION_DAYS;
   const coerced = Math.floor(parsed);
   if (coerced <= 0) return DEFAULT_RETENTION_DAYS;
+  return Math.max(MIN_RETENTION_DAYS, coerced);
+}
+
+function parseClientEventRetentionDays(raw: string | undefined): number {
+  if (!raw) return CLIENT_EVENT_RETENTION_DEFAULT_DAYS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return CLIENT_EVENT_RETENTION_DEFAULT_DAYS;
+  const coerced = Math.floor(parsed);
+  if (coerced <= 0) return CLIENT_EVENT_RETENTION_DEFAULT_DAYS;
   return Math.max(MIN_RETENTION_DAYS, coerced);
 }
 
@@ -347,4 +371,34 @@ function toNumber(value: number | string): number {
 function toNumberNullable(value: Nullable<number | string>): number | null {
   if (value === null || value === undefined) return null;
   return toNumber(value);
+}
+
+async function pruneClientEvents(
+  env: Env,
+  params: { cutoffIso: string; dryRun: boolean; log: Logger },
+): Promise<number> {
+  if (params.dryRun) {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS cnt FROM client_events WHERE created_at < ?1`,
+    )
+      .bind(params.cutoffIso)
+      .first<{ cnt: number | string | null }>();
+    const raw = row?.cnt ?? 0;
+    const count = typeof raw === "number" ? raw : Number(raw);
+    params.log.info("retention.client_events.dry_run", {
+      cutoff: params.cutoffIso,
+      would_delete: count,
+    });
+    return 0;
+  }
+
+  const result = await env.DB.prepare(`DELETE FROM client_events WHERE created_at < ?1`)
+    .bind(params.cutoffIso)
+    .run();
+  const deleted = Number(result.meta?.changes ?? 0);
+  params.log.info("retention.client_events.deleted", {
+    deleted,
+    cutoff: params.cutoffIso,
+  });
+  return deleted;
 }
