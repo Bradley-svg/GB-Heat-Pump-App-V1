@@ -11,6 +11,7 @@ import {
   opsMetricsWindowStart,
   pruneOpsMetrics,
 } from "../lib/ops-metrics";
+import { loadSignupFunnelSummary } from "../lib/signup-funnel";
 
 export async function handleOpsOverview(req: Request, env: Env) {
   const log = loggerForRequest(req, { route: "/api/ops/overview" });
@@ -64,7 +65,13 @@ export async function handleOpsOverview(req: Request, env: Env) {
         }>()
     ).results ?? [];
 
-  const metrics = formatMetricsJson(deviceStats ?? { total: 0, online: 0 }, opsRows);
+  const signupSummary = await loadSignupFunnelSummary(env, { now: new Date(now) });
+  const metrics = formatMetricsJson(
+    deviceStats ?? { total: 0, online: 0 },
+    opsRows,
+    signupSummary,
+    new Date(now).toISOString(),
+  );
 
   const recentRows =
     (
@@ -120,9 +127,10 @@ export async function handleOpsOverview(req: Request, env: Env) {
     generated_at: metrics.generated_at,
     scope: "admin" as const,
     devices: metrics.devices,
-   ops: metrics.ops,
-   ops_summary: metrics.ops_summary,
-   thresholds: metrics.thresholds?.ops ?? null,
+    ops: metrics.ops,
+    ops_summary: metrics.ops_summary,
+    thresholds: metrics.thresholds?.ops ?? null,
+    signup: metrics.signup,
     ops_window: {
       start: windowStart,
       days: OPS_METRICS_WINDOW_DAYS,

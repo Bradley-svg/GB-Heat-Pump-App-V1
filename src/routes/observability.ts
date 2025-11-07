@@ -3,9 +3,11 @@ import { requireAccessUser } from "../lib/access";
 import { ClientErrorReportSchema, ClientEventReportSchema } from "../schemas/observability";
 import type { ClientErrorReport, ClientEventReport } from "../schemas/observability";
 import { loggerForRequest } from "../utils/logging";
+import type { Logger } from "../utils/logging";
 import { json } from "../utils/responses";
 import { validationErrorResponse, validateWithSchema } from "../utils/validation";
 import { checkIpRateLimit } from "../lib/ip-rate-limit";
+import { recordClientEvent } from "../lib/client-events";
 
 const ROUTE_PATH = "/api/observability/client-errors";
 const EVENTS_ROUTE_PATH = "/api/observability/client-events";
@@ -105,6 +107,26 @@ export async function handleClientEventReport(req: Request, env: Env) {
   }
   const body = parsed.data;
   const log = loggerForRequest(req, { route: EVENTS_ROUTE_PATH });
+
+  await persistClientEvent(env, {
+    event: body.event,
+    source: body.source ?? undefined,
+    userEmail: user.email,
+    dimension: deriveEventDimension(body.event, body.properties),
+    properties: body.properties ?? null,
+  }, log);
+
+  if (body.event === "auth.pending_logout.flush_failed") {
+    log.warn("auth.pending_logout.flush_failed", {
+      metric: "greenbro.mobile.pending_logout.flush_failed",
+      metric_key: "mobile.pending_logout.flush_failed",
+      count: 1,
+      source: body.source ?? "unknown",
+      user_email: user.email,
+      reason: typeof body.properties?.message === "string" ? body.properties.message : undefined,
+    });
+  }
+
   log.info("client.event", {
     event: body.event,
     source: body.source ?? "unknown",
@@ -112,6 +134,46 @@ export async function handleClientEventReport(req: Request, env: Env) {
     user_email: user.email,
   });
   return json({ ok: true }, { status: 202 });
+}
+
+async function persistClientEvent(
+  env: Env,
+  record: {
+    event: string;
+    source?: string;
+    userEmail?: string;
+    dimension?: string | null;
+    properties: Record<string, unknown> | null;
+  },
+  log: Logger,
+) {
+  try {
+    await recordClientEvent(env, record);
+  } catch (error) {
+    log.warn("client.event.persist_failed", {
+      event: record.event,
+      error,
+    });
+  }
+}
+
+function deriveEventDimension(
+  event: string,
+  properties: ClientEventReport["properties"],
+): string | null {
+  if (!properties || typeof properties !== "object") {
+    return null;
+  }
+  if (event.startsWith("signup_flow")) {
+    const status = (properties as Record<string, unknown>).status;
+    if (typeof status === "string" && status.trim().length > 0) {
+      return status.trim();
+    }
+  }
+  if (event === "auth.pending_logout.flush_failed") {
+    return "flush_failed";
+  }
+  return null;
 }
 
 function resolveMaxPayloadBytes(env: Env): number {

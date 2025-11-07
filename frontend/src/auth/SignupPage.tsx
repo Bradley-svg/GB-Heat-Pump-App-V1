@@ -3,14 +3,13 @@ import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { AuthLayout } from "./AuthLayout";
-import { useApiClient, useCurrentUserState } from "../app/contexts";
+import { useApiClient } from "../app/contexts";
 import { signup } from "../services/auth-service";
 import { ApiError } from "../services/api-client";
 import { trackClientEvent } from "../services/telemetry";
 
 export function SignupPage() {
   const api = useApiClient();
-  const currentUser = useCurrentUserState();
   const navigate = useNavigate();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -48,19 +47,12 @@ export function SignupPage() {
         phone: phone || undefined,
         company: company || undefined,
       });
-      let refreshed = false;
-      try {
-        await currentUser.refresh();
-        refreshed = true;
-      } catch (refreshError) {
-        console.warn("auth.signup.refresh_failed", refreshError);
-      }
       void trackClientEvent("signup_flow.result", {
-        status: refreshed ? "authenticated" : "pending_verification",
+        status: "pending_verification",
       });
       navigate("/auth/signup/complete", {
         replace: true,
-        state: { status: refreshed ? "authenticated" : "pending_email" },
+        state: { email },
       });
     } catch (err) {
       const message =

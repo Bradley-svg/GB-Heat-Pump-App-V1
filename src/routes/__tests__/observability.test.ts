@@ -5,9 +5,14 @@ import * as accessModule from "../../lib/access";
 import { handleClientErrorReport, handleClientEventReport } from "../observability";
 import * as loggingModule from "../../utils/logging";
 import { checkIpRateLimit } from "../../lib/ip-rate-limit";
+import * as clientEventsModule from "../../lib/client-events";
 
 vi.mock("../../lib/ip-rate-limit", () => ({
   checkIpRateLimit: vi.fn(),
+}));
+
+vi.mock("../../lib/client-events", () => ({
+  recordClientEvent: vi.fn(),
 }));
 
 type LoggerMock = {
@@ -42,6 +47,7 @@ const ADMIN_USER: User = {
 const requireAccessUserMock = vi.spyOn(accessModule, "requireAccessUser");
 const loggerForRequestMock = vi.spyOn(loggingModule, "loggerForRequest");
 const mockedRateLimit = vi.mocked(checkIpRateLimit);
+const recordClientEventMock = vi.mocked(clientEventsModule.recordClientEvent);
 
 function createLoggerStub(): LoggerMock {
   const stub: LoggerMock = {
@@ -59,12 +65,14 @@ afterEach(() => {
   requireAccessUserMock.mockReset();
   loggerForRequestMock.mockReset();
   mockedRateLimit.mockReset();
+  recordClientEventMock.mockReset();
 });
 
 afterAll(() => {
   requireAccessUserMock.mockRestore();
   loggerForRequestMock.mockRestore();
   mockedRateLimit.mockRestore();
+  recordClientEventMock.mockRestore();
 });
 
 describe("handleClientErrorReport", () => {
@@ -80,6 +88,7 @@ describe("handleClientErrorReport", () => {
 
     const res = await handleClientErrorReport(req, env);
     expect(res.status).toBe(401);
+    expect(recordClientEventMock).not.toHaveBeenCalled();
   });
 
   it("returns 400 for malformed JSON", async () => {
@@ -231,6 +240,7 @@ describe("handleClientEventReport", () => {
     const res = await handleClientEventReport(req, env);
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: "Unauthorized" });
+    expect(recordClientEventMock).not.toHaveBeenCalled();
   });
 
   it("enforces AUTH_IP rate limits", async () => {
@@ -292,6 +302,15 @@ describe("handleClientEventReport", () => {
       properties: payload.properties,
       user_email: ADMIN_USER.email,
     });
+    expect(recordClientEventMock).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        event: "signup_flow.result",
+        source: payload.source,
+        userEmail: ADMIN_USER.email,
+        dimension: "pending_verification",
+      }),
+    );
   });
 
   it("validates payloads", async () => {
@@ -308,5 +327,40 @@ describe("handleClientEventReport", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe("Validation failed");
+  });
+
+  it("emits alert metrics when pending logout flush fails", async () => {
+    const logger = createLoggerStub();
+    loggerForRequestMock.mockReturnValueOnce(logger as unknown as loggingModule.Logger);
+    requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
+    const env = createEnv();
+    const payload = {
+      event: "auth.pending_logout.flush_failed",
+      source: "mobile",
+      properties: { message: "network down" },
+    };
+    const req = new Request("https://app.example/api/observability/client-events", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const res = await handleClientEventReport(req, env);
+    expect(res.status).toBe(202);
+    expect(logger.warn).toHaveBeenCalledWith(
+      "auth.pending_logout.flush_failed",
+      expect.objectContaining({
+        metric: "greenbro.mobile.pending_logout.flush_failed",
+        source: "mobile",
+        user_email: ADMIN_USER.email,
+        reason: "network down",
+      }),
+    );
+    expect(recordClientEventMock).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        event: "auth.pending_logout.flush_failed",
+        dimension: "flush_failed",
+      }),
+    );
   });
 });

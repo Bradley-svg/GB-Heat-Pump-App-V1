@@ -336,6 +336,7 @@ export interface OpsOverviewResponse {
   ops: OpsMetricRow[];
   ops_summary: OpsSummary;
   thresholds: OpsThresholds | null;
+  signup: SignupFunnelMetrics;
   recent: OpsRecentEvent[];
   ops_window: OpsWindowMeta;
 }
@@ -375,6 +376,34 @@ export interface OpsThresholds {
   error_rate: { warn: number; critical: number };
   client_error_rate: { warn: number; critical: number };
   avg_duration_ms: { warn: number; critical: number };
+}
+
+export interface SignupThresholdPair {
+  warn: number;
+  critical: number;
+}
+
+export interface SignupFunnelMetrics {
+  window_start: string;
+  window_days: number;
+  submissions: number;
+  authenticated: number;
+  pending: number;
+  errors: number;
+  conversion_rate: number;
+  pending_ratio: number;
+  error_rate: number;
+  status: "ok" | "warn" | "critical";
+  thresholds: {
+    conversion_rate: SignupThresholdPair;
+    pending_ratio: SignupThresholdPair;
+    error_rate: SignupThresholdPair;
+  };
+  metrics?: {
+    conversion_rate: { value: number; status: string; thresholds: SignupThresholdPair };
+    pending_ratio: { value: number; status: string; thresholds: SignupThresholdPair };
+    error_rate: { value: number; status: string; thresholds: SignupThresholdPair };
+  };
 }
 
 export interface OpsRecentEvent {

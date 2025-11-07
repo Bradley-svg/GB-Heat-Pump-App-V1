@@ -9,6 +9,7 @@ import {
   opsMetricsWindowStart,
   pruneOpsMetrics,
 } from "../lib/ops-metrics";
+import { loadSignupFunnelSummary } from "../lib/signup-funnel";
 
 export async function handleMetrics(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
@@ -67,7 +68,13 @@ export async function handleMetrics(req: Request, env: Env) {
     online: deviceStats?.online ?? null,
   };
 
-  const metricsPayload = formatMetricsJson(deviceSummary, opsRows);
+  const signupSummary = await loadSignupFunnelSummary(env, { now: new Date(now) });
+  const metricsPayload = formatMetricsJson(
+    deviceSummary,
+    opsRows,
+    signupSummary,
+    new Date(now).toISOString(),
+  );
 
   if (isDashboardFormat) {
     const dashboard = buildDashboardPayload(metricsPayload);
@@ -92,7 +99,7 @@ export async function handleMetrics(req: Request, env: Env) {
     });
   }
 
-  const promPayload = formatPromMetrics(deviceSummary, opsRows);
+  const promPayload = formatPromMetrics(deviceSummary, opsRows, signupSummary);
   return text(promPayload, {
     headers: {
       "content-type": "text/plain; charset=utf-8",
@@ -128,6 +135,25 @@ function buildDashboardPayload(payload: MetricsJsonPayload) {
     "ok" as SeverityLevel,
   );
 
+  const signupMetrics = payload.signup;
+  const signupThresholds = payload.thresholds.signup;
+  const signupConversionSeverity = deriveInvertedSeverity(
+    signupMetrics.conversion_rate,
+    signupThresholds.conversion_rate,
+  );
+  const signupPendingSeverity = deriveSeverity(
+    signupMetrics.pending_ratio,
+    signupThresholds.pending_ratio,
+  );
+  const signupErrorSeverity = deriveSeverity(
+    signupMetrics.error_rate,
+    signupThresholds.error_rate,
+  );
+  const overallSignupSeverity = [signupConversionSeverity, signupPendingSeverity, signupErrorSeverity].reduce(
+    (acc, level) => (severityWeight(level) > severityWeight(acc) ? level : acc),
+    signupMetrics.status,
+  );
+
   return {
     generated_at: payload.generated_at,
     devices: {
@@ -159,6 +185,27 @@ function buildDashboardPayload(payload: MetricsJsonPayload) {
       top_server_error_routes: payload.ops_summary.top_server_error_routes,
     },
     thresholds: payload.thresholds,
+    signup: {
+      ...signupMetrics,
+      status: overallSignupSeverity,
+      metrics: {
+        conversion_rate: {
+          value: signupMetrics.conversion_rate,
+          status: signupConversionSeverity,
+          thresholds: signupThresholds.conversion_rate,
+        },
+        pending_ratio: {
+          value: signupMetrics.pending_ratio,
+          status: signupPendingSeverity,
+          thresholds: signupThresholds.pending_ratio,
+        },
+        error_rate: {
+          value: signupMetrics.error_rate,
+          status: signupErrorSeverity,
+          thresholds: signupThresholds.error_rate,
+        },
+      },
+    },
   };
 }
 
@@ -180,4 +227,13 @@ function severityWeight(level: SeverityLevel): number {
     default:
       return 1;
   }
+}
+
+function deriveInvertedSeverity(
+  value: number,
+  thresholds: { warn: number; critical: number },
+): SeverityLevel {
+  if (value <= thresholds.critical) return "critical";
+  if (value <= thresholds.warn) return "warn";
+  return "ok";
 }

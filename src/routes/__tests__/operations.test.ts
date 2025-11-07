@@ -34,6 +34,8 @@ const MIGRATIONS = [
   "migrations/0013_dashboard_indexes.sql",
   "migrations/0014_cache_tokens.sql",
   "migrations/0015_auth.sql",
+  "migrations/0016_email_verifications.sql",
+  "migrations/0017_client_events.sql",
 ];
 
 const DEV_SEED = "seeds/dev/seed.sql";
@@ -142,6 +144,7 @@ describe("handleOpsOverview", () => {
       expect(Array.isArray(body.ops)).toBe(true);
       expect(Array.isArray(body.recent)).toBe(true);
       expect(body.recent.length).toBeLessThanOrEqual(5);
+      expect(body.signup).toBeTruthy();
       expect(body.ops_window).toMatchObject({
         start: expect.any(String),
         days: OPS_METRICS_WINDOW_DAYS,

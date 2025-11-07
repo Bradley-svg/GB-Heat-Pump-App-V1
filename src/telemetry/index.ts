@@ -1,6 +1,10 @@
 import { nowISO, round } from "../utils";
+import type { SignupFunnelSummary } from "../lib/signup-funnel";
+import { SIGNUP_FUNNEL_WINDOW_DAYS } from "../lib/signup-funnel";
 
 export type MetricsFormat = "prom" | "json";
+
+type SeverityLevel = "ok" | "warn" | "critical";
 
 export interface DerivationInput {
   supplyC?: number | null;
@@ -39,6 +43,11 @@ export interface OpsMetricNormalized {
   max_duration_ms: number;
 }
 
+export interface SignupMetricsPayload extends SignupFunnelSummary {
+  status: SeverityLevel;
+  thresholds: typeof ALERT_THRESHOLDS.signup;
+}
+
 const WATER_DENSITY_KG_PER_L = 0.997;
 const WATER_SPECIFIC_HEAT_KJ_PER_KG_C = 4.186;
 const MIN_COP_POWER_KW = 0.05;
@@ -56,6 +65,11 @@ export const ALERT_THRESHOLDS = {
   ingest: {
     consecutive_failures: { warn: 3, critical: 5 },
     rate_limit_per_device: { warn: 90, critical: 120 },
+  },
+  signup: {
+    conversion_rate: { warn: 0.45, critical: 0.25 },
+    pending_ratio: { warn: 0.35, critical: 0.55 },
+    error_rate: { warn: 0.2, critical: 0.35 },
   },
 } as const;
 
@@ -151,6 +165,68 @@ export function normalizeOpsMetrics(rows: OpsMetricInput[]): OpsMetricNormalized
   });
 }
 
+function normalizeSignupSummary(
+  summary: SignupFunnelSummary | undefined,
+  generatedAt: string,
+): SignupMetricsPayload {
+  const base: SignupFunnelSummary =
+    summary ??
+    {
+      window_start: generatedAt,
+      window_days: SIGNUP_FUNNEL_WINDOW_DAYS,
+      submissions: 0,
+      authenticated: 0,
+      pending: 0,
+      errors: 0,
+      conversion_rate: 0,
+      pending_ratio: 0,
+      error_rate: 0,
+    };
+
+  const submissions = Math.max(0, base.submissions ?? 0);
+  const authenticated = Math.max(0, base.authenticated ?? 0);
+  const pending = Math.max(0, base.pending ?? 0);
+  const errors = Math.max(0, base.errors ?? 0);
+
+  const conversionRate =
+    submissions > 0 ? authenticated / submissions : base.conversion_rate ?? 0;
+  const pendingRatio =
+    submissions > 0 ? pending / submissions : base.pending_ratio ?? (pending > 0 ? 1 : 0);
+  const errorRate =
+    submissions > 0 ? errors / submissions : base.error_rate ?? (errors > 0 ? 1 : 0);
+
+  const normalized = {
+    window_start: base.window_start,
+    window_days: base.window_days,
+    submissions,
+    authenticated,
+    pending,
+    errors,
+    conversion_rate: Number(conversionRate.toFixed(4)),
+    pending_ratio: Number(pendingRatio.toFixed(4)),
+    error_rate: Number(errorRate.toFixed(4)),
+  };
+
+  const conversionSeverity = deriveInvertedSeverity(
+    normalized.conversion_rate,
+    ALERT_THRESHOLDS.signup.conversion_rate,
+  );
+  const pendingSeverity = severityFromThresholds(
+    normalized.pending_ratio,
+    ALERT_THRESHOLDS.signup.pending_ratio,
+  );
+  const errorSeverity = severityFromThresholds(
+    normalized.error_rate,
+    ALERT_THRESHOLDS.signup.error_rate,
+  );
+
+  return {
+    ...normalized,
+    status: worstSeverity(conversionSeverity, worstSeverity(pendingSeverity, errorSeverity)),
+    thresholds: ALERT_THRESHOLDS.signup,
+  };
+}
+
 export function summarizeOpsMetrics(rows: OpsMetricNormalized[]) {
   let total = 0;
   let serverErrors = 0;
@@ -207,12 +283,14 @@ export function summarizeOpsMetrics(rows: OpsMetricNormalized[]) {
 export function formatMetricsJson(
   devices: DeviceSummaryInput,
   opsRows: OpsMetricInput[],
+  signupSummary?: SignupFunnelSummary,
   generatedAt: string = nowISO(),
 ) {
   const summary = normalizeDeviceSummary(devices);
   const ops = normalizeOpsMetrics(opsRows);
   const opsSummary = summarizeOpsMetrics(ops);
   const offlineRatio = summary.total > 0 ? summary.offline / summary.total : 0;
+  const signup = normalizeSignupSummary(signupSummary, generatedAt);
 
   return {
     devices: {
@@ -221,6 +299,7 @@ export function formatMetricsJson(
     },
     ops,
     ops_summary: opsSummary,
+    signup,
     thresholds: ALERT_THRESHOLDS,
     generated_at: generatedAt,
   };
@@ -229,12 +308,14 @@ export function formatMetricsJson(
 export function formatPromMetrics(
   devices: DeviceSummaryInput,
   opsRows: OpsMetricInput[],
+  signupSummary?: SignupFunnelSummary,
   timestampMs: number = Date.now(),
 ) {
   const summary = normalizeDeviceSummary(devices);
   const ops = normalizeOpsMetrics(opsRows);
   const opsSummary = summarizeOpsMetrics(ops);
   const offlineRatio = summary.total > 0 ? summary.offline / summary.total : 0;
+  const signup = normalizeSignupSummary(signupSummary, new Date(timestampMs).toISOString());
   const lines: string[] = [
     "# HELP greenbro_devices_total Total registered devices",
     "# TYPE greenbro_devices_total gauge",
@@ -276,6 +357,60 @@ export function formatPromMetrics(
   lines.push("# HELP greenbro_ops_slow_rate Share of requests above avg latency threshold");
   lines.push("# TYPE greenbro_ops_slow_rate gauge");
   lines.push(`greenbro_ops_slow_rate ${opsSummary.slow_rate}`);
+  lines.push("# HELP greenbro_signup_submissions_total Signup submissions captured within window");
+  lines.push("# TYPE greenbro_signup_submissions_total gauge");
+  lines.push(`greenbro_signup_submissions_total ${signup.submissions}`);
+  lines.push("# HELP greenbro_signup_authenticated_total Signup verifications completed within window");
+  lines.push("# TYPE greenbro_signup_authenticated_total gauge");
+  lines.push(`greenbro_signup_authenticated_total ${signup.authenticated}`);
+  lines.push("# HELP greenbro_signup_pending_total Pending verifications within window");
+  lines.push("# TYPE greenbro_signup_pending_total gauge");
+  lines.push(`greenbro_signup_pending_total ${signup.pending}`);
+  lines.push("# HELP greenbro_signup_error_total Signup errors recorded within window");
+  lines.push("# TYPE greenbro_signup_error_total gauge");
+  lines.push(`greenbro_signup_error_total ${signup.errors}`);
+  lines.push("# HELP greenbro_signup_conversion_rate Signup conversion rate within window");
+  lines.push("# TYPE greenbro_signup_conversion_rate gauge");
+  lines.push(`greenbro_signup_conversion_rate ${signup.conversion_rate}`);
+  lines.push("# HELP greenbro_signup_pending_ratio Pending verification ratio within window");
+  lines.push("# TYPE greenbro_signup_pending_ratio gauge");
+  lines.push(`greenbro_signup_pending_ratio ${signup.pending_ratio}`);
+  lines.push("# HELP greenbro_signup_error_ratio Signup error ratio within window");
+  lines.push("# TYPE greenbro_signup_error_ratio gauge");
+  lines.push(`greenbro_signup_error_ratio ${signup.error_rate}`);
 
   return lines.join("\n") + "\n";
+}
+
+function severityFromThresholds(
+  value: number,
+  thresholds: { warn: number; critical: number },
+): SeverityLevel {
+  if (value >= thresholds.critical) return "critical";
+  if (value >= thresholds.warn) return "warn";
+  return "ok";
+}
+
+function deriveInvertedSeverity(
+  value: number,
+  thresholds: { warn: number; critical: number },
+): SeverityLevel {
+  if (value <= thresholds.critical) return "critical";
+  if (value <= thresholds.warn) return "warn";
+  return "ok";
+}
+
+function worstSeverity(a: SeverityLevel, b: SeverityLevel): SeverityLevel {
+  return severityWeight(a) >= severityWeight(b) ? a : b;
+}
+
+function severityWeight(level: SeverityLevel): number {
+  switch (level) {
+    case "critical":
+      return 3;
+    case "warn":
+      return 2;
+    default:
+      return 1;
+  }
 }

@@ -3,6 +3,21 @@ import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import type { Env, User } from "../../env";
 import * as accessModule from "../../lib/access";
 import { handleMetrics } from "../metrics";
+import * as signupModule from "../../lib/signup-funnel";
+
+vi.mock("../../lib/signup-funnel", () => ({
+  loadSignupFunnelSummary: vi.fn().mockResolvedValue({
+    window_start: "2025-01-01T00:00:00.000Z",
+    window_days: 7,
+    submissions: 4,
+    authenticated: 2,
+    pending: 1,
+    errors: 1,
+    conversion_rate: 0.5,
+    pending_ratio: 0.25,
+    error_rate: 0.25,
+  }),
+}));
 
 function createMockEnv(overrides?: {
   device?: { total: number; online: number | null };
@@ -59,6 +74,7 @@ function createMockEnv(overrides?: {
 }
 
 const requireAccessUserMock = vi.spyOn(accessModule, "requireAccessUser");
+const loadSignupFunnelSummaryMock = vi.mocked(signupModule.loadSignupFunnelSummary);
 
 const ADMIN_USER: User = {
   email: "admin@example.com",
@@ -68,10 +84,12 @@ const ADMIN_USER: User = {
 
 afterEach(() => {
   requireAccessUserMock.mockReset();
+  loadSignupFunnelSummaryMock.mockClear();
 });
 
 afterAll(() => {
   requireAccessUserMock.mockRestore();
+  loadSignupFunnelSummaryMock.mockRestore();
 });
 
 describe("handleMetrics", () => {
@@ -117,6 +135,14 @@ describe("handleMetrics", () => {
       start: expect.any(String),
       days: expect.any(Number),
     });
+    expect(body.signup).toMatchObject({
+      submissions: 4,
+      authenticated: 2,
+      pending: 1,
+      errors: 1,
+      status: expect.any(String),
+    });
+    expect(loadSignupFunnelSummaryMock).toHaveBeenCalled();
   });
 
   it("returns dashboard payload with derived statuses", async () => {
@@ -138,6 +164,8 @@ describe("handleMetrics", () => {
     expect(body.ops.status).toMatch(/ok|warn|critical/);
     expect(body.ops.metrics.server_error_rate.value).toBeGreaterThan(0);
     expect(Array.isArray(body.ops.slow_routes)).toBe(true);
+    expect(body.signup).toBeTruthy();
+    expect(body.signup.metrics.conversion_rate.value).toBeGreaterThan(0);
     expect(body.ops_window).toMatchObject({
       start: expect.any(String),
       days: expect.any(Number),

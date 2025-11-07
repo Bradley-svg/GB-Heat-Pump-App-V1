@@ -3,28 +3,19 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AuthLayout } from "./AuthLayout";
 
 type SignupCompleteState = {
-  status?: "authenticated" | "pending_email";
+  email?: string;
 };
 
 export function SignupCompletePage() {
   const location = useLocation();
   const navigate = useNavigate();
   const state = (location.state as SignupCompleteState | null) ?? {};
-  const status = state.status ?? "pending_email";
-
-  const title =
-    status === "authenticated" ?
-      "You're all set!" :
-      "Check your inbox to finish signing up";
-  const body =
-    status === "authenticated" ?
-      "We've created your dashboard and signed you in. You can start exploring devices right away." :
-      "If that email matches an existing account, you'll receive next steps shortly. Follow the link in your inbox to complete setup.";
+  const submittedEmail = state.email ?? "";
 
   return (
     <AuthLayout
-      title={title}
-      subtitle={body}
+      title="Check your inbox"
+      subtitle="We sent verification instructions to finish creating your account."
       footer={
         <div className="auth-footer-links">
           <button
@@ -40,20 +31,28 @@ export function SignupCompletePage() {
         </div>
       }
     >
+      <div className="card callout" role="status">
+        <strong>Next step:</strong>{" "}
+        {submittedEmail ?
+          <>Open <span style={{ fontFamily: "monospace" }}>{submittedEmail}</span> and follow the verification link.</> :
+          "Open your inbox and follow the verification link we just sent."}
+      </div>
       <div className="auth-message-card">
+        <p>Finish setup in three quick steps:</p>
+        <ol style={{ marginLeft: "1.2rem" }}>
+          <li>Open the "Verify your GREENBRO account" email.</li>
+          <li>Select the button inside the message to confirm your address.</li>
+          <li>
+            Prefer to paste the token manually?{" "}
+            <Link to="/auth/verify" className="link">
+              Enter it here
+            </Link>.
+          </li>
+        </ol>
         <p>
           Need help? <a href="mailto:support@greenbro.com">Contact support</a> and mention the
           email address you used during signup.
         </p>
-        {status === "pending_email" ? (
-          <p>
-            Already have your code?{" "}
-            <Link to="/auth/verify" className="link">
-              Verify it here
-            </Link>
-            .
-          </p>
-        ) : null}
       </div>
     </AuthLayout>
   );

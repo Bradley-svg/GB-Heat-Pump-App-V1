@@ -52,6 +52,40 @@ describe("OpsPage", () => {
       client_error_rate: { warn: 0.08, critical: 0.15 },
       avg_duration_ms: { warn: 1500, critical: 3000 },
     },
+    signup: {
+      window_start: "2024-10-03T10:00:00.000Z",
+      window_days: 7,
+      submissions: 8,
+      authenticated: 5,
+      pending: 2,
+      errors: 1,
+      conversion_rate: 0.625,
+      pending_ratio: 0.25,
+      error_rate: 0.125,
+      status: "ok",
+      thresholds: {
+        conversion_rate: { warn: 0.45, critical: 0.25 },
+        pending_ratio: { warn: 0.35, critical: 0.55 },
+        error_rate: { warn: 0.2, critical: 0.35 },
+      },
+      metrics: {
+        conversion_rate: {
+          value: 0.625,
+          status: "ok",
+          thresholds: { warn: 0.45, critical: 0.25 },
+        },
+        pending_ratio: {
+          value: 0.25,
+          status: "ok",
+          thresholds: { warn: 0.35, critical: 0.55 },
+        },
+        error_rate: {
+          value: 0.125,
+          status: "ok",
+          thresholds: { warn: 0.2, critical: 0.35 },
+        },
+      },
+    },
     recent: [
       {
         ts: "2024-10-10T09:58:00.000Z",
@@ -85,6 +119,7 @@ describe("OpsPage", () => {
     expect(screen.getByText(/Route breakdown/i)).toBeInTheDocument();
     expect(screen.getByText(/Slow routes/i)).toBeInTheDocument();
     expect(screen.getByText(/Server errors/i)).toBeInTheDocument();
+    expect(screen.getByText(/Signup funnel/i)).toBeInTheDocument();
     expect(getMock).toHaveBeenCalledWith("/api/ops/overview", expect.anything());
     expect(screen.getByText(/Window: last 30 days/i)).toBeInTheDocument();
   });

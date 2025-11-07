@@ -60,6 +60,17 @@ describe("metrics formatting", () => {
         { route: "/api/devices", status_code: 200, count: 5 },
         { route: null, status_code: null, count: null },
       ],
+      {
+        window_start: "2024-12-25T00:00:00.000Z",
+        window_days: 7,
+        submissions: 10,
+        authenticated: 6,
+        pending: 3,
+        errors: 1,
+        conversion_rate: 0.6,
+        pending_ratio: 0.3,
+        error_rate: 0.1,
+      },
       "2025-01-01T00:00:00.000Z",
     );
 
@@ -97,12 +108,35 @@ describe("metrics formatting", () => {
     });
     expect(payload.thresholds).toEqual(ALERT_THRESHOLDS);
     expect(payload.generated_at).toBe("2025-01-01T00:00:00.000Z");
+    expect(payload.signup).toMatchObject({
+      submissions: 10,
+      authenticated: 6,
+      pending: 3,
+      errors: 1,
+      conversion_rate: 0.6,
+      pending_ratio: 0.3,
+      error_rate: 0.1,
+      window_start: "2024-12-25T00:00:00.000Z",
+      window_days: 7,
+      status: "ok",
+    });
   });
 
   it("produces prometheus output with escaped labels", () => {
     const prom = formatPromMetrics(
       { total: 5, online: 3 },
       [{ route: '/api/"test"', status_code: 500, count: 2 }],
+      {
+        window_start: "2024-12-20T00:00:00.000Z",
+        window_days: 7,
+        submissions: 12,
+        authenticated: 8,
+        pending: 3,
+        errors: 2,
+        conversion_rate: 0.66,
+        pending_ratio: 0.25,
+        error_rate: 0.16,
+      },
       5000,
     );
 
@@ -116,6 +150,9 @@ describe("metrics formatting", () => {
     expect(prom).toContain(`greenbro_ops_server_error_rate 1`);
     expect(prom).toContain(`greenbro_ops_client_error_rate 0`);
     expect(prom).toContain(`greenbro_ops_slow_rate 0`);
+    expect(prom).toContain(`greenbro_signup_submissions_total 12`);
+    expect(prom).toContain(`greenbro_signup_conversion_rate 0.66`);
+    expect(prom).toContain(`greenbro_signup_error_total 2`);
   });
 });
 

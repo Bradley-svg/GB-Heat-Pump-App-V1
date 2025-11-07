@@ -59,7 +59,15 @@ export default function OpsPage() {
     );
   }
 
-  const { ops_summary: summary, devices, thresholds, ops, recent, ops_window: windowMeta } = data;
+  const {
+    ops_summary: summary,
+    devices,
+    thresholds,
+    ops,
+    recent,
+    ops_window: windowMeta,
+    signup,
+  } = data;
   const warnThreshold = thresholds?.error_rate?.warn ?? null;
   const clientWarnThreshold = thresholds?.client_error_rate?.warn ?? null;
   const slowWarnThreshold = thresholds?.avg_duration_ms?.warn ?? null;
@@ -67,6 +75,16 @@ export default function OpsPage() {
     windowMeta ?
       `Window: last ${formatNumber(windowMeta.days, 0)} days (since ${formatDate(windowMeta.start)})` :
       null;
+  const signupWindowDescriptor =
+    signup ?
+      `Window: last ${formatNumber(signup.window_days, 0)} days (since ${formatDate(signup.window_start)})` :
+      null;
+  const signupStatusClass =
+    signup?.status === "critical" ?
+      "pill error" :
+      signup?.status === "warn" ?
+        "pill warn" :
+        "pill";
 
   return (
     <Page title="Operations">
@@ -109,6 +127,49 @@ export default function OpsPage() {
           </div>
         </div>
       </div>
+
+      {signup ? (
+        <div className="card mt-1">
+          <div className="card-header">
+            <div className="card-title">Signup funnel</div>
+            <span className={signupStatusClass}>{signup.status.toUpperCase()}</span>
+          </div>
+          <div className="grid kpis">
+            <div className="card tight">
+              <div className="muted">Submissions</div>
+              <div className="large-number">{formatNumber(signup.submissions, 0)}</div>
+              <div className="subdued">{signupWindowDescriptor}</div>
+            </div>
+            <div className="card tight">
+              <div className="muted">Verified</div>
+              <div className="large-number">{formatNumber(signup.authenticated, 0)}</div>
+              <div className="subdued">
+                Conversion {formatPercent(signup.conversion_rate * 100, 1)}
+              </div>
+            </div>
+            <div className="card tight">
+              <div className="muted">Pending verification</div>
+              <div className="large-number">{formatNumber(signup.pending, 0)}</div>
+              <div className="subdued">
+                {formatPercent(signup.pending_ratio * 100, 1)} of submissions
+              </div>
+            </div>
+            <div className="card tight">
+              <div className="muted">Errors reported</div>
+              <div className="large-number">{formatNumber(signup.errors, 0)}</div>
+              <div className="subdued">
+                {formatPercent(signup.error_rate * 100, 1)} error rate
+              </div>
+            </div>
+          </div>
+          {signup.status !== "ok" ? (
+            <div className={`callout ${signup.status === "critical" ? "error" : "warn"} mt-06`}>
+              Monitor conversions (warn {formatPercent(signup.thresholds.conversion_rate.warn * 100, 0)}%) and pending backlog
+              (<strong>{formatPercent(signup.thresholds.pending_ratio.warn * 100, 0)}%</strong> warn threshold).
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {(summary.slow_routes.length || summary.top_server_error_routes.length) ? (
         <div className="card mt-1">
