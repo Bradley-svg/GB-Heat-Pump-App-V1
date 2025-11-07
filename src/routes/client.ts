@@ -100,6 +100,8 @@ interface CachedTopDeviceRow {
   online: boolean;
   last_seen_at: string | null;
   updated_at: string | null;
+  supplyC: number | null;
+  returnC: number | null;
   cop: number | null;
   deltaT: number | null;
   thermalKW: number | null;
@@ -316,6 +318,8 @@ export async function handleClientCompact(req: Request, env: Env) {
                 d.site,
                 d.online,
                 d.last_seen_at,
+                ls.supplyC,
+                ls.returnC,
                 ls.cop,
                 ls.deltaT,
                 ls.thermalKW,
@@ -336,6 +340,8 @@ export async function handleClientCompact(req: Request, env: Env) {
         site: string | null;
         online: number | null;
         last_seen_at: string | null;
+        supplyC: number | null;
+        returnC: number | null;
         cop: number | null;
         deltaT: number | null;
         thermalKW: number | null;
@@ -349,6 +355,8 @@ export async function handleClientCompact(req: Request, env: Env) {
     online: Boolean(row.online),
     last_seen_at: row.last_seen_at ?? null,
     updated_at: row.updated_at ?? null,
+    supplyC: row.supplyC ?? null,
+    returnC: row.returnC ?? null,
     cop: row.cop ?? null,
     deltaT: row.deltaT ?? null,
     thermalKW: row.thermalKW ?? null,
@@ -496,6 +504,8 @@ async function presentClientCompactResponse(
         online: device.online,
         last_seen_at: device.last_seen_at,
         updated_at: device.updated_at,
+        supplyC: maskTelemetryNumber(device.supplyC, scope.isAdmin, 1, 2),
+        returnC: maskTelemetryNumber(device.returnC, scope.isAdmin, 1, 2),
         cop: maskTelemetryNumber(device.cop, scope.isAdmin, 1, 2),
         deltaT: maskTelemetryNumber(device.deltaT, scope.isAdmin, 1, 2),
         thermalKW: maskTelemetryNumber(device.thermalKW, scope.isAdmin, 1, 2),

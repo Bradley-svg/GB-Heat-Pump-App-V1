@@ -26,6 +26,8 @@ interface TopDevice {
   online: boolean;
   last_seen_at: string | null;
   updated_at: string | null;
+  supplyC: number | null;
+  returnC: number | null;
   cop: number | null;
   deltaT: number | null;
   thermalKW: number | null;

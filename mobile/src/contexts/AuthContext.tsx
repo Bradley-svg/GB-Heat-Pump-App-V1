@@ -85,17 +85,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const logout = useCallback(async () => {
+    const fallbackStatus: AuthStatus = user ? "authenticated" : "anonymous";
+    setStatus("authenticating");
     try {
       await logoutSession();
-    } catch {
-      // Ignore network failures here; we still clear local state.
-    } finally {
       await clearSessionCookie();
       setSessionCookie(undefined);
       setUser(null);
       setStatus("anonymous");
+      setError(null);
+    } catch (err) {
+      setStatus(fallbackStatus);
+      const message =
+        err instanceof Error ? err.message : "Unable to sign out. Try again.";
+      setError(message);
+      throw err;
     }
-  }, []);
+  }, [user]);
 
   const refresh = useCallback(async () => {
     try {

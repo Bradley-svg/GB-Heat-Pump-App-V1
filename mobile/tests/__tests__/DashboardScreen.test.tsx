@@ -44,6 +44,8 @@ const fleetData: NonNullable<FleetSummaryResult["data"]> = {
       online: true,
       last_seen_at: "2024-11-07T11:59:00Z",
       updated_at: "2024-11-07T11:59:30Z",
+      supplyC: 47.1,
+      returnC: 41.0,
       cop: 3.4,
       deltaT: 6.5,
       thermalKW: 11.7,

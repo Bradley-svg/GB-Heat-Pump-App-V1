@@ -10,9 +10,22 @@
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.greenbro.mobile"
+      "bundleIdentifier": "com.greenbro.mobile",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": ["greenbro"]
+      }
     },
-    "android": { "package": "com.greenbro.mobile" },
+    "android": {
+      "package": "com.greenbro.mobile",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [{ "scheme": "greenbro" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
+      "queries": [{ "scheme": "greenbro" }]
+    },
     "web": { "bundler": "metro" },
     "extra": {
       "apiBase": "https://app.greenbro.com"

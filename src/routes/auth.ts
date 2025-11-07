@@ -20,6 +20,7 @@ import {
   hashToken,
 } from "../lib/auth/sessions";
 import { checkIpRateLimit } from "../lib/ip-rate-limit";
+import { sendPasswordResetNotification } from "../lib/notifications/password-reset";
 
 const EMAIL_ALREADY_REGISTERED = "Email is already registered";
 const INVALID_CREDENTIALS = "Invalid email or password";
@@ -27,6 +28,8 @@ const DEFAULT_ROLE = "client";
 const PASSWORD_RESET_TTL_MINUTES = 60;
 const MIN_PASSWORD_LENGTH = 8;
 const ALLOWED_ROLES = new Set(["admin", "client", "contractor"]);
+const PASSWORD_RESET_UNAVAILABLE = "Password recovery is temporarily unavailable";
+const PASSWORD_RESET_DELIVERY_FAILED = "Unable to deliver reset instructions";
 
 const signupSchema = z.object({
   email: z.string().trim().email(),
@@ -210,6 +213,12 @@ export async function handleRecover(req: Request, env: Env) {
   const log = loggerForRequest(req, { scope: "auth.recover" });
   const limited = await enforceAuthRateLimit(req, env, "/api/auth/recover", log);
   if (limited) return limited;
+  const webhookConfigured = typeof env.PASSWORD_RESET_WEBHOOK_URL === "string"
+    && env.PASSWORD_RESET_WEBHOOK_URL.trim().length > 0;
+  if (!webhookConfigured) {
+    log.warn("auth.password_reset.disabled", { reason: "webhook_not_configured" });
+    return json({ error: PASSWORD_RESET_UNAVAILABLE }, { status: 503 });
+  }
   const body = await readJson(req);
   const parsed = recoverSchema.safeParse(body);
   if (!parsed.success) {
@@ -230,17 +239,34 @@ export async function handleRecover(req: Request, env: Env) {
   const createdAt = now.toISOString();
   const expiresAt = expires.toISOString();
 
-  await env.DB.batch([
-    env.DB.prepare(`DELETE FROM password_resets WHERE user_id = ?1`).bind(user.id),
-    env.DB
-      .prepare(
-        `INSERT INTO password_resets (token_hash, user_id, created_at, expires_at, used_at)
-         VALUES (?1, ?2, ?3, ?4, NULL)`,
-      )
-      .bind(tokenHash, user.id, createdAt, expiresAt),
-  ]);
+  await env.DB.prepare(`DELETE FROM password_resets WHERE user_id = ?1`).bind(user.id).run();
 
-  const _resetUrl = buildResetUrl(env, token);
+  const resetUrl = buildResetUrl(env, token);
+
+  try {
+    await sendPasswordResetNotification(env, {
+      email,
+      resetUrl,
+      token,
+      expiresAt,
+    });
+  } catch (error) {
+    log.error("auth.password_reset.notify_failed", {
+      user_id: user.id,
+      email: maskEmail(email),
+      error,
+    });
+    return json({ error: PASSWORD_RESET_DELIVERY_FAILED }, { status: 502 });
+  }
+
+  await env.DB
+    .prepare(
+      `INSERT INTO password_resets (token_hash, user_id, created_at, expires_at, used_at)
+       VALUES (?1, ?2, ?3, ?4, NULL)`,
+    )
+    .bind(tokenHash, user.id, createdAt, expiresAt)
+    .run();
+
   log.info("auth.password_reset.issued", {
     user_id: user.id,
     email: maskEmail(email),

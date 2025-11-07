@@ -12,6 +12,8 @@ AUTH_IP_LIMIT_PER_MIN=30
 AUTH_IP_BLOCK_SECONDS=300
 AUTH_IP_LIMIT_PER_MIN=0
 AUTH_IP_BLOCK_SECONDS=60
+# Optional hook invoked when password reset emails are issued.
+PASSWORD_RESET_WEBHOOK_URL=https://hooks.example.com/password-reset
 # Local dev environments should explicitly declare their deployment mode.
 ENVIRONMENT=development
 # ASSET_SIGNING_SECRET=only-if-testing-signed-assets

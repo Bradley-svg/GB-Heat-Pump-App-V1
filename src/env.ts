@@ -56,6 +56,7 @@ export interface Env {
   CLIENT_QUERY_PROFILE_THRESHOLD_MS?: string;
   ARCHIVE_CACHE_TTL_SECS?: string;
   PASSWORD_PBKDF2_ITERATIONS?: string;
+  PASSWORD_RESET_WEBHOOK_URL?: string;
 }
 
 export type User = {
@@ -400,6 +401,18 @@ const EnvSchema = z
       }
     }
 
+    const resetWebhookRaw =
+      typeof value.PASSWORD_RESET_WEBHOOK_URL === "string"
+        ? value.PASSWORD_RESET_WEBHOOK_URL.trim()
+        : "";
+    if (resetWebhookRaw && !isHttpUrl(resetWebhookRaw)) {
+      ctx.addIssue({
+        path: ["PASSWORD_RESET_WEBHOOK_URL"],
+        code: z.ZodIssueCode.custom,
+        message: "PASSWORD_RESET_WEBHOOK_URL must be an absolute http(s) URL when set",
+      });
+    }
+
     const carryForwardRaw =
       typeof value.TELEMETRY_CARRY_MAX_MINUTES === "string"
         ? value.TELEMETRY_CARRY_MAX_MINUTES.trim()
@@ -419,11 +432,11 @@ const EnvSchema = z
       typeof value.AUTH_IP_LIMIT_PER_MIN === "string" ? value.AUTH_IP_LIMIT_PER_MIN.trim() : "";
     if (authIpLimitRaw) {
       const parsed = Number.parseInt(authIpLimitRaw, 10);
-      if (!Number.isFinite(parsed) || parsed <= 0) {
+      if (!Number.isFinite(parsed) || parsed < 0) {
         ctx.addIssue({
           path: ["AUTH_IP_LIMIT_PER_MIN"],
           code: z.ZodIssueCode.custom,
-          message: "AUTH_IP_LIMIT_PER_MIN must be a positive integer",
+          message: "AUTH_IP_LIMIT_PER_MIN must be zero or a positive integer",
         });
       }
     }
@@ -438,6 +451,24 @@ const EnvSchema = z
           code: z.ZodIssueCode.custom,
           message: "AUTH_IP_BLOCK_SECONDS must be a positive integer",
         });
+      }
+    }
+
+    const authLimit = Number.parseInt(authIpLimitRaw || "0", 10);
+    if (authLimit > 0) {
+      const bucket = value.AUTH_IP_BUCKETS as KvNamespace | undefined;
+      if (!bucket || typeof bucket.get !== "function" || typeof bucket.put !== "function") {
+        if (isLocalEnv) {
+          console.warn(
+            "AUTH_IP_LIMIT_PER_MIN is enabled without an AUTH_IP_BUCKETS binding; falling back to in-memory token buckets per isolate.",
+          );
+        } else {
+          ctx.addIssue({
+            path: ["AUTH_IP_BUCKETS"],
+            code: z.ZodIssueCode.custom,
+            message: "AUTH_IP_BUCKETS KV namespace must be bound when AUTH_IP_LIMIT_PER_MIN is greater than zero",
+          });
+        }
       }
     }
   });

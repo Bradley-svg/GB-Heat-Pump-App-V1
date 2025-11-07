@@ -218,11 +218,13 @@ function deriveKpis(data: FleetSummaryResult["data"]): DashboardKpi[] {
 
   const latestTrend = data.trend[data.trend.length - 1];
   const primaryDevice = data.top_devices[0];
+  const outletTemp = primaryDevice?.supplyC ?? null;
+  const fallbackOutlet = outletTemp ?? primaryDevice?.deltaT ?? null;
 
   return [
     {
       label: "Outlet Temp",
-      value: formatNumber(primaryDevice?.deltaT, 1),
+      value: formatNumber(fallbackOutlet, 1),
       unit: "°C",
       delta: undefined,
     },

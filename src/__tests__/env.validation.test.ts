@@ -27,6 +27,7 @@ function createEnv(overrides: Partial<Env> = {}): Env {
     INGEST_SIGNATURE_TOLERANCE_SECS: "300",
     ENVIRONMENT: "test",
     INGEST_IP_BUCKETS: createTestKvNamespace(),
+    AUTH_IP_BUCKETS: createTestKvNamespace(),
   } satisfies Partial<Env>;
   return { ...base, ...overrides } as Env;
 }
@@ -128,6 +129,22 @@ describe("validateEnv", () => {
     });
     delete (env as any).INGEST_IP_BUCKETS;
     expect(() => validateEnv(env)).toThrowError(/INGEST_IP_BUCKETS/);
+  });
+
+  it("fails when auth IP rate limiting is enabled without a KV binding", () => {
+    const env = createEnv({
+      AUTH_IP_LIMIT_PER_MIN: "25",
+    });
+    delete (env as any).AUTH_IP_BUCKETS;
+    expect(() => validateEnv(env)).toThrowError(/AUTH_IP_BUCKETS/);
+  });
+
+  it("accepts auth IP rate limiting when the KV binding is present", () => {
+    const env = createEnv({
+      AUTH_IP_LIMIT_PER_MIN: "25",
+      AUTH_IP_BUCKETS: createTestKvNamespace(),
+    });
+    expect(() => validateEnv(env)).not.toThrow();
   });
 
   it("allows missing INGEST_IP_BUCKETS when running locally", () => {
