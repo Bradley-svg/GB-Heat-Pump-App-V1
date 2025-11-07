@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render } from "@testing-library/react-native";
+import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import { Linking } from "react-native";
 
 import { DashboardScreen } from "../../src/screens/DashboardScreen";
@@ -53,7 +53,8 @@ const fleetData: NonNullable<FleetSummaryResult["data"]> = {
 describe("DashboardScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.spyOn(Linking, "openURL").mockResolvedValue(true);
+    jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
+    jest.spyOn(Linking, "canOpenURL").mockResolvedValue(true);
     mockUseFleetSummary.mockReturnValue({
       data: fleetData,
       status: "success",
@@ -67,7 +68,7 @@ describe("DashboardScreen", () => {
     jest.restoreAllMocks();
   });
 
-  it("renders live KPI data and triggers CTA toasts", () => {
+  it("renders live KPI data and triggers CTA toasts", async () => {
     const onShowToast = jest.fn();
     const { getByText } = renderWithTheme(
       <DashboardScreen onShowToast={onShowToast} />,
@@ -81,7 +82,9 @@ describe("DashboardScreen", () => {
       "success",
     );
     fireEvent.press(getByText("View Alerts"));
-    expect(onShowToast).toHaveBeenCalledWith("Opening alerts...", "warn");
+    await waitFor(() =>
+      expect(onShowToast).toHaveBeenCalledWith("Opening alerts...", "warn"),
+    );
   });
 
   it("shows fallback values when fleet data is unavailable", () => {

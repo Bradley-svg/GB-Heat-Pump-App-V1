@@ -90,3 +90,9 @@ jest.mock("react-native/Libraries/Modal/Modal", () => {
 jest.mock("react-native/Libraries/Animated/createAnimatedComponent", () => {
   return (Component: React.ComponentType) => Component;
 });
+
+jest.mock("expo-secure-store", () => ({
+  getItemAsync: jest.fn(async () => null),
+  setItemAsync: jest.fn(async () => undefined),
+  deleteItemAsync: jest.fn(async () => undefined),
+}));

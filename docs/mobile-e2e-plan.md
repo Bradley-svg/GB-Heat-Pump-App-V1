@@ -1,40 +1,17 @@
-# Mobile E2E (Detox) Plan
+﻿# Mobile E2E (Detox) Plan
 
 ## Goal
-Automate the “happy path” (Dashboard KPI load, Alerts filter/ack) on both Android + iOS simulators so we catch regressions before shipping.
+Automate the dashboard + alerts happy paths on iOS and Android simulators so UI regressions are caught pre-merge.
 
-## Dependencies
+## Current status
+- `expo-dev-client`, `detox`, and `@config-plugins/detox` are installed (see `mobile/package.json`).
+- `mobile/detox.config.ts` wires up placeholder build commands for `ios.sim.debug` and `android.emu.debug`.
+- Jest runner config + global init live under `mobile/e2e/`, with a skipped `auth.spec.ts` that we will flesh out once dedicated test accounts exist.
 
-| Tool | Version | Notes |
-| --- | --- | --- |
-| Detox | `^20.x` | Works with RN 0.76; install as devDependency in `mobile/package.json`. |
-| Jest | already present | Detox plugs into Jest runner. |
-| expo-dev-client | `~4.0` | Needed to build custom dev clients for Detox. |
-| Apple Xcode 15 / Android API 34 SDK | for simulators |
+## Remaining work
+1. Provision deterministic test credentials (non-prod) and surface them via secrets for Detox.
+2. Update `mobile/e2e/auth.spec.ts` (and add dashboard/alerts specs) to drive the new login screen, KPI scroll, and alert acknowledgement flows.
+3. Document simulator provisioning (`xcrun simctl`, AVD Manager) and add an Actions workflow that runs `npm run mobile:e2e:test:ios` / `...:android` nightly.
+4. Once stable, remove the `.skip` guard so Detox gates PRs touching `mobile/`.
 
-## Proposed file structure
-
-```
-mobile/
-  e2e/
-    detox.config.ts      # extends expo-detox-tools (when added)
-    init.ts              # global setup (login helper)
-    dashboard.spec.ts    # KPI load + CTA toast assertions
-    alerts.spec.ts       # severity filter + acknowledge flow
-```
-
-## Test data & auth
-Detox runs will reuse the same environment contract we added for CI:
-
-- `EXPO_PUBLIC_API_BASE`
-- `EXPO_PUBLIC_SESSION_COOKIE`
-
-Store both as GitHub Secrets (`EXPO_PUBLIC_API_BASE`, `MOBILE_SESSION_COOKIE`) and surface via workflow env vars. Locally, put them in `mobile/.env`.
-
-## Open tasks
-1. Add `expo-dev-client`, `detox`, and `@config-plugins/detox` to `mobile/package.json`.
-2. Create a `detox.config.ts` using `detox-expo-helpers` (Metro bundler automation).
-3. Write onboarding docs for provisioning iOS simulators (`xcrun simctl create` etc.).
-4. Gate CI via a nightly job (Detox matrix for `ios.sim.debug` + `android.emu.debug`) once the backend cookie automation is stable.
-
-Until these are done, keep relying on `docs/mobile-validation.md` for manual coverage but treat this file as the source of truth for the rollout checklist.
+Until then, continue using `docs/mobile-validation.md` for manual checks after every feature.

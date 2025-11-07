@@ -1,5 +1,5 @@
 ﻿import { MaterialIcons } from "@expo/vector-icons";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -11,6 +11,7 @@ import {
 } from "react-native";
 
 import { GBButton } from "../components/GBButton";
+import { GBCard } from "../components/GBCard";
 import { GBKpiTile } from "../components/GBKpiTile";
 import { GBListItem } from "../components/GBListItem";
 import { GBStatusPill } from "../components/GBStatusPill";
@@ -58,11 +59,24 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     onShowToast("Commissioning workflow created", "success");
   };
 
-  const handleAlertsLink = () => {
+  const handleAlertsLink = useCallback(async () => {
     void haptic("warning");
-    onShowToast("Opening alerts...", "warn");
-    void Linking.openURL("greenbro://alerts").catch(() => undefined);
-  };
+    const alertsUrl = "greenbro://alerts";
+    try {
+      const canOpen = await Linking.canOpenURL(alertsUrl);
+      if (canOpen) {
+        await Linking.openURL(alertsUrl);
+        onShowToast("Opening alerts...", "warn");
+      } else {
+        onShowToast("Use the Alerts tab below to review issues.", "warn");
+      }
+    } catch {
+      onShowToast(
+        "Unable to open alerts link. Use the Alerts tab instead.",
+        "error",
+      );
+    }
+  }, [haptic, onShowToast]);
 
   if (!data && status === "loading") {
     return (
@@ -102,6 +116,16 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             : "Telemetry synced from the last 24h window."}
         </Text>
       </View>
+
+      {status === "error" ? (
+        <GBCard title="Unable to load fleet metrics" tone="error">
+          <Text style={{ color: colors.textMuted }}>
+            {error?.message ?? "An unexpected error occurred."}
+          </Text>
+          <View style={themedStyles.spacerSm} />
+          <GBButton label="Retry" onPress={refresh} />
+        </GBCard>
+      ) : null}
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         {kpis.map((kpi) => (
