@@ -308,7 +308,7 @@ describe("handleClientEventReport", () => {
         event: "signup_flow.result",
         source: payload.source,
         userEmail: ADMIN_USER.email,
-        dimension: "pending_verification",
+        dimension: "pending_email",
       }),
     );
   });

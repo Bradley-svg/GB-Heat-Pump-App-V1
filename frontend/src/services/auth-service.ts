@@ -40,6 +40,10 @@ export async function signup(api: ApiClient, payload: SignupPayload): Promise<vo
   await api.post<SignupResponse>("/api/auth/signup", payload);
 }
 
+export async function resendVerification(api: ApiClient, email: string): Promise<void> {
+  await api.post<SignupResponse>("/api/auth/verify/resend", { email });
+}
+
 export async function login(api: ApiClient, payload: LoginPayload): Promise<LoginResponse> {
   return api.post<LoginResponse>("/api/auth/login", payload);
 }

@@ -10,6 +10,7 @@ import {
   pruneOpsMetrics,
 } from "../lib/ops-metrics";
 import { loadSignupFunnelSummary } from "../lib/signup-funnel";
+import { loggerForRequest } from "../utils/logging";
 
 export async function handleMetrics(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
@@ -17,6 +18,7 @@ export async function handleMetrics(req: Request, env: Env) {
   if (!userIsAdmin(user)) {
     return json({ error: "Forbidden" }, { status: 403 });
   }
+  const log = loggerForRequest(req, { route: "/api/metrics" });
 
   const url = new URL(req.url);
   const paramsResult = MetricsQuerySchema.safeParse({
@@ -75,6 +77,18 @@ export async function handleMetrics(req: Request, env: Env) {
     signupSummary,
     new Date(now).toISOString(),
   );
+
+  if (metricsPayload.signup.status !== "ok") {
+    log.warn("signup.funnel_degraded", {
+      status: metricsPayload.signup.status,
+      conversion_rate: metricsPayload.signup.conversion_rate,
+      pending_ratio: metricsPayload.signup.pending_ratio,
+      error_rate: metricsPayload.signup.error_rate,
+      metric: "greenbro.signup.funnel_degraded",
+      metric_key: "signup.funnel_degraded",
+      count: 1,
+    });
+  }
 
   if (isDashboardFormat) {
     const dashboard = buildDashboardPayload(metricsPayload);

@@ -30,6 +30,7 @@ const MIGRATION_FILES = [
   "0015_auth.sql",
   "0016_email_verifications.sql",
   "0017_client_events.sql",
+  "0018_backfill_signup_events.sql",
   "schema-indexes.sql",
 ];
 

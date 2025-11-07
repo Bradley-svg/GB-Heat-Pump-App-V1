@@ -59,6 +59,10 @@ const verifySchema = z.object({
   token: z.string().trim().min(10),
 });
 
+const resendSchema = z.object({
+  email: z.string().trim().email(),
+});
+
 export async function handleSignup(req: Request, env: Env) {
   const log = loggerForRequest(req, { scope: "auth.signup" });
   const limited = await enforceAuthRateLimit(req, env, "/api/auth/signup", log);
@@ -419,6 +423,48 @@ export async function handleVerifyEmail(req: Request, env: Env) {
     },
     { headers: { "Set-Cookie": cookie } },
   );
+}
+
+export async function handleResendVerification(req: Request, env: Env) {
+  const log = loggerForRequest(req, { scope: "auth.resend" });
+  const limited = await enforceAuthRateLimit(req, env, "/api/auth/verify/resend", log);
+  if (limited) return limited;
+  const body = await readJson(req);
+  const parsed = resendSchema.safeParse(body);
+  if (!parsed.success) {
+    return json(validationError(parsed.error), { status: 400 });
+  }
+
+  const email = parsed.data.email.toLowerCase();
+  const userRow = await env.DB
+    .prepare(`SELECT id, verified_at FROM users WHERE email = ?1`)
+    .bind(email)
+    .first<{ id: string; verified_at: string | null }>();
+
+  if (!userRow) {
+    log.info("auth.resend.unknown_email", { email: maskEmail(email) });
+    return json({ ok: true }, { status: 202 });
+  }
+
+  if (userRow.verified_at) {
+    log.info("auth.resend.already_verified", { user_id: userRow.id });
+    return json({ ok: true }, { status: 202 });
+  }
+
+  try {
+    const verification = await issueEmailVerification(env, userRow.id);
+    await sendEmailVerificationNotification(env, {
+      email,
+      verifyUrl: buildVerificationUrl(env, verification.token),
+      expiresAt: verification.expiresAt,
+    });
+  } catch (error) {
+    log.error("auth.resend.delivery_failed", { user_id: userRow.id, error });
+    return json({ error: "Unable to deliver verification email" }, { status: 502 });
+  }
+
+  log.info("auth.resend.sent", { user_id: userRow.id });
+  return json({ ok: true }, { status: 202 });
 }
 
 async function readJson(req: Request): Promise<unknown> {

@@ -37,6 +37,7 @@ const MIGRATIONS = [
   "migrations/0015_auth.sql",
   "migrations/0016_email_verifications.sql",
   "migrations/0017_client_events.sql",
+  "migrations/0018_backfill_signup_events.sql",
 ];
 
 const SEED = "seeds/dev/seed.sql";

@@ -3,6 +3,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import type { Env, User } from "../../env";
 import * as accessModule from "../../lib/access";
 import { handleMetrics } from "../metrics";
+import * as loggingModule from "../../utils/logging";
 import * as signupModule from "../../lib/signup-funnel";
 
 vi.mock("../../lib/signup-funnel", () => ({
@@ -75,6 +76,19 @@ function createMockEnv(overrides?: {
 
 const requireAccessUserMock = vi.spyOn(accessModule, "requireAccessUser");
 const loadSignupFunnelSummaryMock = vi.mocked(signupModule.loadSignupFunnelSummary);
+const loggerForRequestMock = vi.spyOn(loggingModule, "loggerForRequest");
+
+function createLoggerStub() {
+  const stub = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    with: vi.fn(),
+  };
+  stub.with.mockReturnValue(stub);
+  return stub;
+}
 
 const ADMIN_USER: User = {
   email: "admin@example.com",
@@ -85,11 +99,13 @@ const ADMIN_USER: User = {
 afterEach(() => {
   requireAccessUserMock.mockReset();
   loadSignupFunnelSummaryMock.mockClear();
+  loggerForRequestMock.mockReset();
 });
 
 afterAll(() => {
   requireAccessUserMock.mockRestore();
   loadSignupFunnelSummaryMock.mockRestore();
+  loggerForRequestMock.mockRestore();
 });
 
 describe("handleMetrics", () => {
@@ -147,6 +163,8 @@ describe("handleMetrics", () => {
 
   it("returns dashboard payload with derived statuses", async () => {
     requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
+    const logger = createLoggerStub();
+    loggerForRequestMock.mockReturnValueOnce(logger as unknown as loggingModule.Logger);
     const opsRows = [
       { route: "/api/ingest", status_code: 200, count: 50 },
       { route: "/api/ingest", status_code: 500, count: 10 },
@@ -170,6 +188,7 @@ describe("handleMetrics", () => {
       start: expect.any(String),
       days: expect.any(Number),
     });
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it("returns Prometheus metrics text by default", async () => {
@@ -193,4 +212,34 @@ describe("handleMetrics", () => {
     const res = await handleMetrics(req, env);
     expect(res.status).toBe(401);
   });
+
+  it("logs a warning when signup funnel is degraded", async () => {
+    requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
+    loadSignupFunnelSummaryMock.mockResolvedValueOnce({
+      window_start: "2025-01-01T00:00:00.000Z",
+      window_days: 7,
+      submissions: 20,
+      authenticated: 5,
+      pending: 10,
+      errors: 5,
+      conversion_rate: 0.25,
+      pending_ratio: 0.5,
+      error_rate: 0.25,
+    });
+    const logger = createLoggerStub();
+    loggerForRequestMock.mockReturnValueOnce(logger as unknown as loggingModule.Logger);
+    const { env } = createMockEnv();
+    const req = new Request("https://example.com/metrics?format=json");
+    const res = await handleMetrics(req, env);
+    expect(res.status).toBe(200);
+    expect(logger.warn).toHaveBeenCalledWith(
+      "signup.funnel_degraded",
+      expect.objectContaining({
+        metric_key: "signup.funnel_degraded",
+      }),
+    );
+  });
+});
+beforeEach(() => {
+  loggerForRequestMock.mockReturnValue(createLoggerStub() as unknown as loggingModule.Logger);
 });
