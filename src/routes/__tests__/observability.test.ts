@@ -4,6 +4,11 @@ import type { Env, User } from "../../env";
 import * as accessModule from "../../lib/access";
 import { handleClientErrorReport, handleClientEventReport } from "../observability";
 import * as loggingModule from "../../utils/logging";
+import { checkIpRateLimit } from "../../lib/ip-rate-limit";
+
+vi.mock("../../lib/ip-rate-limit", () => ({
+  checkIpRateLimit: vi.fn(),
+}));
 
 type LoggerMock = {
   debug: ReturnType<typeof vi.fn>;
@@ -36,6 +41,7 @@ const ADMIN_USER: User = {
 
 const requireAccessUserMock = vi.spyOn(accessModule, "requireAccessUser");
 const loggerForRequestMock = vi.spyOn(loggingModule, "loggerForRequest");
+const mockedRateLimit = vi.mocked(checkIpRateLimit);
 
 function createLoggerStub(): LoggerMock {
   const stub: LoggerMock = {
@@ -52,11 +58,13 @@ function createLoggerStub(): LoggerMock {
 afterEach(() => {
   requireAccessUserMock.mockReset();
   loggerForRequestMock.mockReset();
+  mockedRateLimit.mockReset();
 });
 
 afterAll(() => {
   requireAccessUserMock.mockRestore();
   loggerForRequestMock.mockRestore();
+  mockedRateLimit.mockRestore();
 });
 
 describe("handleClientErrorReport", () => {
@@ -211,8 +219,55 @@ describe("handleClientErrorReport", () => {
 });
 
 describe("handleClientEventReport", () => {
-  it("accepts anonymous payloads and logs info", async () => {
+  it("rejects unauthenticated requests", async () => {
     requireAccessUserMock.mockResolvedValueOnce(null);
+    const env = createEnv();
+    const req = new Request("https://app.example/api/observability/client-events", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ event: "test", properties: {} }),
+    });
+
+    const res = await handleClientEventReport(req, env);
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "Unauthorized" });
+  });
+
+  it("enforces AUTH_IP rate limits", async () => {
+    mockedRateLimit.mockResolvedValueOnce({
+      limited: true,
+      retryAfterSeconds: 12,
+      remaining: 0,
+      limit: 60,
+      ip: "198.51.100.1",
+    });
+    requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
+
+    const env = createEnv();
+    const req = new Request("https://app.example/api/observability/client-events", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ event: "signup_flow.result" }),
+    });
+
+    const res = await handleClientEventReport(req, env);
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("12");
+    expect(await res.json()).toEqual({ error: "Rate limit exceeded" });
+    expect(mockedRateLimit).toHaveBeenCalledWith(
+      expect.any(Request),
+      env,
+      "/api/observability/client-events",
+      expect.objectContaining({
+        limitEnvKey: "AUTH_IP_LIMIT_PER_MIN",
+        blockEnvKey: "AUTH_IP_BLOCK_SECONDS",
+        kvBindingKey: "AUTH_IP_BUCKETS",
+      }),
+    );
+  });
+
+  it("logs client events when authorized", async () => {
+    requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
     const logger = createLoggerStub();
     loggerForRequestMock.mockReturnValueOnce(logger as unknown as loggingModule.Logger);
 
@@ -235,13 +290,13 @@ describe("handleClientEventReport", () => {
       event: payload.event,
       source: payload.source,
       properties: payload.properties,
-      user_email: null,
+      user_email: ADMIN_USER.email,
     });
   });
 
   it("validates payloads", async () => {
     loggerForRequestMock.mockReturnValue(createLoggerStub() as unknown as loggingModule.Logger);
-    requireAccessUserMock.mockResolvedValue(null);
+    requireAccessUserMock.mockResolvedValue(ADMIN_USER);
     const env = createEnv();
     const req = new Request("https://app.example/api/observability/client-events", {
       method: "POST",

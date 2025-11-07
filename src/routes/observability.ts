@@ -5,9 +5,10 @@ import type { ClientErrorReport, ClientEventReport } from "../schemas/observabil
 import { loggerForRequest } from "../utils/logging";
 import { json } from "../utils/responses";
 import { validationErrorResponse, validateWithSchema } from "../utils/validation";
-import { requireAccessUser } from "../lib/access";
+import { checkIpRateLimit } from "../lib/ip-rate-limit";
 
 const ROUTE_PATH = "/api/observability/client-errors";
+const EVENTS_ROUTE_PATH = "/api/observability/client-events";
 const DEFAULT_MAX_PAYLOAD_BYTES = 16_384;
 const STACK_MAX_CHARS = 4_096;
 const COMPONENT_STACK_MAX_CHARS = 4_096;
@@ -72,6 +73,26 @@ export async function handleClientErrorReport(req: Request, env: Env) {
 }
 
 export async function handleClientEventReport(req: Request, env: Env) {
+  const rateLimit = await checkIpRateLimit(req, env, EVENTS_ROUTE_PATH, {
+    limitEnvKey: "AUTH_IP_LIMIT_PER_MIN",
+    blockEnvKey: "AUTH_IP_BLOCK_SECONDS",
+    kvBindingKey: "AUTH_IP_BUCKETS",
+    defaultLimit: 120,
+    defaultBlockSeconds: 60,
+  });
+  if (rateLimit?.limited) {
+    const response = json({ error: "Rate limit exceeded" }, { status: 429 });
+    if (rateLimit.retryAfterSeconds != null) {
+      response.headers.set("Retry-After", String(rateLimit.retryAfterSeconds));
+    }
+    return response;
+  }
+
+  const user = await requireAccessUser(req, env);
+  if (!user) {
+    return json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let payload: unknown;
   try {
     payload = await req.json();
@@ -83,13 +104,12 @@ export async function handleClientEventReport(req: Request, env: Env) {
     return validationErrorResponse(parsed.issues);
   }
   const body = parsed.data;
-  const user = await requireAccessUser(req, env);
-  const log = loggerForRequest(req, { route: "/api/observability/client-events" });
+  const log = loggerForRequest(req, { route: EVENTS_ROUTE_PATH });
   log.info("client.event", {
     event: body.event,
     source: body.source ?? "unknown",
     properties: body.properties ?? {},
-    user_email: user?.email ?? null,
+    user_email: user.email,
   });
   return json({ ok: true }, { status: 202 });
 }

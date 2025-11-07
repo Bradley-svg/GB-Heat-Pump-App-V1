@@ -20,7 +20,8 @@ import {
   hashToken,
 } from "../lib/auth/sessions";
 import { checkIpRateLimit } from "../lib/ip-rate-limit";
-import { sendPasswordResetNotification } from "../lib/notifications/password-reset";
+import { sendPasswordResetNotification, sendEmailVerificationNotification } from "../lib/notifications/password-reset";
+import { issueEmailVerification, consumeEmailVerification } from "../lib/auth/email-verification";
 
 const EMAIL_ALREADY_REGISTERED = "Email is already registered";
 const INVALID_CREDENTIALS = "Invalid email or password";
@@ -52,6 +53,10 @@ const recoverSchema = z.object({
 const resetSchema = z.object({
   token: z.string().trim().min(10),
   password: z.string().min(MIN_PASSWORD_LENGTH),
+});
+
+const verifySchema = z.object({
+  token: z.string().trim().min(10),
 });
 
 export async function handleSignup(req: Request, env: Env) {
@@ -120,8 +125,19 @@ export async function handleSignup(req: Request, env: Env) {
 
   log.info("auth.signup.success", { user_id: userId, email: maskEmail(email) });
 
-  const { cookie } = await createSession(env, userId);
-  return json({ ok: true }, { status: 202, headers: { "Set-Cookie": cookie } });
+  try {
+    const verification = await issueEmailVerification(env, userId);
+    await sendEmailVerificationNotification(env, {
+      email,
+      verifyUrl: buildVerificationUrl(env, verification.token),
+      expiresAt: verification.expiresAt,
+    });
+  } catch (error) {
+    loggerForRequest(req, { scope: "auth.signup" }).error("auth.signup.verification_failed", { error });
+    return json({ error: "Unable to deliver verification email" }, { status: 502 });
+  }
+
+  return json({ ok: true }, { status: 202 });
 }
 
 export async function handleLogin(req: Request, env: Env) {
@@ -145,6 +161,7 @@ export async function handleLogin(req: Request, env: Env) {
           users.password_iters AS password_iters,
           users.roles AS roles,
           users.client_ids AS client_ids,
+          users.verified_at AS verified_at,
           user_profiles.first_name AS first_name,
           user_profiles.last_name AS last_name
         FROM users
@@ -169,6 +186,20 @@ export async function handleLogin(req: Request, env: Env) {
   if (!passwordOk) {
     log.warn("auth.login.invalid_password", { user_id: userRow.id });
     return json({ error: INVALID_CREDENTIALS }, { status: 401 });
+  }
+
+  if (!userRow.verified_at) {
+    try {
+      const verification = await issueEmailVerification(env, userRow.id);
+      await sendEmailVerificationNotification(env, {
+        email,
+        verifyUrl: buildVerificationUrl(env, verification.token),
+        expiresAt: verification.expiresAt,
+      });
+    } catch (error) {
+      log.error("auth.login.verification_resend_failed", { error });
+    }
+    return json({ error: "Email verification required" }, { status: 403 });
   }
 
   const { cookie, session } = await createSession(env, userRow.id);
@@ -320,6 +351,76 @@ export async function handleReset(req: Request, env: Env) {
   );
 }
 
+export async function handleVerifyEmail(req: Request, env: Env) {
+  const log = loggerForRequest(req, { scope: "auth.verify" });
+  const body = await readJson(req);
+  const parsed = verifySchema.safeParse(body);
+  if (!parsed.success) {
+    return json(validationError(parsed.error), { status: 400 });
+  }
+
+  const result = await consumeEmailVerification(env, parsed.data.token);
+  if (!result.ok) {
+    const message =
+      result.reason === "expired" ?
+        "Verification link has expired" :
+        result.reason === "used" ?
+          "Verification link has already been used" :
+          "Invalid verification token";
+    return json({ error: message }, { status: 400 });
+  }
+
+  const userRow = await env.DB
+    .prepare(
+      `SELECT u.id,
+              u.email,
+              u.roles,
+              u.client_ids,
+              u.verified_at,
+              p.first_name,
+              p.last_name
+         FROM users u
+         LEFT JOIN user_profiles p ON p.user_id = u.id
+        WHERE u.id = ?1`,
+    )
+    .bind(result.userId)
+    .first<{
+      id: string;
+      email: string;
+      roles: string;
+      client_ids: string | null;
+      verified_at: string | null;
+      first_name: string | null;
+      last_name: string | null;
+    }>();
+
+  if (!userRow) {
+    return json({ error: "User not found" }, { status: 404 });
+  }
+
+  await env.DB
+    .prepare(`UPDATE users SET verified_at = COALESCE(verified_at, ?2) WHERE id = ?1`)
+    .bind(userRow.id, nowISO())
+    .run();
+
+  const { cookie, session } = await createSession(env, userRow.id);
+  log.info("auth.verify.success", { user_id: userRow.id });
+
+  return json(
+    {
+      user: {
+        email: userRow.email,
+        roles: parseStoredRoles(userRow.roles),
+        clientIds: parseStoredClientIds(userRow.client_ids),
+        firstName: userRow.first_name ?? null,
+        lastName: userRow.last_name ?? null,
+        sessionExpiresAt: session.expiresAt,
+      },
+    },
+    { headers: { "Set-Cookie": cookie } },
+  );
+}
+
 async function readJson(req: Request): Promise<unknown> {
   try {
     return await req.json();
@@ -362,6 +463,17 @@ function buildResetUrl(env: Env, token: string): string {
   return base.toString();
 }
 
+function buildVerificationUrl(env: Env, token: string): string {
+  const base = safeUrl(env.APP_BASE_URL);
+  if (!base) {
+    return `/auth/verify?token=${encodeURIComponent(token)}`;
+  }
+  base.pathname = "/auth/verify";
+  base.search = `token=${encodeURIComponent(token)}`;
+  base.hash = "";
+  return base.toString();
+}
+
 function safeUrl(candidate: string | undefined): URL | null {
   if (!candidate) return null;
   try {
@@ -380,6 +492,7 @@ type DbUserRow = {
   client_ids: string | null;
   first_name: string | null;
   last_name: string | null;
+  verified_at: string | null;
 };
 
 function parseStoredRoles(value: string): string[] {

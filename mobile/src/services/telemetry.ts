@@ -1,21 +1,38 @@
-import { apiClient } from "./api-client";
+import { buildApiUrl } from "../config/app-config";
+import { getCachedSessionCookie } from "./session-storage";
 
 type EventProperties = Record<string, string | number | boolean | null | undefined>;
+
+interface TelemetryOptions {
+  source?: string;
+  cookie?: string | null;
+}
 
 export async function reportClientEvent(
   event: string,
   properties?: EventProperties,
-  source = "mobile",
+  options: TelemetryOptions = {},
 ): Promise<void> {
   try {
-    await apiClient.post("/api/observability/client-events", {
-      event,
-      source,
-      timestamp: new Date().toISOString(),
-      properties,
+    const url = buildApiUrl("/api/observability/client-events");
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+    };
+    const cookie = options.cookie ?? getCachedSessionCookie();
+    if (cookie) {
+      headers.Cookie = cookie;
+    }
+    await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        event,
+        source: options.source ?? "mobile",
+        timestamp: new Date().toISOString(),
+        properties,
+      }),
     });
   } catch (error) {
     console.warn("telemetry.event_failed", { event, error });
   }
 }
-

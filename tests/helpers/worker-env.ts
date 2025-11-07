@@ -28,6 +28,7 @@ const MIGRATION_FILES = [
   "0013_dashboard_indexes.sql",
   "0014_cache_tokens.sql",
   "0015_auth.sql",
+  "0016_email_verifications.sql",
   "schema-indexes.sql",
 ];
 

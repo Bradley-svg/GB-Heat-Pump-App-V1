@@ -55,3 +55,7 @@ export async function recover(api: ApiClient, email: string): Promise<void> {
 export async function resetPassword(api: ApiClient, payload: ResetPayload): Promise<void> {
   await api.post("/api/auth/reset", payload);
 }
+
+export async function verifyEmail(api: ApiClient, token: string): Promise<LoginResponse> {
+  return api.post<LoginResponse>("/api/auth/verify", { token });
+}

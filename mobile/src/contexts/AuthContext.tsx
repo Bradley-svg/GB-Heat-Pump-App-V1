@@ -57,12 +57,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       try {
         await logoutSession();
         await clearPendingLogoutCookie();
-        void reportClientEvent("auth.pending_logout.drained");
+        void reportClientEvent("auth.pending_logout.drained", undefined, { cookie });
       } catch (err) {
         console.warn("auth.pending_logout_failed", err);
-        void reportClientEvent("auth.pending_logout.flush_failed", {
-          message: err instanceof Error ? err.message : String(err),
-        });
+        void reportClientEvent(
+          "auth.pending_logout.flush_failed",
+          {
+            message: err instanceof Error ? err.message : String(err),
+          },
+          { cookie },
+        );
       } finally {
         setSessionCookie(undefined);
       }
@@ -122,17 +126,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     const activeCookie = getCachedSessionCookie();
     try {
       await logoutSession();
-      void reportClientEvent("auth.logout.completed", { mode: "server" });
+      void reportClientEvent("auth.logout.completed", { mode: "server" }, { cookie: activeCookie ?? undefined });
     } catch (err) {
       if (activeCookie) {
         await persistPendingLogoutCookie(activeCookie);
-        void reportClientEvent("auth.pending_logout.queued");
+        void reportClientEvent("auth.pending_logout.queued", undefined, { cookie: activeCookie });
         void flushPendingLogout();
       }
       console.warn("auth.logout_failed", err);
-      void reportClientEvent("auth.logout.server_failed", {
-        message: err instanceof Error ? err.message : String(err),
-      });
+      void reportClientEvent(
+        "auth.logout.server_failed",
+        {
+          message: err instanceof Error ? err.message : String(err),
+        },
+        { cookie: activeCookie ?? undefined },
+      );
     } finally {
       await clearSessionCookie();
       setSessionCookie(undefined);

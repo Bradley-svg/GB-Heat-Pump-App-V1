@@ -45,8 +45,16 @@ export function SignupCompletePage() {
           Need help? <a href="mailto:support@greenbro.com">Contact support</a> and mention the
           email address you used during signup.
         </p>
+        {status === "pending_email" ? (
+          <p>
+            Already have your code?{" "}
+            <Link to="/auth/verify" className="link">
+              Verify it here
+            </Link>
+            .
+          </p>
+        ) : null}
       </div>
     </AuthLayout>
   );
 }
-

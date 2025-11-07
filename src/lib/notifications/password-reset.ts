@@ -1,11 +1,17 @@
 import type { Env } from "../../env";
 import { systemLogger } from "../../utils/logging";
 
-const log = systemLogger({ scope: "password-reset" });
+const log = systemLogger({ scope: "user-notifications" });
 
 export interface PasswordResetNotificationPayload {
   email: string;
   resetUrl: string;
+  expiresAt: string;
+}
+
+export interface EmailVerificationNotificationPayload {
+  email: string;
+  verifyUrl: string;
   expiresAt: string;
 }
 
@@ -31,35 +37,32 @@ async function signPayload(secret: string, body: string): Promise<string> {
   return bytesToBase64(digest);
 }
 
-/**
- * Sends a password reset payload to the configured webhook.
- * The webhook must accept JSON and return a 2xx status to indicate success.
- */
-export async function sendPasswordResetNotification(
-  env: Env,
-  payload: PasswordResetNotificationPayload,
+async function dispatchUserNotification(
+  scope: string,
+  endpoint: string | undefined,
+  secret: string | undefined,
+  payload: Record<string, unknown>,
 ): Promise<void> {
-  const endpoint = env.PASSWORD_RESET_WEBHOOK_URL?.trim();
   if (!endpoint) {
-    throw new Error("PASSWORD_RESET_WEBHOOK_URL is not configured");
+    throw new Error(`${scope}_WEBHOOK_URL is not configured`);
   }
 
   const body = JSON.stringify(payload);
   const headers = new Headers({
     "content-type": "application/json",
     accept: "application/json, */*",
-    "user-agent": "greenbro-worker/password-reset",
+    "user-agent": `greenbro-worker/${scope}`,
   });
-  if (env.PASSWORD_RESET_WEBHOOK_SECRET) {
-    headers.set("authorization", `Bearer ${env.PASSWORD_RESET_WEBHOOK_SECRET.trim()}`);
+  if (secret) {
+    headers.set("authorization", `Bearer ${secret.trim()}`);
     try {
-      headers.set("x-reset-signature", await signPayload(env.PASSWORD_RESET_WEBHOOK_SECRET.trim(), body));
+      headers.set("x-user-event-signature", await signPayload(secret.trim(), body));
     } catch (error) {
-      log.warn("password_reset.signature_failed", { error });
+      log.warn(`${scope}.signature_failed`, { error });
     }
   }
 
-  log.info("password_reset.webhook.dispatch", {
+  log.info(`${scope}.webhook.dispatch`, {
     endpoint: new URL(endpoint).host,
     email: payload.email,
     expires_at: payload.expiresAt,
@@ -78,20 +81,48 @@ export async function sendPasswordResetNotification(
     } catch {
       responseBody = undefined;
     }
-    log.warn("password_reset.webhook_failed", {
+    log.warn(`${scope}.webhook_failed`, {
       endpoint,
       status: response.status,
       response: responseBody ? responseBody.slice(0, 200) : null,
     });
     throw new Error(
-      `Password reset webhook failed with status ${response.status}${
+      `${scope} webhook failed with status ${response.status}${
         responseBody ? `: ${responseBody.slice(0, 200)}` : ""
       }`,
     );
   }
 
-  log.info("password_reset.webhook_succeeded", {
+  log.info(`${scope}.webhook_succeeded`, {
     endpoint,
     status: response.status,
   });
+}
+
+/**
+ * Sends a password reset payload to the configured webhook.
+ * The webhook must accept JSON and return a 2xx status to indicate success.
+ */
+export async function sendPasswordResetNotification(
+  env: Env,
+  payload: PasswordResetNotificationPayload,
+): Promise<void> {
+  await dispatchUserNotification(
+    "password_reset",
+    env.PASSWORD_RESET_WEBHOOK_URL?.trim(),
+    env.PASSWORD_RESET_WEBHOOK_SECRET,
+    payload,
+  );
+}
+
+export async function sendEmailVerificationNotification(
+  env: Env,
+  payload: EmailVerificationNotificationPayload,
+): Promise<void> {
+  await dispatchUserNotification(
+    "email_verification",
+    env.EMAIL_VERIFICATION_WEBHOOK_URL?.trim() ?? env.PASSWORD_RESET_WEBHOOK_URL?.trim(),
+    env.EMAIL_VERIFICATION_WEBHOOK_SECRET ?? env.PASSWORD_RESET_WEBHOOK_SECRET,
+    payload,
+  );
 }

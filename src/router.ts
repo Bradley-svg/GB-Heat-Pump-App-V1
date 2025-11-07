@@ -22,6 +22,7 @@ import {
   handleRecover,
   handleReset,
   handleSignup,
+  handleVerifyEmail,
 } from "./routes/auth";
 import { handleArchive } from "./routes/archive";
 import { handleClientCompact } from "./routes/client";
@@ -58,6 +59,7 @@ router
   .post("/api/auth/logout", (req, env) => handleLogout(req, env))
   .post("/api/auth/recover", (req, env) => handleRecover(req, env))
   .post("/api/auth/reset", (req, env) => handleReset(req, env))
+  .post("/api/auth/verify", (req, env) => handleVerifyEmail(req, env))
   .get("/api/me", withAccess((req, env) => handleMe(req, env)))
   .get("/api/fleet/summary", withAccess((req, env) => handleFleetSummary(req, env)))
   .get(
@@ -88,7 +90,7 @@ router
     "/api/observability/client-errors",
     withAccess((req, env) => handleClientErrorReport(req, env)),
   )
-  .post("/api/observability/client-events", (req, env) => handleClientEventReport(req, env))
+  .post("/api/observability/client-events", withAccess((req, env) => handleClientEventReport(req, env)))
   .post(
     "/api/ingest/:profile",
     withParam("profile", (req, env, profile) => handleIngest(req, env, profile)),

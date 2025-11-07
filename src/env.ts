@@ -58,6 +58,8 @@ export interface Env {
   PASSWORD_PBKDF2_ITERATIONS?: string;
   PASSWORD_RESET_WEBHOOK_URL?: string;
   PASSWORD_RESET_WEBHOOK_SECRET?: string;
+  EMAIL_VERIFICATION_WEBHOOK_URL?: string;
+  EMAIL_VERIFICATION_WEBHOOK_SECRET?: string;
 }
 
 export type User = {
@@ -423,6 +425,30 @@ const EnvSchema = z
         path: ["PASSWORD_RESET_WEBHOOK_SECRET"],
         code: z.ZodIssueCode.custom,
         message: "PASSWORD_RESET_WEBHOOK_SECRET must be at least 16 characters when set",
+      });
+    }
+
+    const verificationWebhookRaw =
+      typeof value.EMAIL_VERIFICATION_WEBHOOK_URL === "string"
+        ? value.EMAIL_VERIFICATION_WEBHOOK_URL.trim()
+        : "";
+    if (verificationWebhookRaw && !isHttpUrl(verificationWebhookRaw)) {
+      ctx.addIssue({
+        path: ["EMAIL_VERIFICATION_WEBHOOK_URL"],
+        code: z.ZodIssueCode.custom,
+        message: "EMAIL_VERIFICATION_WEBHOOK_URL must be an absolute http(s) URL when set",
+      });
+    }
+
+    const verificationWebhookSecretRaw =
+      typeof value.EMAIL_VERIFICATION_WEBHOOK_SECRET === "string"
+        ? value.EMAIL_VERIFICATION_WEBHOOK_SECRET.trim()
+        : "";
+    if (verificationWebhookSecretRaw && verificationWebhookSecretRaw.length < 16) {
+      ctx.addIssue({
+        path: ["EMAIL_VERIFICATION_WEBHOOK_SECRET"],
+        code: z.ZodIssueCode.custom,
+        message: "EMAIL_VERIFICATION_WEBHOOK_SECRET must be at least 16 characters when set",
       });
     }
 

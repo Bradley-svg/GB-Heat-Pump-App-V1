@@ -55,7 +55,7 @@ export function SignupPage() {
       } catch (refreshError) {
         console.warn("auth.signup.refresh_failed", refreshError);
       }
-      void trackClientEvent(api, "signup_flow.result", {
+      void trackClientEvent("signup_flow.result", {
         status: refreshed ? "authenticated" : "pending_verification",
       });
       navigate("/auth/signup/complete", {
@@ -68,7 +68,7 @@ export function SignupPage() {
           "Some of the submitted information was invalid. Please check and try again." :
           "We couldn't create your account. Please try again.";
       setError(message);
-      void trackClientEvent(api, "signup_flow.error", {
+      void trackClientEvent("signup_flow.error", {
         status: err instanceof ApiError ? err.status : "unknown",
       });
     } finally {
@@ -79,7 +79,7 @@ export function SignupPage() {
   return (
     <AuthLayout
       title="Create your GREENBRO account"
-      subtitle="We’ll tailor the dashboard to your role once inside."
+      subtitle="We'll tailor the dashboard to your role once inside."
       footer={
         <div className="auth-footer-links">
           <span>Already registered?</span>
