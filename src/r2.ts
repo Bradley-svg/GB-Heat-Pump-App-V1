@@ -32,12 +32,18 @@ function notFound() {
 }
 
 function normalizeKey(pathname: string): string {
-  const key = pathname.replace(/^\/+/, "");
-  if (!key) throw new Error("empty_key");
-  if (key.split("/").some((segment) => segment === "..")) {
+  const trimmed = pathname.replace(/^\/+/, "").replace(/\/+$/, "");
+  if (!trimmed) throw new Error("empty_key");
+  if (trimmed.includes("\\")) {
     throw new Error("invalid_key");
   }
-  return key;
+  const segments = trimmed.split("/");
+  for (const segment of segments) {
+    if (!segment || segment === "." || segment === "..") {
+      throw new Error("invalid_key");
+    }
+  }
+  return segments.join("/");
 }
 
 function parseAllowedPrefixes(env: Env): string[] | null {

@@ -281,10 +281,18 @@ const EnvSchema = z
           });
         }
       }
-      if (parsed > 0 && !value.INGEST_IP_BUCKETS && !isLocalEnv) {
-        console.warn(
-          "INGEST_IP_LIMIT_PER_MIN is enabled without an INGEST_IP_BUCKETS binding; falling back to in-memory token buckets per isolate.",
-        );
+      if (parsed > 0 && !value.INGEST_IP_BUCKETS) {
+        if (isLocalEnv) {
+          console.warn(
+            "INGEST_IP_LIMIT_PER_MIN is enabled without an INGEST_IP_BUCKETS binding; falling back to in-memory token buckets per isolate.",
+          );
+        } else {
+          ctx.addIssue({
+            path: ["INGEST_IP_BUCKETS"],
+            code: z.ZodIssueCode.custom,
+            message: "INGEST_IP_BUCKETS must be bound when INGEST_IP_LIMIT_PER_MIN is greater than zero",
+          });
+        }
       }
     } else if (ingestIpBlockRaw) {
       const block = Number.parseInt(ingestIpBlockRaw, 10);

@@ -12,6 +12,8 @@ The platform now deploys a single Worker (`gb-heat-pump-app-v1`). Key bindings a
 |---------------|--------------|--------------------------|------------------------------|----------------------|
 | `gb-heat-pump-app-v1` | `https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev` | `GREENBRO_DB` -> `ee7ad98b-3629-4985-bd7d-a60c401953a7` | `GB_BUCKET`->`greenbro-brand`; `APP_STATIC`->`greenbro-app-static` | `ACCESS_AUD`, `ACCESS_JWKS_URL` (`https://bradleyayliffl.cloudflareaccess.com/cdn-cgi/access/certs`), `CURSOR_SECRET`, `ASSET_SIGNING_SECRET`, optional `ALLOWED_PREFIXES`, ingestion limits (`INGEST_ALLOWED_ORIGINS`, `INGEST_RATE_LIMIT_PER_MIN=120`, `INGEST_SIGNATURE_TOLERANCE_SECS=300`, `INGEST_IP_LIMIT_PER_MIN`, `INGEST_IP_BLOCK_SECONDS`) |
 
+> When `INGEST_IP_LIMIT_PER_MIN` is greater than zero, bind `INGEST_IP_BUCKETS` (KV) in the target environment. The Worker now fails validation instead of silently falling back to per-isolate token buckets. Use the namespace created via `wrangler kv namespace create greenbro-ingest-ip` (preview + production IDs) for all deployments.
+
 > `ACCESS_AUD` values are managed in Cloudflare Access and stored only via `wrangler secret put`. Rotate/update them alongside the Access application policies described in `docs/platform-setup-guide.md`.
 
 ---

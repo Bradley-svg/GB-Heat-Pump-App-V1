@@ -138,6 +138,7 @@ export async function requireAccessUser(req: Request, env: Env): Promise<User | 
   }
 
   const jwt = req.headers.get("Cf-Access-Jwt-Assertion");
+  const hasAccessJwt = Boolean(jwt);
   if (jwt) {
     try {
       const { payload } = await jwtVerify(jwt, getJwks(env), { audience: env.ACCESS_AUD });
@@ -171,6 +172,8 @@ export async function requireAccessUser(req: Request, env: Env): Promise<User | 
         logFields.sanitized_email = sanitizedEmail;
       }
       log.warn("access.jwt_verify_failed", logFields);
+      cacheRequestUser(req, null);
+      return null;
     }
   }
 
@@ -191,6 +194,11 @@ export async function requireAccessUser(req: Request, env: Env): Promise<User | 
   }
 
   if (!environmentAllowsShim) {
+    cacheRequestUser(req, null);
+    return null;
+  }
+
+  if (hasAccessJwt) {
     cacheRequestUser(req, null);
     return null;
   }

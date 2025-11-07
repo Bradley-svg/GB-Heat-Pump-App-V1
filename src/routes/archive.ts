@@ -257,6 +257,14 @@ async function presentArchiveResponse(
   scope: ReturnType<typeof buildDeviceScope>,
   logger: Logger,
 ) {
+  if (scope.empty) {
+    return {
+      generated_at: payload.generated_at,
+      offline: [],
+      history: [],
+    };
+  }
+
   let offline;
   try {
     offline = await Promise.all(

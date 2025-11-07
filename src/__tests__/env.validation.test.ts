@@ -122,6 +122,24 @@ describe("validateEnv", () => {
     expect(() => validateEnv(env)).not.toThrow();
   });
 
+  it("fails when ingest IP rate limiting is enabled without a KV binding", () => {
+    const env = createEnv({
+      INGEST_IP_LIMIT_PER_MIN: "60",
+    });
+    delete (env as any).INGEST_IP_BUCKETS;
+    expect(() => validateEnv(env)).toThrowError(/INGEST_IP_BUCKETS/);
+  });
+
+  it("allows missing INGEST_IP_BUCKETS when running locally", () => {
+    const env = createEnv({
+      APP_BASE_URL: "http://127.0.0.1:8787/app",
+      ENVIRONMENT: "development",
+      INGEST_IP_LIMIT_PER_MIN: "10",
+    });
+    delete (env as any).INGEST_IP_BUCKETS;
+    expect(() => validateEnv(env)).not.toThrow();
+  });
+
   it("allows disabling ingest IP rate limit with zero", () => {
     const env = createEnv({
       INGEST_IP_LIMIT_PER_MIN: "0",

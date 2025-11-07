@@ -447,6 +447,27 @@ async function presentClientCompactResponse(
   scope: ReturnType<typeof buildDeviceScope>,
   logger: Logger,
 ) {
+  if (scope.empty) {
+    return {
+      generated_at: payload.generated_at,
+      scope: "empty" as const,
+      window_start_ms: payload.window_start_ms,
+      kpis: {
+        devices_total: 0,
+        devices_online: 0,
+        offline_count: 0,
+        online_pct: 0,
+        avg_cop: null,
+        low_deltaT_count: 0,
+        open_alerts: 0,
+        max_heartbeat_age_sec: null,
+      },
+      alerts: [],
+      top_devices: [],
+      trend: [],
+    };
+  }
+
   let alerts;
   try {
     alerts = await Promise.all(
