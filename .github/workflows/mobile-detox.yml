@@ -1,0 +1,90 @@
+name: Mobile Detox E2E
+
+on:
+  schedule:
+    - cron: "0 8 * * *" # 08:00 UTC daily
+  workflow_dispatch:
+
+jobs:
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    env:
+      EXPO_PUBLIC_API_BASE: ${{ secrets.EXPO_PUBLIC_API_BASE }}
+      MOBILE_E2E_EMAIL: ${{ secrets.MOBILE_E2E_EMAIL }}
+      MOBILE_E2E_PASSWORD: ${{ secrets.MOBILE_E2E_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Install mobile dependencies
+        run: npm run mobile:install
+
+      - name: Prepare iOS native project
+        run: |
+          cd mobile
+          npx expo prebuild -p ios --non-interactive --no-install
+
+      - name: Install CocoaPods
+        run: |
+          sudo gem install cocoapods
+          cd mobile/ios && pod install --repo-update
+
+      - name: Build iOS Detox binary
+        run: |
+          cd mobile
+          npm run e2e:build:ios
+
+      - name: Run iOS Detox tests
+        run: |
+          cd mobile
+          npm run e2e:test:ios -- --record-logs all --debug-synchronization 500 --cleanup
+
+  android:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      EXPO_PUBLIC_API_BASE: ${{ secrets.EXPO_PUBLIC_API_BASE }}
+      MOBILE_E2E_EMAIL: ${{ secrets.MOBILE_E2E_EMAIL }}
+      MOBILE_E2E_PASSWORD: ${{ secrets.MOBILE_E2E_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Install mobile dependencies
+        run: npm run mobile:install
+
+      - name: Prepare Android native project
+        run: |
+          cd mobile
+          npx expo prebuild -p android --non-interactive --no-install
+
+      - name: Run Android Detox suite
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_7
+          emulator-options: "-no-snapshot -no-window"
+          disable-animations: true
+          script: |
+            cd mobile
+            npm run e2e:build:android
+            npm run e2e:test:android -- --headless --record-logs all --debug-synchronization 500 --cleanup

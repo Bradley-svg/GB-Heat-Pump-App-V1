@@ -41,4 +41,12 @@ npm run mobile:e2e:test:android
 
 Need to debug Detox locally? Append `-- --record-logs all --debug-synchronization 500` to capture verbose logs.
 
+## Detox prerequisites
+
+- Install Xcode command-line tools, Cocoapods (`sudo gem install cocoapods`), and Watchman (`brew install watchman`).
+- Run `npx expo prebuild -p ios` / `npx expo prebuild -p android` once to generate native projects (the CI workflow runs this automatically).
+- Ensure an iOS Simulator (e.g., “iPhone 15”) and Android AVD (“Pixel_7_API_34”) exist locally.
+- Provide `EXPO_PUBLIC_API_BASE`, `MOBILE_E2E_EMAIL`, and `MOBILE_E2E_PASSWORD` in both GitHub Secrets and `mobile/.env`.
+- Our nightly workflow (`.github/workflows/mobile-detox.yml`) runs both platforms headlessly; keep it green before merging PRs that touch `mobile/`.
+
 See `docs/mobile-validation.md` for the on-device QA loop and `docs/mobile-e2e-plan.md` for Detox rollout details.

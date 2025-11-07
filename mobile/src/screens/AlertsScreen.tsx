@@ -158,12 +158,14 @@ export const AlertsScreen: React.FC<AlertsScreenProps> = ({ onShowToast }) => {
                 </GBCard>
                 <GBButton
                   testID="alert-ack-button"
-                  label="Mark as Acknowledged"
-                  onPress={() => {
-                    onShowToast("Acknowledged (mock)", "success");
-                    setActiveAlert(null);
-                  }}
+                  label="Acknowledgement coming soon"
+                  disabled
+                  accessibilityHint="Acknowledgement will be enabled once backend wiring is in place"
                 />
+                <Text style={themedStyles.placeholderText}>
+                  Use the web console to acknowledge alerts{"\n"}
+                  until the mobile API is available.
+                </Text>
                 <View style={themedStyles.spacerSm} />
                 <GBButton
                   label="Close"
@@ -230,4 +232,8 @@ const createStyles = (spacing: ThemeSpacing, colors: ThemeColors) =>
     },
     modalSection: { marginTop: spacing.md },
     cardText: { color: colors.text },
+    placeholderText: {
+      color: colors.textMuted,
+      marginTop: spacing.xs,
+    },
   });

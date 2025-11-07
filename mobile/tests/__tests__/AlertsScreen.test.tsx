@@ -69,8 +69,11 @@ describe("AlertsScreen", () => {
     expect(getByText("Low flow detected")).toBeTruthy();
 
     fireEvent.press(getByText("Low flow detected"));
-    expect(getByText("Mark as Acknowledged")).toBeTruthy();
-    fireEvent.press(getByText("Mark as Acknowledged"));
-    expect(onShowToast).toHaveBeenCalledWith("Acknowledged (mock)", "success");
+    const placeholderButton = getByText("Acknowledgement coming soon");
+    expect(placeholderButton).toBeTruthy();
+    expect(
+      getByText(/Use the web console to acknowledge alerts/i),
+    ).toBeTruthy();
+    expect(onShowToast).not.toHaveBeenCalled();
   });
 });
