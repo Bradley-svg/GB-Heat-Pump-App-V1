@@ -26,3 +26,9 @@ Follow this loop whenever you need to validate the Expo client against productio
    Use the native dev menu (`⌘ + D` on iOS Simulator / `Ctrl + M` on Android) to toggle performance overlays and confirm frame times when scrolling KPI tiles.
 
 Document the device/OS combo in the PR description so we can track coverage across fleets.
+
+## Test harness notes
+- `mobile/tests/__tests__/LoginScreen.test.tsx` shims `KeyboardAvoidingView` with `react-native/Libraries/Components/View/View` so Jest can render the login screen without native keyboard primitives. When upgrading React Native, confirm the internal path still exists or adjust the mock before bumping to avoid runaway recursion errors.
+
+## Post-QA monitoring
+- After validating on-device, watch the `signup_flow.resend` funnel in Dashboard/`client.event` logs to ensure resend attempts succeed at expected rates and alert if the metric deviates (per Prompt Bible observability guidance).

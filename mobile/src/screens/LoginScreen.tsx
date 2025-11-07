@@ -13,6 +13,9 @@ import { GBButton } from "../components/GBButton";
 import { GBCard } from "../components/GBCard";
 import { useAuth } from "../contexts/AuthContext";
 import { useTheme } from "../theme/GBThemeProvider";
+import { resendVerification } from "../services/auth-service";
+import { ApiError } from "../services/api-client";
+import { reportClientEvent } from "../services/telemetry";
 
 interface LoginScreenProps {
   onSuccess?: () => void;
@@ -28,6 +31,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
+  const [resendError, setResendError] = useState<string | null>(null);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
+  const [resendPending, setResendPending] = useState(false);
+  const emitResendEvent = (status: string) => {
+    void reportClientEvent("signup_flow.resend", { status }).catch((err) => {
+      console.warn("signup_flow.resend.telemetry_failed", err);
+    });
+  };
 
   const handleSubmit = async () => {
     setLocalError(null);
@@ -50,6 +61,36 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     password.length < 8;
 
   const helperText = localError ?? error;
+  const handleResend = async () => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) {
+      setResendError("Enter your email to resend the verification link.");
+      setResendMessage(null);
+      emitResendEvent("missing_email");
+      return;
+    }
+    setResendPending(true);
+    setResendError(null);
+    setResendMessage(null);
+    try {
+      await resendVerification(trimmed);
+      setResendMessage("Check your inbox for a fresh verification email.");
+      emitResendEvent("ok");
+    } catch (err) {
+      const statusCode = err instanceof ApiError ? err.status : "error";
+      const message =
+        err instanceof ApiError && err.status === 429 ?
+          "Please wait before requesting another verification email." :
+          "We couldn't resend the verification email. Try again soon.";
+      setResendError(message);
+      setResendMessage(null);
+      emitResendEvent(
+        typeof statusCode === "number" ? String(statusCode) : statusCode,
+      );
+    } finally {
+      setResendPending(false);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -110,6 +151,30 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             loading={status === "authenticating"}
             accessibilityHint="Signs in to the GreenBro mobile console"
           />
+          <View style={styles.resendContainer}>
+            <Text style={[styles.label, { color: colors.textMuted }]}>
+              Need another verification email?
+            </Text>
+            <GBButton
+              label="Resend verification"
+              testID="login-resend"
+              tone="secondary"
+              onPress={handleResend}
+              disabled={resendPending}
+              loading={resendPending}
+              accessibilityHint="Sends a new verification email"
+            />
+            {resendError ? (
+              <Text style={[styles.errorText, { color: colors.error }]}>
+                {resendError}
+              </Text>
+            ) : null}
+            {resendMessage ? (
+              <Text style={[styles.successText, { color: colors.success }]}>
+                {resendMessage}
+              </Text>
+            ) : null}
+          </View>
         </View>
       </GBCard>
       {status === "loading" ? (
@@ -145,5 +210,12 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 32,
     right: 32,
+  },
+  resendContainer: {
+    gap: 8,
+    marginTop: 16,
+  },
+  successText: {
+    fontSize: 13,
   },
 });

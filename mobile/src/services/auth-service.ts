@@ -54,6 +54,10 @@ export async function logoutSession(): Promise<void> {
   await apiClient.post("/api/auth/logout", {});
 }
 
+export async function resendVerification(email: string): Promise<void> {
+  await apiClient.post("/api/auth/verify/resend", { email });
+}
+
 async function safeJson<T>(response: Response): Promise<T> {
   const text = await response.text();
   if (!text) return {} as T;
