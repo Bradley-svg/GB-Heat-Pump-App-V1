@@ -33,6 +33,7 @@ AUTH_IP_BLOCK_SECONDS = "300"
 INGEST_FAILURE_LIMIT_PER_MIN = "60"
 INGEST_IP_LIMIT_PER_MIN = "240"
 INGEST_IP_BLOCK_SECONDS = "60"
+EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS = "300"
 
 # Ops thresholds (override per-env if needed)
 HEARTBEAT_INTERVAL_SECS = "30"        # expected device heartbeat period
@@ -116,6 +117,7 @@ preview_id = "6c84b7f2da474d1f9efc3a8c2a1be4d5"
   INGEST_IP_BLOCK_SECONDS = "60"
   HEARTBEAT_INTERVAL_SECS = "30"
   OFFLINE_MULTIPLIER = "6"
+  EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS = "300"
 
 [[env.production.d1_databases]]
 binding = "DB"

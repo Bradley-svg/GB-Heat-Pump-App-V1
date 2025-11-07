@@ -236,4 +236,39 @@ describe("signup + email verification", () => {
       dispose();
     }
   });
+
+  it("throttles resend attempts within the cooldown window", async () => {
+    const { env, dispose } = await createWorkerEnv({
+      EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS: "600",
+    });
+    try {
+      const payload = {
+        email: "throttle@example.com",
+        password: "Throttle123!",
+        firstName: "Throttle",
+        lastName: "User",
+      };
+      const signupReq = new Request("https://app.test/api/auth/signup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      await handleSignup(signupReq, env);
+
+      const resendReq = new Request("https://app.test/api/auth/verify/resend", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: payload.email }),
+      });
+      const first = await handleResendVerification(resendReq, env);
+      expect(first.status).toBe(202);
+
+      const second = await handleResendVerification(resendReq, env);
+      expect(second.status).toBe(429);
+      const body = await second.json();
+      expect(body.error).toMatch(/wait/i);
+    } finally {
+      dispose();
+    }
+  });
 });

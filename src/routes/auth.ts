@@ -451,6 +451,25 @@ export async function handleResendVerification(req: Request, env: Env) {
     return json({ ok: true }, { status: 202 });
   }
 
+  const cooldownSeconds = resolveVerificationResendCooldown(env);
+  const existingVerification = await env.DB
+    .prepare(`SELECT created_at FROM email_verifications WHERE user_id = ?1`)
+    .bind(userRow.id)
+    .first<{ created_at: string }>();
+  if (existingVerification?.created_at) {
+    const createdAtMs = Date.parse(existingVerification.created_at);
+    if (Number.isFinite(createdAtMs) && Date.now() - createdAtMs < cooldownSeconds * 1000) {
+      log.warn("auth.resend.cooldown", {
+        user_id: userRow.id,
+        cooldown_seconds: cooldownSeconds,
+      });
+      return json(
+        { error: "Please wait before requesting another verification email." },
+        { status: 429 },
+      );
+    }
+  }
+
   try {
     const verification = await issueEmailVerification(env, userRow.id);
     await sendEmailVerificationNotification(env, {
@@ -465,6 +484,18 @@ export async function handleResendVerification(req: Request, env: Env) {
 
   log.info("auth.resend.sent", { user_id: userRow.id });
   return json({ ok: true }, { status: 202 });
+}
+
+function resolveVerificationResendCooldown(env: Env): number {
+  const raw =
+    typeof env.EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS === "string" ?
+      env.EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS.trim() :
+      "";
+  const parsed = Number.parseInt(raw, 10);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+  return 300;
 }
 
 async function readJson(req: Request): Promise<unknown> {

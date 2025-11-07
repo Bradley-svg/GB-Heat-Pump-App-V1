@@ -60,6 +60,7 @@ export interface Env {
   PASSWORD_RESET_WEBHOOK_SECRET?: string;
   EMAIL_VERIFICATION_WEBHOOK_URL?: string;
   EMAIL_VERIFICATION_WEBHOOK_SECRET?: string;
+  EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS?: string;
 }
 
 export type User = {
@@ -450,6 +451,21 @@ const EnvSchema = z
         code: z.ZodIssueCode.custom,
         message: "EMAIL_VERIFICATION_WEBHOOK_SECRET must be at least 16 characters when set",
       });
+    }
+
+    const resendCooldownRaw =
+      typeof value.EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS === "string" ?
+        value.EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS.trim() :
+        "";
+    if (resendCooldownRaw) {
+      const parsed = Number.parseInt(resendCooldownRaw, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        ctx.addIssue({
+          path: ["EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS"],
+          code: z.ZodIssueCode.custom,
+          message: "EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS must be a positive integer when set",
+        });
+      }
     }
 
     const carryForwardRaw =
