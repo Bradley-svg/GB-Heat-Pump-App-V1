@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "GreenBro Mobile",
+    "slug": "greenbro-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "greenbro",
+    "updates": { "fallbackToCacheTimeout": 0 },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.greenbro.mobile"
+    },
+    "android": { "package": "com.greenbro.mobile" },
+    "web": { "bundler": "metro" }
+  }
+}

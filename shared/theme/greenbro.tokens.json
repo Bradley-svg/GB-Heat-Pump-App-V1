@@ -1,0 +1,73 @@
+{
+  "metadata": {
+    "name": "GreenBro Universal Tokens",
+    "version": "1.0.0",
+    "brand": "GreenBro"
+  },
+  "colors": {
+    "light": {
+      "primary": "#39B54A",
+      "onPrimary": "#FFFFFF",
+      "neutral": "#414042",
+      "surface": "#FFFFFF",
+      "surfaceMuted": "#F2F5F2",
+      "surfaceElevated": "#FFFFFF",
+      "border": "#D8E2D8",
+      "text": "#1F1F1F",
+      "textMuted": "#4F5A4F",
+      "success": "#2F9742",
+      "warning": "#CC8A00",
+      "error": "#C23B3B",
+      "info": "#1F7BB5"
+    },
+    "dark": {
+      "primary": "#39B54A",
+      "onPrimary": "#0C1A0F",
+      "neutral": "#E2E2E2",
+      "surface": "#111412",
+      "surfaceMuted": "#191D1A",
+      "surfaceElevated": "#1D221E",
+      "border": "#2D372D",
+      "text": "#F3F6F3",
+      "textMuted": "#9CA79D",
+      "success": "#48C761",
+      "warning": "#E0A73C",
+      "error": "#E26666",
+      "info": "#59AEE0"
+    }
+  },
+  "spacing": {
+    "xxs": 4,
+    "xs": 8,
+    "sm": 12,
+    "md": 16,
+    "lg": 24,
+    "xl": 32
+  },
+  "radii": {
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 20
+  },
+  "shadows": {
+    "light": {
+      "level1": "0px 2px 6px rgba(0,0,0,0.08)",
+      "level2": "0px 6px 16px rgba(0,0,0,0.12)"
+    },
+    "dark": {
+      "level1": "0px 2px 6px rgba(0,0,0,0.32)",
+      "level2": "0px 6px 16px rgba(0,0,0,0.44)"
+    }
+  },
+  "typeScale": {
+    "display": { "size": 34, "lineHeight": 40, "weight": "700" },
+    "title": { "size": 24, "lineHeight": 30, "weight": "600" },
+    "body": { "size": 16, "lineHeight": 22, "weight": "500" },
+    "label": { "size": 14, "lineHeight": 18, "weight": "500" }
+  },
+  "motion": {
+    "durations": { "tap": 200, "transition": 300, "toast": 4000 },
+    "curves": { "standard": "ease-in-out", "decelerate": "cubic-bezier(0.05, 0.7, 0.1, 1)" }
+  }
+}
