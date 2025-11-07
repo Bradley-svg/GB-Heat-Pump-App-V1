@@ -57,6 +57,7 @@ export interface Env {
   ARCHIVE_CACHE_TTL_SECS?: string;
   PASSWORD_PBKDF2_ITERATIONS?: string;
   PASSWORD_RESET_WEBHOOK_URL?: string;
+  PASSWORD_RESET_WEBHOOK_SECRET?: string;
 }
 
 export type User = {
@@ -410,6 +411,18 @@ const EnvSchema = z
         path: ["PASSWORD_RESET_WEBHOOK_URL"],
         code: z.ZodIssueCode.custom,
         message: "PASSWORD_RESET_WEBHOOK_URL must be an absolute http(s) URL when set",
+      });
+    }
+
+    const resetWebhookSecretRaw =
+      typeof value.PASSWORD_RESET_WEBHOOK_SECRET === "string"
+        ? value.PASSWORD_RESET_WEBHOOK_SECRET.trim()
+        : "";
+    if (resetWebhookSecretRaw && resetWebhookSecretRaw.length < 16) {
+      ctx.addIssue({
+        path: ["PASSWORD_RESET_WEBHOOK_SECRET"],
+        code: z.ZodIssueCode.custom,
+        message: "PASSWORD_RESET_WEBHOOK_SECRET must be at least 16 characters when set",
       });
     }
 

@@ -16,6 +16,27 @@ The platform now deploys a single Worker (`gb-heat-pump-app-v1`). Key bindings a
 
 > `ACCESS_AUD` values are managed in Cloudflare Access and stored only via `wrangler secret put`. Rotate/update them alongside the Access application policies described in `docs/platform-setup-guide.md`.
 
+### Password reset webhook + auth KV bindings
+
+| Item | Notes |
+| --- | --- |
+| `PASSWORD_RESET_WEBHOOK_URL` | HTTPS endpoint (SendGrid, SES, Twilio, etc.) that delivers password-reset notifications. Configure via `wrangler secret put PASSWORD_RESET_WEBHOOK_URL` per environment. |
+| `PASSWORD_RESET_WEBHOOK_SECRET` | Shared secret used for `Authorization: Bearer …` and `X-Reset-Signature` headers. Must be ≥16 chars. Rotate quarterly via the checklist below. |
+| `AUTH_IP_BUCKETS` (KV) | Now provisioned for **both** production and preview. Use `wrangler kv namespace create greenbro-auth-ip --env production` (and `--env preview`) and copy the IDs into `wrangler.toml`. The Worker refuses to boot if `AUTH_IP_LIMIT_PER_MIN > 0` without this binding, preventing silent degradation. |
+
+**Secret rotation checklist**
+
+1. Create a new webhook secret in the password manager.
+2. `wrangler secret put PASSWORD_RESET_WEBHOOK_SECRET` for preview, deploy, and verify reset emails hit the sandbox inbox.
+3. Repeat for production. Do not delete the previous secret from the service provider until both environments return 2xx responses for test resets.
+4. Update the rotation log in the password manager entry with timestamp + operator.
+
+**Monitoring**
+
+- `password_reset.webhook_failed` (Workers log) feeds the Datadog monitor `greenbro.password_reset.notifications`. Alerts page ops if we see >2 failures in 5 minutes.
+- Configure the downstream email/SMS provider (SendGrid Event Webhook, SES SNS topic, etc.) to alert on sustained bounce/deferral rates.
+- See `docs/password-reset-webhook.md` for payload schema, sample curl verification, and SendGrid wiring steps.
+
 ---
 
 ### Fleet cache controls

@@ -75,6 +75,8 @@ export async function createWorkerEnv(overrides: Partial<Env> = {}): Promise<Wor
     AUTH_IP_LIMIT_PER_MIN: "0",
     AUTH_IP_BLOCK_SECONDS: "60",
     AUTH_IP_BUCKETS: createTestKvNamespace(),
+    PASSWORD_RESET_WEBHOOK_URL: "https://hooks.test/password-reset",
+    PASSWORD_RESET_WEBHOOK_SECRET: "dev-reset-secret",
   };
 
   const env: Env = { ...baseEnv, ...overrides, DB };
