@@ -35,8 +35,8 @@ describe("useCurrentUser", () => {
       expect(options.signal).toBeInstanceOf(AbortSignal);
     }
 
-    act(() => {
-      result.current.refresh();
+    await act(async () => {
+      await result.current.refresh();
     });
 
     await waitFor(() => expect(getMock).toHaveBeenCalledTimes(2));

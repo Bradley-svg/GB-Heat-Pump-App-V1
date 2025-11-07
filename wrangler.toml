@@ -23,6 +23,8 @@ ALLOWED_PREFIXES = "brand/"
 TELEMETRY_RETENTION_DAYS = "90"
 RETENTION_BACKUP_PREFIX = "data-retention"
 ENVIRONMENT = "production"
+AUTH_IP_LIMIT_PER_MIN = "60"
+AUTH_IP_BLOCK_SECONDS = "300"
 # Ingest controls are provided via `wrangler secret put` per environment:
 #   INGEST_ALLOWED_ORIGINS
 #   INGEST_RATE_LIMIT_PER_MIN
@@ -74,6 +76,12 @@ binding = "INGEST_IP_BUCKETS"
 id = "a5ea436cc7854b0a8ce5bab3e3551455"
 preview_id = "623e877af5934787b541a5711fe2151c"
 
+[[kv_namespaces]]
+# Placeholder IDs – replace with the real namespace IDs for auth rate limiting.
+binding = "AUTH_IP_BUCKETS"
+id = "00000000000000000000000000000000"
+preview_id = "00000000000000000000000000000000"
+
 [env.local]
   [env.local.vars]
   APP_BASE_URL = "http://127.0.0.1:8787/app"
@@ -82,6 +90,8 @@ preview_id = "623e877af5934787b541a5711fe2151c"
   TELEMETRY_REFACTOR_MODE = "compare"
   INGEST_IP_LIMIT_PER_MIN = "0"
   INGEST_IP_BLOCK_SECONDS = "60"
+  AUTH_IP_LIMIT_PER_MIN = "25"
+  AUTH_IP_BLOCK_SECONDS = "300"
   # Enable the Access shim for local Miniflare sessions (adjust as needed).
   ALLOW_DEV_ACCESS_SHIM = "true"
   DEV_ALLOW_USER = '{"email":"local-admin@example.com","roles":["admin"],"clientIds":["profile-west"]}'

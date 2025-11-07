@@ -408,12 +408,15 @@ async function enforceAuthRateLimit(
     if (result.retryAfterSeconds != null) {
       response.headers.set("Retry-After", String(result.retryAfterSeconds));
     }
-    log.warn("auth.rate_limited", {
+    const fields: Record<string, unknown> = {
       route,
-      ip: result.ip ?? null,
       limit_per_minute: result.limit ?? null,
       retry_after_seconds: result.retryAfterSeconds ?? null,
-    });
+    };
+    if (result.ip) {
+      fields.client_ip = result.ip;
+    }
+    log.warn("auth.rate_limited", fields);
     return response;
   }
   return null;

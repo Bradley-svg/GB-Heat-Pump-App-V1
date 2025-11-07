@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 
 import { useApiClient } from "../contexts";
 
@@ -22,7 +22,7 @@ type Action =
   | { type: "error"; error: Error };
 
 export interface CurrentUserState extends State {
-  refresh: () => void;
+  refresh: () => Promise<void>;
 }
 
 const initialState: State = {
@@ -47,41 +47,41 @@ function reducer(state: State, action: Action): State {
 export function useCurrentUser(): CurrentUserState {
   const api = useApiClient();
   const [state, dispatch] = useReducer(reducer, initialState);
-  const [version, bumpVersion] = useReducer((v: number) => v + 1, 0);
+  const aliveRef = useRef(true);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      dispatch({ type: "loading" });
-      try {
-        const payload = await api.get<CurrentUser>("/api/me");
-        if (!cancelled) {
-          dispatch({ type: "success", user: normalizeUser(payload) });
-        }
-      } catch (error) {
-        if (!cancelled) {
-          const err = error instanceof Error ? error : new Error("Failed to load user profile");
-          dispatch({ type: "error", error: err });
-        }
-      }
-    }
-
-    void load();
-
     return () => {
-      cancelled = true;
+      aliveRef.current = false;
     };
-  }, [api, version]);
+  }, []);
+
+  const load = useCallback(async () => {
+    dispatch({ type: "loading" });
+    try {
+      const payload = await api.get<CurrentUser>("/api/me");
+      if (!aliveRef.current) {
+        return;
+      }
+      dispatch({ type: "success", user: normalizeUser(payload) });
+    } catch (error) {
+      if (!aliveRef.current) {
+        return;
+      }
+      const err = error instanceof Error ? error : new Error("Failed to load user profile");
+      dispatch({ type: "error", error: err });
+    }
+  }, [api]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   return useMemo(
     () => ({
       ...state,
-      refresh: () => {
-        bumpVersion();
-      },
+      refresh: () => load(),
     }),
-    [state],
+    [state, load],
   );
 }
 

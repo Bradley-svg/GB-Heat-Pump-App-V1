@@ -40,7 +40,14 @@ export function AppShell() {
           : "We couldn't complete the request. Please try again."
         : error?.message ?? "An unexpected error occurred. Please try again.";
 
-    return <RequestErrorScreen message={message} onRetry={currentUser.refresh} />;
+    return (
+      <RequestErrorScreen
+        message={message}
+        onRetry={() => {
+          void currentUser.refresh();
+        }}
+      />
+    );
   }
 
   if (!currentUser.user) {

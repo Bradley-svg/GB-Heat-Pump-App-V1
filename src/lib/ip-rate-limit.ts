@@ -75,55 +75,50 @@ export async function checkIpRateLimit(
 }
 
 function resolveConfig(env: Env, options?: RateLimitOptions): IpRateLimitConfig | null {
-  const rawLimit = readStringEnv(
-    env,
-    options?.limitEnvKey,
-    typeof env.INGEST_IP_LIMIT_PER_MIN === "string" ? env.INGEST_IP_LIMIT_PER_MIN : undefined,
-  );
-  let capacity: number | null = null;
-  if (rawLimit) {
-    const parsed = Number.parseInt(rawLimit.trim(), 10);
-    if (Number.isFinite(parsed) && parsed > 0) {
-      capacity = parsed;
-    } else {
-      return null;
-    }
-  } else if (options?.defaultLimit && options.defaultLimit > 0) {
+  const rawLimit =
+    getEnvString(env, options?.limitEnvKey) ??
+    (!options?.limitEnvKey ? getEnvString(env, "INGEST_IP_LIMIT_PER_MIN") : undefined);
+  let capacity = parsePositiveInt(rawLimit);
+  if (capacity === null && options?.defaultLimit && options.defaultLimit > 0) {
     capacity = options.defaultLimit;
   }
-  if (!capacity) {
+  if (capacity === null) {
     return null;
   }
 
-  const rawBlockSeconds = readStringEnv(
-    env,
-    options?.blockEnvKey,
-    typeof env.INGEST_IP_BLOCK_SECONDS === "string"
-      ? env.INGEST_IP_BLOCK_SECONDS
-      : undefined,
-  );
-  const fallbackBlockSeconds = options?.defaultBlockSeconds ?? 60;
-  const blockSeconds = Number.parseInt(rawBlockSeconds || String(fallbackBlockSeconds), 10);
-  const blockDurationMs =
-    Number.isFinite(blockSeconds) && blockSeconds > 0
-      ? blockSeconds * 1000
-      : fallbackBlockSeconds * 1000;
+  const rawBlock =
+    getEnvString(env, options?.blockEnvKey) ??
+    (!options?.blockEnvKey ? getEnvString(env, "INGEST_IP_BLOCK_SECONDS") : undefined);
+  const fallbackBlock = options?.defaultBlockSeconds ?? 60;
+  let blockSeconds = parsePositiveInt(rawBlock);
+  if (blockSeconds === null) {
+    blockSeconds = fallbackBlock;
+  }
 
   return {
     capacity,
     refillIntervalMs: 60_000,
-    blockDurationMs,
+    blockDurationMs: Math.max(1, blockSeconds) * 1000,
   };
 }
 
-function readStringEnv(env: Env, key: keyof Env | undefined, fallback?: string): string {
-  if (key) {
-    const value = env[key];
-    if (typeof value === "string") {
-      return value;
-    }
+function getEnvString(env: Env, key?: keyof Env): string | undefined {
+  if (!key) return undefined;
+  const value = env[key];
+  if (typeof value !== "string") {
+    return undefined;
   }
-  return typeof fallback === "string" ? fallback : "";
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : undefined;
+}
+
+function parsePositiveInt(raw?: string): number | null {
+  if (!raw) return null;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+  return parsed;
 }
 
 function resolveKvBinding(env: Env, options?: RateLimitOptions): KvNamespace | undefined {
@@ -133,7 +128,10 @@ function resolveKvBinding(env: Env, options?: RateLimitOptions): KvNamespace | u
       return binding as KvNamespace;
     }
   }
-  return env.INGEST_IP_BUCKETS;
+  if (env.INGEST_IP_BUCKETS && typeof env.INGEST_IP_BUCKETS.get === "function") {
+    return env.INGEST_IP_BUCKETS;
+  }
+  return undefined;
 }
 
 function extractClientIp(req: Request): string | null {

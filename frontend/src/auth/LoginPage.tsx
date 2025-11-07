@@ -39,7 +39,7 @@ export function LoginPage() {
     setError(null);
     try {
       await login(api, { email, password });
-      currentUser.refresh();
+      await currentUser.refresh();
       navigate("/app", { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {

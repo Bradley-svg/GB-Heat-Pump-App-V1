@@ -47,7 +47,7 @@ export function SignupPage() {
         phone: phone || undefined,
         company: company || undefined,
       });
-      currentUser.refresh();
+      await currentUser.refresh();
       navigate("/app", { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {

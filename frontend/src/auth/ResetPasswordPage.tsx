@@ -53,7 +53,7 @@ export function ResetPasswordPage() {
     setError(null);
     try {
       await resetPassword(api, { token, password });
-      currentUser.refresh();
+      await currentUser.refresh();
       navigate("/app", { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.status === 400) {
