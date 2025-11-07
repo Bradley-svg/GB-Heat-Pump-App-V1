@@ -99,7 +99,47 @@ preview_id = "6c84b7f2da474d1f9efc3a8c2a1be4d5"
 
 [env.production]
   [env.production.vars]
+  APP_BASE_URL = "https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev/app"
+  RETURN_DEFAULT = "https://www.greenbro.co.za/"
+  TIMEZONE = "Africa/Johannesburg"
+  APP_API_BASE = "https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev"
+  APP_ASSET_BASE = "https://pub-3f14c9b10881423a97f40e12402d4b03.r2.dev/app/assets/"
+  TELEMETRY_REFACTOR_MODE = "compare"
+  ALLOWED_PREFIXES = "brand/"
+  TELEMETRY_RETENTION_DAYS = "90"
+  RETENTION_BACKUP_PREFIX = "data-retention"
+  ENVIRONMENT = "production"
+  AUTH_IP_LIMIT_PER_MIN = "60"
+  AUTH_IP_BLOCK_SECONDS = "300"
+  INGEST_FAILURE_LIMIT_PER_MIN = "60"
+  INGEST_IP_LIMIT_PER_MIN = "240"
+  INGEST_IP_BLOCK_SECONDS = "60"
+  HEARTBEAT_INTERVAL_SECS = "30"
+  OFFLINE_MULTIPLIER = "6"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "GREENBRO_DB"
+database_id = "ee7ad98b-3629-4985-bd7d-a60c401953a7"
+
+[[env.production.kv_namespaces]]
+binding = "INGEST_IP_BUCKETS"
+id = "a5ea436cc7854b0a8ce5bab3e3551455"
+preview_id = "623e877af5934787b541a5711fe2151c"
+
+[[env.production.kv_namespaces]]
+binding = "AUTH_IP_BUCKETS"
+id = "9d1a0f8cbe2545afa46a9d12dfe7c4b3"
+preview_id = "6c84b7f2da474d1f9efc3a8c2a1be4d5"
+
+[[env.production.r2_buckets]]
+binding = "GB_BUCKET"
+bucket_name = "greenbro-brand"
 
 [[env.production.r2_buckets]]
 binding = "APP_STATIC"
 bucket_name = "greenbro-app-static"
+
+[[env.production.r2_buckets]]
+binding = "RETENTION_ARCHIVE"
+bucket_name = "greenbro-telemetry-archive"
