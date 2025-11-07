@@ -71,6 +71,7 @@ function randomBytes(length: number): Uint8Array {
 
 async function deriveKey(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
   const encoder = new TextEncoder();
+  const normalizedSalt = new Uint8Array(salt);
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
     encoder.encode(password),
@@ -81,7 +82,7 @@ async function deriveKey(password: string, salt: Uint8Array, iterations: number)
   const derivedBits = await crypto.subtle.deriveBits(
     {
       name: "PBKDF2",
-      salt,
+      salt: normalizedSalt,
       iterations,
       hash: "SHA-256",
     },

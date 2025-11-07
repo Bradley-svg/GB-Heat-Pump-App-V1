@@ -2,16 +2,19 @@ import type { Logger } from "../utils/logging";
 
 const CACHE_HOST = "https://cache.greenbro.internal";
 
+type CloudflareCacheStorage = CacheStorage & { default?: Cache };
+
 function buildCacheRequest(key: string): Request {
   return new Request(`${CACHE_HOST}/${encodeURIComponent(key)}`, { method: "GET" });
 }
 
 function getDefaultCache(): Cache | null {
   try {
-    if (typeof caches === "undefined") {
+    const storage = (globalThis as typeof globalThis & { caches?: CloudflareCacheStorage }).caches;
+    if (!storage) {
       return null;
     }
-    return caches.default ?? null;
+    return storage.default ?? null;
   } catch {
     return null;
   }

@@ -176,6 +176,7 @@ export async function handleArchive(req: Request, env: Env) {
                 d.online,
                 ls.cop,
                 ls.deltaT,
+                ls.thermalKW,
                 ls.faults_json,
                 ls.updated_at
            FROM devices d
@@ -193,6 +194,7 @@ export async function handleArchive(req: Request, env: Env) {
         online: number;
         cop: number | null;
         deltaT: number | null;
+        thermalKW: number | null;
         faults_json: string | null;
         updated_at: string | null;
       }>(),
@@ -204,6 +206,7 @@ export async function handleArchive(req: Request, env: Env) {
     online: Boolean(row.online),
     cop: row.cop ?? null,
     deltaT: row.deltaT ?? null,
+    thermalKW: row.thermalKW ?? null,
     updated_at: row.updated_at ?? null,
     faults: parseFaultsJson(row.faults_json),
   }));
