@@ -15,6 +15,8 @@ import { handleR2Request } from "./r2";
 import { runTelemetryRetention, TELEMETRY_RETENTION_CRON } from "./jobs/retention";
 import { clearCronCursor, readCronCursor, writeCronCursor } from "./lib/cron-cursor";
 import { recordOpsMetric } from "./lib/ops-metrics";
+import { loadSignupFunnelSummary } from "./lib/signup-funnel";
+import { ALERT_THRESHOLDS } from "./telemetry";
 export { resolveAppConfig, serializeAppConfig } from "./app-config";
 
 const STATIC_CONTENT_TYPES: Record<string, string> = {
@@ -28,6 +30,7 @@ const DEFAULT_OFFLINE_MULTIPLIER = 6;
 const OFFLINE_BATCH_SIZE = 100;
 const OFFLINE_MAX_BATCHES_PER_RUN = 40;
 const OFFLINE_CURSOR_KEY = "offline.devices";
+const SIGNUP_FUNNEL_ALERT_CRON = "*/10 * * * *";
 
 function extname(path: string): string {
   const idx = path.lastIndexOf(".");
@@ -307,6 +310,11 @@ export default {
       return;
     }
 
+    if (event.cron === SIGNUP_FUNNEL_ALERT_CRON) {
+      await runSignupFunnelMonitor(env);
+      return;
+    }
+
     const log = systemLogger({ task: "offline-cron" });
     try {
       const result = await env.DB.prepare(
@@ -443,3 +451,91 @@ export default {
     await recordOpsMetric(env, "/cron/offline", truncated ? 299 : 200, Date.now() - offlineStartedAt, null, log);
   },
 };
+
+async function runSignupFunnelMonitor(env: Env): Promise<void> {
+  const startedAt = Date.now();
+  const log = systemLogger({ task: "signup-funnel-cron" });
+  try {
+    const summary = await loadSignupFunnelSummary(env);
+    const thresholds = ALERT_THRESHOLDS.signup;
+    const conversionSeverity = deriveInvertedSeverity(
+      summary.conversion_rate,
+      thresholds.conversion_rate,
+    );
+    const pendingSeverity = deriveSeverity(summary.pending_ratio, thresholds.pending_ratio);
+    const errorSeverity = deriveSeverity(summary.error_rate, thresholds.error_rate);
+    const overallSeverity = worstSeverity(conversionSeverity, worstSeverity(pendingSeverity, errorSeverity));
+
+    log.info("signup.funnel.check", {
+      status: overallSeverity,
+      submissions: summary.submissions,
+      authenticated: summary.authenticated,
+      pending: summary.pending,
+      errors: summary.errors,
+      conversion_rate: summary.conversion_rate,
+      pending_ratio: summary.pending_ratio,
+      error_rate: summary.error_rate,
+      window_start: summary.window_start,
+      window_days: summary.window_days,
+    });
+
+    if (overallSeverity !== "ok") {
+      log.warn("signup.funnel_degraded", {
+        status: overallSeverity,
+        conversion_rate: summary.conversion_rate,
+        pending_ratio: summary.pending_ratio,
+        error_rate: summary.error_rate,
+        metric: "greenbro.signup.funnel_degraded",
+        metric_key: "signup.funnel_degraded",
+        count: 1,
+      });
+    }
+
+    const statusCode = severityToStatusCode(overallSeverity);
+    await recordOpsMetric(env, "/cron/signup-funnel", statusCode, Date.now() - startedAt, null, log);
+  } catch (error) {
+    log.error("signup.funnel.failed", { error });
+    await recordOpsMetric(env, "/cron/signup-funnel", 500, Date.now() - startedAt, null, log);
+  }
+}
+
+type SeverityLevel = "ok" | "warn" | "critical";
+
+function deriveSeverity(
+  value: number,
+  thresholds: { warn: number; critical: number },
+): SeverityLevel {
+  if (value >= thresholds.critical) return "critical";
+  if (value >= thresholds.warn) return "warn";
+  return "ok";
+}
+
+function deriveInvertedSeverity(
+  value: number,
+  thresholds: { warn: number; critical: number },
+): SeverityLevel {
+  if (value <= thresholds.critical) return "critical";
+  if (value <= thresholds.warn) return "warn";
+  return "ok";
+}
+
+function worstSeverity(a: SeverityLevel, b: SeverityLevel): SeverityLevel {
+  return severityWeight(a) >= severityWeight(b) ? a : b;
+}
+
+function severityWeight(level: SeverityLevel): number {
+  switch (level) {
+    case "critical":
+      return 3;
+    case "warn":
+      return 2;
+    default:
+      return 1;
+  }
+}
+
+function severityToStatusCode(level: SeverityLevel): number {
+  if (level === "critical") return 500;
+  if (level === "warn") return 299;
+  return 200;
+}

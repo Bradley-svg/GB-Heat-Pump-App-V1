@@ -5,6 +5,7 @@ import type { Env } from "../env";
 import type { Logger } from "../utils/logging";
 import * as logging from "../utils/logging";
 import * as retention from "../jobs/retention";
+import * as signupFunnel from "../lib/signup-funnel";
 
 type ScheduledEvent = Parameters<(typeof app)["scheduled"]>[0];
 type ScheduledExecutionContext = Parameters<(typeof app)["scheduled"]>[2];
@@ -31,7 +32,7 @@ function mockSystemLogger() {
   } as unknown as Logger;
   withFn.mockReturnValue(logger);
   const spy = vi.spyOn(logging, "systemLogger").mockReturnValue(logger);
-  return { spy, debug };
+  return { spy, debug, warn };
 }
 
 function createScheduledEnv(
@@ -239,5 +240,41 @@ describe("app.scheduled", () => {
     expect(env.DB.prepare).not.toHaveBeenCalledWith(
       expect.stringContaining("DELETE FROM ingest_nonces"),
     );
+  });
+
+  it("evaluates the signup funnel when the alert cron fires", async () => {
+    const { env, bindCalls } = createScheduledEnv();
+    const { warn } = mockSystemLogger();
+    const loadSpy = vi.spyOn(signupFunnel, "loadSignupFunnelSummary").mockResolvedValue({
+      window_start: "2025-11-01T00:00:00Z",
+      window_days: 7,
+      submissions: 20,
+      authenticated: 5,
+      pending: 10,
+      errors: 5,
+      conversion_rate: 0.25,
+      pending_ratio: 0.5,
+      error_rate: 0.25,
+    });
+
+    await app.scheduled(
+      { cron: "*/10 * * * *" } as ScheduledEvent,
+      env,
+      {} as ScheduledExecutionContext,
+    );
+
+    expect(loadSpy).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      "signup.funnel_degraded",
+      expect.objectContaining({
+        status: expect.stringMatching(/warn|critical/),
+      }),
+    );
+    const signupMetric = bindCalls.find(
+      (entry) =>
+        entry.normalized.startsWith("INSERT INTO ops_metrics") &&
+        entry.args?.[1] === "/cron/signup-funnel",
+    );
+    expect(signupMetric).toBeTruthy();
   });
 });
