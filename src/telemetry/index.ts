@@ -70,6 +70,8 @@ export const ALERT_THRESHOLDS = {
     conversion_rate: { warn: 0.45, critical: 0.25 },
     pending_ratio: { warn: 0.35, critical: 0.55 },
     error_rate: { warn: 0.2, critical: 0.35 },
+    resend_error_rate: { warn: 0.2, critical: 0.4 },
+    pending_logout_failures: { warn: 5, critical: 15 },
   },
 } as const;
 
@@ -181,12 +183,23 @@ function normalizeSignupSummary(
       conversion_rate: 0,
       pending_ratio: 0,
       error_rate: 0,
+      resend_requests: 0,
+      resend_success: 0,
+      resend_errors: 0,
+      resend_error_rate: 0,
+      resend_status_counts: {},
+      pending_logout_failures: 0,
     };
 
   const submissions = Math.max(0, base.submissions ?? 0);
   const authenticated = Math.max(0, base.authenticated ?? 0);
   const pending = Math.max(0, base.pending ?? 0);
   const errors = Math.max(0, base.errors ?? 0);
+  const resendRequests = Math.max(0, base.resend_requests ?? 0);
+  const resendSuccess = Math.max(0, base.resend_success ?? 0);
+  const resendErrors = Math.max(0, base.resend_errors ?? 0);
+  const pendingLogoutFailures = Math.max(0, base.pending_logout_failures ?? 0);
+  const resendStatusCounts = base.resend_status_counts ?? {};
 
   const conversionRate =
     submissions > 0 ? authenticated / submissions : base.conversion_rate ?? 0;
@@ -194,6 +207,10 @@ function normalizeSignupSummary(
     submissions > 0 ? pending / submissions : base.pending_ratio ?? (pending > 0 ? 1 : 0);
   const errorRate =
     submissions > 0 ? errors / submissions : base.error_rate ?? (errors > 0 ? 1 : 0);
+  const resendErrorRate =
+    resendRequests > 0 ?
+      resendErrors / resendRequests :
+      base.resend_error_rate ?? (resendErrors > 0 ? 1 : 0);
 
   const normalized = {
     window_start: base.window_start,
@@ -205,6 +222,12 @@ function normalizeSignupSummary(
     conversion_rate: Number(conversionRate.toFixed(4)),
     pending_ratio: Number(pendingRatio.toFixed(4)),
     error_rate: Number(errorRate.toFixed(4)),
+    resend_requests: resendRequests,
+    resend_success: resendSuccess,
+    resend_errors: resendErrors,
+    resend_error_rate: Number(resendErrorRate.toFixed(4)),
+    resend_status_counts: resendStatusCounts,
+    pending_logout_failures: pendingLogoutFailures,
   };
 
   const conversionSeverity = deriveInvertedSeverity(
@@ -219,10 +242,24 @@ function normalizeSignupSummary(
     normalized.error_rate,
     ALERT_THRESHOLDS.signup.error_rate,
   );
+  const resendSeverity = severityFromThresholds(
+    normalized.resend_error_rate,
+    ALERT_THRESHOLDS.signup.resend_error_rate,
+  );
+  const pendingLogoutSeverity = severityFromThresholds(
+    normalized.pending_logout_failures,
+    ALERT_THRESHOLDS.signup.pending_logout_failures,
+  );
 
   return {
     ...normalized,
-    status: worstSeverity(conversionSeverity, worstSeverity(pendingSeverity, errorSeverity)),
+    status: worstSeverity(
+      conversionSeverity,
+      worstSeverity(
+        pendingSeverity,
+        worstSeverity(errorSeverity, worstSeverity(resendSeverity, pendingLogoutSeverity)),
+      ),
+    ),
     thresholds: ALERT_THRESHOLDS.signup,
   };
 }
@@ -378,6 +415,21 @@ export function formatPromMetrics(
   lines.push("# HELP greenbro_signup_error_ratio Signup error ratio within window");
   lines.push("# TYPE greenbro_signup_error_ratio gauge");
   lines.push(`greenbro_signup_error_ratio ${signup.error_rate}`);
+  lines.push("# HELP greenbro_signup_resend_requests_total Verification resend attempts within window");
+  lines.push("# TYPE greenbro_signup_resend_requests_total gauge");
+  lines.push(`greenbro_signup_resend_requests_total ${signup.resend_requests}`);
+  lines.push("# HELP greenbro_signup_resend_success_total Successful verification resends within window");
+  lines.push("# TYPE greenbro_signup_resend_success_total gauge");
+  lines.push(`greenbro_signup_resend_success_total ${signup.resend_success}`);
+  lines.push("# HELP greenbro_signup_resend_error_total Failed verification resends within window");
+  lines.push("# TYPE greenbro_signup_resend_error_total gauge");
+  lines.push(`greenbro_signup_resend_error_total ${signup.resend_errors}`);
+  lines.push("# HELP greenbro_signup_resend_error_ratio Verification resend failure ratio within window");
+  lines.push("# TYPE greenbro_signup_resend_error_ratio gauge");
+  lines.push(`greenbro_signup_resend_error_ratio ${signup.resend_error_rate}`);
+  lines.push("# HELP greenbro_mobile_pending_logout_flush_failed_total Pending logout flush failures reported by mobile clients");
+  lines.push("# TYPE greenbro_mobile_pending_logout_flush_failed_total gauge");
+  lines.push(`greenbro_mobile_pending_logout_flush_failed_total ${signup.pending_logout_failures}`);
 
   return lines.join("\n") + "\n";
 }

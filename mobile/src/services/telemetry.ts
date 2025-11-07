@@ -12,7 +12,7 @@ export async function reportClientEvent(
   event: string,
   properties?: EventProperties,
   options: TelemetryOptions = {},
-): Promise<void> {
+): Promise<boolean> {
   try {
     const url = buildApiUrl("/api/observability/client-events");
     const headers: Record<string, string> = {
@@ -32,7 +32,9 @@ export async function reportClientEvent(
         properties,
       }),
     });
+    return true;
   } catch (error) {
     console.warn("telemetry.event_failed", { event, error });
+    return false;
   }
 }

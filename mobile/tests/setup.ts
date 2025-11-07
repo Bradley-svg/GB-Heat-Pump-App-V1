@@ -1,5 +1,25 @@
 import "@testing-library/jest-native/extend-expect";
 
+const ReactNative = require("react-native");
+const originalAppStateAddEventListener = ReactNative.AppState?.addEventListener;
+const mockAppStateAddEventListener = jest
+  .spyOn(ReactNative.AppState, "addEventListener")
+  .mockImplementation((_event: string, handler: () => void) => ({
+    remove: jest.fn(),
+  }));
+if (!originalAppStateAddEventListener) {
+  ReactNative.AppState.currentState = "active";
+}
+
+const mockNetInfoAddEventListener = jest.fn((handler: (state: any) => void) => () => {});
+
+jest.mock("@react-native-community/netinfo", () => ({
+  addEventListener: mockNetInfoAddEventListener,
+  fetch: jest.fn(() =>
+    Promise.resolve({ isConnected: true, isInternetReachable: true }),
+  ),
+}));
+
 jest.mock(
   "react-native/Libraries/vendor/emitter/EventEmitter",
   () => require("events").EventEmitter,

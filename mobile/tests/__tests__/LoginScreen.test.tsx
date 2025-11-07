@@ -47,7 +47,7 @@ describe("LoginScreen resend verification", () => {
     });
     mockResend.mockReset();
     mockReportEvent.mockReset();
-    mockReportEvent.mockResolvedValue(undefined);
+    mockReportEvent.mockResolvedValue(true);
   });
 
   it("resends verification when an email is provided", async () => {
@@ -86,7 +86,7 @@ describe("LoginScreen resend verification", () => {
 
   it("logs telemetry failures but still shows success copy", async () => {
     mockResend.mockResolvedValue(undefined);
-    mockReportEvent.mockRejectedValueOnce(new Error("queue offline"));
+    mockReportEvent.mockResolvedValueOnce(false);
     const warnSpy = jest
       .spyOn(console, "warn")
       .mockImplementation(() => undefined);
@@ -96,10 +96,9 @@ describe("LoginScreen resend verification", () => {
     fireEvent.press(getByTestId("login-resend"));
 
     expect(await findByText(/fresh verification email/i)).toBeTruthy();
-    expect(warnSpy).toHaveBeenCalledWith(
-      "signup_flow.resend.telemetry_failed",
-      expect.any(Error),
-    );
+    expect(warnSpy).toHaveBeenCalledWith("signup_flow.resend.telemetry_failed", {
+      status: "ok",
+    });
     warnSpy.mockRestore();
   });
 });

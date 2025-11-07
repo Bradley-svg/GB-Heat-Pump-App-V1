@@ -464,7 +464,18 @@ async function runSignupFunnelMonitor(env: Env): Promise<void> {
     );
     const pendingSeverity = deriveSeverity(summary.pending_ratio, thresholds.pending_ratio);
     const errorSeverity = deriveSeverity(summary.error_rate, thresholds.error_rate);
-    const overallSeverity = worstSeverity(conversionSeverity, worstSeverity(pendingSeverity, errorSeverity));
+    const resendSeverity = deriveSeverity(summary.resend_error_rate, thresholds.resend_error_rate);
+    const pendingLogoutSeverity = deriveSeverity(
+      summary.pending_logout_failures,
+      thresholds.pending_logout_failures,
+    );
+    const overallSeverity = worstSeverity(
+      conversionSeverity,
+      worstSeverity(
+        pendingSeverity,
+        worstSeverity(errorSeverity, worstSeverity(resendSeverity, pendingLogoutSeverity)),
+      ),
+    );
 
     log.info("signup.funnel.check", {
       status: overallSeverity,
@@ -475,6 +486,11 @@ async function runSignupFunnelMonitor(env: Env): Promise<void> {
       conversion_rate: summary.conversion_rate,
       pending_ratio: summary.pending_ratio,
       error_rate: summary.error_rate,
+      resend_requests: summary.resend_requests,
+      resend_success: summary.resend_success,
+      resend_errors: summary.resend_errors,
+      resend_error_rate: summary.resend_error_rate,
+      pending_logout_failures: summary.pending_logout_failures,
       window_start: summary.window_start,
       window_days: summary.window_days,
     });
@@ -488,6 +504,30 @@ async function runSignupFunnelMonitor(env: Env): Promise<void> {
         metric: "greenbro.signup.funnel_degraded",
         metric_key: "signup.funnel_degraded",
         count: 1,
+      });
+    }
+
+    if (summary.resend_requests > 0 && summary.resend_error_rate >= thresholds.resend_error_rate.warn) {
+      log.warn("signup.resend_degraded", {
+        resend_error_rate: summary.resend_error_rate,
+        resend_requests: summary.resend_requests,
+        resend_errors: summary.resend_errors,
+        window_start: summary.window_start,
+        window_days: summary.window_days,
+        metric: "greenbro.signup.resend_degraded",
+        metric_key: "signup.resend_degraded",
+        count: summary.resend_errors,
+      });
+    }
+
+    if (summary.pending_logout_failures >= thresholds.pending_logout_failures.warn) {
+      log.warn("auth.pending_logout.flush_failed.aggregate", {
+        failures: summary.pending_logout_failures,
+        window_start: summary.window_start,
+        window_days: summary.window_days,
+        metric: "greenbro.mobile.pending_logout.flush_failed",
+        metric_key: "mobile.pending_logout.flush_failed",
+        count: summary.pending_logout_failures,
       });
     }
 

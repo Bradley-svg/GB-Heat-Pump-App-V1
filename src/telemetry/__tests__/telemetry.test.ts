@@ -70,6 +70,12 @@ describe("metrics formatting", () => {
         conversion_rate: 0.6,
         pending_ratio: 0.3,
         error_rate: 0.1,
+        resend_requests: 4,
+        resend_success: 3,
+        resend_errors: 0,
+        resend_error_rate: 0,
+        resend_status_counts: { ok: 3, "429": 1 },
+        pending_logout_failures: 0,
       },
       "2025-01-01T00:00:00.000Z",
     );
@@ -113,6 +119,10 @@ describe("metrics formatting", () => {
       authenticated: 6,
       pending: 3,
       errors: 1,
+      resend_requests: 4,
+      resend_success: 3,
+      resend_errors: 0,
+      pending_logout_failures: 0,
       conversion_rate: 0.6,
       pending_ratio: 0.3,
       error_rate: 0.1,
@@ -136,6 +146,12 @@ describe("metrics formatting", () => {
         conversion_rate: 0.66,
         pending_ratio: 0.25,
         error_rate: 0.16,
+        resend_requests: 4,
+        resend_success: 2,
+        resend_errors: 2,
+        resend_error_rate: 0.5,
+        resend_status_counts: { ok: 2, other: 2 },
+        pending_logout_failures: 1,
       },
       5000,
     );
@@ -153,6 +169,9 @@ describe("metrics formatting", () => {
     expect(prom).toContain(`greenbro_signup_submissions_total 12`);
     expect(prom).toContain(`greenbro_signup_conversion_rate 0.66`);
     expect(prom).toContain(`greenbro_signup_error_total 2`);
+    expect(prom).toContain(`greenbro_signup_resend_requests_total 4`);
+    expect(prom).toContain(`greenbro_signup_resend_error_total 2`);
+    expect(prom).toContain(`greenbro_mobile_pending_logout_flush_failed_total 1`);
   });
 });
 

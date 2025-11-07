@@ -25,6 +25,7 @@ import {
 } from "../services/session-storage";
 import { fetchCurrentUser } from "../services/user-service";
 import { reportClientEvent } from "../services/telemetry";
+import { subscribePendingLogoutWatchers } from "../utils/pending-logout";
 
 type AuthStatus = "loading" | "authenticating" | "authenticated" | "anonymous";
 
@@ -100,6 +101,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     void hydrateFromStorage();
     void flushPendingLogout();
   }, [hydrateFromStorage, flushPendingLogout]);
+
+  useEffect(() => {
+    const cleanup = subscribePendingLogoutWatchers(() => {
+      void flushPendingLogout();
+    });
+    return cleanup;
+  }, [flushPendingLogout]);
 
   const login = useCallback(async (email: string, password: string) => {
     setStatus("authenticating");

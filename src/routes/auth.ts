@@ -22,6 +22,7 @@ import {
 import { checkIpRateLimit } from "../lib/ip-rate-limit";
 import { sendPasswordResetNotification, sendEmailVerificationNotification } from "../lib/notifications/password-reset";
 import { issueEmailVerification, consumeEmailVerification } from "../lib/auth/email-verification";
+import { maskEmail } from "../utils/mask";
 
 const EMAIL_ALREADY_REGISTERED = "Email is already registered";
 const INVALID_CREDENTIALS = "Invalid email or password";
@@ -630,27 +631,4 @@ async function enforceAuthRateLimit(
     return response;
   }
   return null;
-}
-
-function maskEmail(email: string): string {
-  const trimmed = email?.trim().toLowerCase();
-  if (!trimmed) return "***";
-  const parts = trimmed.split("@");
-  if (parts.length !== 2) {
-    return "***";
-  }
-  const [local, domain] = parts;
-  if (!domain) {
-    return "***";
-  }
-  if (!local) {
-    return `*@${domain}`;
-  }
-  if (local.length === 1) {
-    return `*@${domain}`;
-  }
-  if (local.length === 2) {
-    return `${local[0]}*@${domain}`;
-  }
-  return `${local[0]}***${local.slice(-1)}@${domain}`;
 }

@@ -1,5 +1,6 @@
 import type { Env } from "../../env";
 import { systemLogger } from "../../utils/logging";
+import { maskEmail } from "../../utils/mask";
 
 const log = systemLogger({ scope: "user-notifications" });
 
@@ -62,9 +63,11 @@ async function dispatchUserNotification(
     }
   }
 
+  const maskedEmail = maskEmail(payload.email);
+
   log.info(`${scope}.webhook.dispatch`, {
     endpoint: new URL(endpoint).host,
-    email: payload.email,
+    email: maskedEmail,
     expires_at: payload.expiresAt,
   });
 

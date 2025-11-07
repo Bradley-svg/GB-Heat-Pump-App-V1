@@ -3,7 +3,12 @@ import { requireAccessUser, userIsAdmin } from "../lib/access";
 import { json, text } from "../utils/responses";
 import { validationErrorResponse } from "../utils/validation";
 import { MetricsQuerySchema } from "../schemas/metrics";
-import { formatMetricsJson, formatPromMetrics, pickMetricsFormat } from "../telemetry";
+import {
+  ALERT_THRESHOLDS,
+  formatMetricsJson,
+  formatPromMetrics,
+  pickMetricsFormat,
+} from "../telemetry";
 import {
   OPS_METRICS_WINDOW_DAYS,
   opsMetricsWindowStart,
@@ -71,6 +76,34 @@ export async function handleMetrics(req: Request, env: Env) {
   };
 
   const signupSummary = await loadSignupFunnelSummary(env, { now: new Date(now) });
+
+  if (
+    signupSummary.pending_logout_failures >=
+    ALERT_THRESHOLDS.signup.pending_logout_failures.warn
+  ) {
+    log.warn("auth.pending_logout.flush_failed.aggregate", {
+      failures: signupSummary.pending_logout_failures,
+      window_start: signupSummary.window_start,
+      window_days: signupSummary.window_days,
+      metric: "greenbro.mobile.pending_logout.flush_failed",
+      metric_key: "mobile.pending_logout.flush_failed",
+      count: signupSummary.pending_logout_failures,
+    });
+  }
+
+  if (
+    signupSummary.resend_requests > 0 &&
+    signupSummary.resend_error_rate >= ALERT_THRESHOLDS.signup.resend_error_rate.warn
+  ) {
+    log.warn("signup.resend_degraded", {
+      resend_error_rate: signupSummary.resend_error_rate,
+      resend_requests: signupSummary.resend_requests,
+      resend_errors: signupSummary.resend_errors,
+      metric: "greenbro.signup.resend_degraded",
+      metric_key: "signup.resend_degraded",
+      count: signupSummary.resend_errors,
+    });
+  }
   const metricsPayload = formatMetricsJson(
     deviceSummary,
     opsRows,

@@ -17,6 +17,12 @@ vi.mock("../../lib/signup-funnel", () => ({
     conversion_rate: 0.5,
     pending_ratio: 0.25,
     error_rate: 0.25,
+    resend_requests: 3,
+    resend_success: 2,
+    resend_errors: 1,
+    resend_error_rate: 0.3333,
+    resend_status_counts: { ok: 2, "429": 1 },
+    pending_logout_failures: 0,
   }),
 }));
 
@@ -157,6 +163,8 @@ describe("handleMetrics", () => {
       pending: 1,
       errors: 1,
       status: expect.any(String),
+      resend_requests: 3,
+      pending_logout_failures: 0,
     });
     expect(loadSignupFunnelSummaryMock).toHaveBeenCalled();
   });
@@ -225,6 +233,12 @@ describe("handleMetrics", () => {
       conversion_rate: 0.25,
       pending_ratio: 0.5,
       error_rate: 0.25,
+      resend_requests: 10,
+      resend_success: 4,
+      resend_errors: 6,
+      resend_error_rate: 0.6,
+      resend_status_counts: { ok: 4, "429": 4, other: 2 },
+      pending_logout_failures: 7,
     });
     const logger = createLoggerStub();
     loggerForRequestMock.mockReturnValueOnce(logger as unknown as loggingModule.Logger);
@@ -236,6 +250,18 @@ describe("handleMetrics", () => {
       "signup.funnel_degraded",
       expect.objectContaining({
         metric_key: "signup.funnel_degraded",
+      }),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      "signup.resend_degraded",
+      expect.objectContaining({
+        resend_error_rate: expect.any(Number),
+      }),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      "auth.pending_logout.flush_failed.aggregate",
+      expect.objectContaining({
+        failures: 7,
       }),
     );
   });

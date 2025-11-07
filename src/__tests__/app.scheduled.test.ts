@@ -255,6 +255,12 @@ describe("app.scheduled", () => {
       conversion_rate: 0.25,
       pending_ratio: 0.5,
       error_rate: 0.25,
+      resend_requests: 8,
+      resend_success: 3,
+      resend_errors: 5,
+      resend_error_rate: 0.625,
+      resend_status_counts: { ok: 3, "429": 3, other: 2 },
+      pending_logout_failures: 6,
     });
 
     await app.scheduled(

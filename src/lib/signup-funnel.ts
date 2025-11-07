@@ -13,6 +13,12 @@ export interface SignupFunnelSummary {
   conversion_rate: number;
   pending_ratio: number;
   error_rate: number;
+  resend_requests: number;
+  resend_success: number;
+  resend_errors: number;
+  resend_error_rate: number;
+  resend_status_counts: Record<string, number>;
+  pending_logout_failures: number;
 }
 
 interface RawSignupRow {
@@ -38,7 +44,12 @@ export async function loadSignupFunnelSummary(
               COUNT(*) AS count
          FROM client_events
         WHERE created_at >= ?1
-          AND event IN ('signup_flow.result', 'signup_flow.error')
+          AND event IN (
+            'signup_flow.result',
+            'signup_flow.error',
+            'signup_flow.resend',
+            'auth.pending_logout.flush_failed'
+          )
         GROUP BY event, dimension`,
     )
       .bind(windowStart)
@@ -60,6 +71,11 @@ export async function loadSignupFunnelSummary(
   let authenticated = 0;
   let pending = 0;
   let errors = 0;
+  let resendRequests = 0;
+  let resendSuccess = 0;
+  let resendErrors = 0;
+  const resendStatusCounts: Record<string, number> = {};
+  let pendingLogoutFailures = 0;
 
   for (const row of rows) {
     const event = (row.event ?? "").trim();
@@ -74,12 +90,25 @@ export async function loadSignupFunnelSummary(
       }
     } else if (event === "signup_flow.error") {
       errors += count;
+    } else if (event === "signup_flow.resend") {
+      resendRequests += count;
+      const status = dimension || "unknown";
+      resendStatusCounts[status] = (resendStatusCounts[status] ?? 0) + count;
+      if (status === "ok") {
+        resendSuccess += count;
+      } else {
+        resendErrors += count;
+      }
+    } else if (event === "auth.pending_logout.flush_failed") {
+      pendingLogoutFailures += count;
     }
   }
 
   const conversionRate = submissions > 0 ? authenticated / submissions : 0;
   const pendingRatio = submissions > 0 ? pending / submissions : pending > 0 ? 1 : 0;
   const errorRate = submissions > 0 ? errors / submissions : errors > 0 ? 1 : 0;
+  const resendErrorRate =
+    resendRequests > 0 ? resendErrors / resendRequests : resendErrors > 0 ? 1 : 0;
 
   return {
     window_start: windowStart,
@@ -91,6 +120,12 @@ export async function loadSignupFunnelSummary(
     conversion_rate: Number(conversionRate.toFixed(4)),
     pending_ratio: Number(pendingRatio.toFixed(4)),
     error_rate: Number(errorRate.toFixed(4)),
+    resend_requests: resendRequests,
+    resend_success: resendSuccess,
+    resend_errors: resendErrors,
+    resend_error_rate: Number(resendErrorRate.toFixed(4)),
+    resend_status_counts: resendStatusCounts,
+    pending_logout_failures: pendingLogoutFailures,
   };
 }
 
@@ -116,6 +151,11 @@ function createEmptySummary(windowStart: string, windowDays: number): SignupFunn
     conversion_rate: 0,
     pending_ratio: 0,
     error_rate: 0,
+    resend_requests: 0,
+    resend_success: 0,
+    resend_errors: 0,
+    resend_error_rate: 0,
+    resend_status_counts: {},
+    pending_logout_failures: 0,
   };
 }
-
