@@ -24,6 +24,7 @@ import {
   clearPendingLogoutCookie,
 } from "../services/session-storage";
 import { fetchCurrentUser } from "../services/user-service";
+import { reportClientEvent } from "../services/telemetry";
 
 type AuthStatus = "loading" | "authenticating" | "authenticated" | "anonymous";
 
@@ -56,8 +57,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       try {
         await logoutSession();
         await clearPendingLogoutCookie();
+        void reportClientEvent("auth.pending_logout.drained");
       } catch (err) {
         console.warn("auth.pending_logout_failed", err);
+        void reportClientEvent("auth.pending_logout.flush_failed", {
+          message: err instanceof Error ? err.message : String(err),
+        });
       } finally {
         setSessionCookie(undefined);
       }
@@ -117,12 +122,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     const activeCookie = getCachedSessionCookie();
     try {
       await logoutSession();
+      void reportClientEvent("auth.logout.completed", { mode: "server" });
     } catch (err) {
       if (activeCookie) {
         await persistPendingLogoutCookie(activeCookie);
+        void reportClientEvent("auth.pending_logout.queued");
         void flushPendingLogout();
       }
       console.warn("auth.logout_failed", err);
+      void reportClientEvent("auth.logout.server_failed", {
+        message: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       await clearSessionCookie();
       setSessionCookie(undefined);

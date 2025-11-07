@@ -6,6 +6,7 @@ import { AuthLayout } from "./AuthLayout";
 import { useApiClient, useCurrentUserState } from "../app/contexts";
 import { signup } from "../services/auth-service";
 import { ApiError } from "../services/api-client";
+import { trackClientEvent } from "../services/telemetry";
 
 export function SignupPage() {
   const api = useApiClient();
@@ -20,7 +21,6 @@ export function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,7 +39,6 @@ export function SignupPage() {
 
     setSubmitting(true);
     setError(null);
-    setSuccessMessage(null);
     try {
       await signup(api, {
         email,
@@ -56,17 +55,22 @@ export function SignupPage() {
       } catch (refreshError) {
         console.warn("auth.signup.refresh_failed", refreshError);
       }
-      if (refreshed) {
-        navigate("/app", { replace: true });
-      } else {
-        setSuccessMessage("If that email is registered, check your inbox for next steps.");
-      }
+      void trackClientEvent(api, "signup_flow.result", {
+        status: refreshed ? "authenticated" : "pending_verification",
+      });
+      navigate("/auth/signup/complete", {
+        replace: true,
+        state: { status: refreshed ? "authenticated" : "pending_email" },
+      });
     } catch (err) {
-      if (err instanceof ApiError && err.status === 400) {
-        setError("Some of the submitted information was invalid. Please check and try again.");
-      } else {
-        setError("We couldn't create your account. Please try again.");
-      }
+      const message =
+        err instanceof ApiError && err.status === 400 ?
+          "Some of the submitted information was invalid. Please check and try again." :
+          "We couldn't create your account. Please try again.";
+      setError(message);
+      void trackClientEvent(api, "signup_flow.error", {
+        status: err instanceof ApiError ? err.status : "unknown",
+      });
     } finally {
       setSubmitting(false);
     }
@@ -92,7 +96,6 @@ export function SignupPage() {
         }}
       >
         {error ? <div className="auth-error">{error}</div> : null}
-        {successMessage ? <div className="auth-info">{successMessage}</div> : null}
         <div className="auth-grid">
           <label className="auth-field">
             <span>First name</span>

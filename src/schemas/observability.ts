@@ -40,3 +40,18 @@ export const ClientErrorReportSchema = z
   .passthrough();
 
 export type ClientErrorReport = z.infer<typeof ClientErrorReportSchema>;
+
+export const ClientEventReportSchema = z
+  .object({
+    event: z
+      .string()
+      .trim()
+      .min(1, "event name required")
+      .max(128, "event name too long"),
+    source: optionalTrimmedString(64),
+    timestamp: optionalTrimmedString(64),
+    properties: optionalStringRecord,
+  })
+  .strict();
+
+export type ClientEventReport = z.infer<typeof ClientEventReportSchema>;

@@ -2,7 +2,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Env, User } from "../../env";
 import * as accessModule from "../../lib/access";
-import { handleClientErrorReport } from "../observability";
+import { handleClientErrorReport, handleClientEventReport } from "../observability";
 import * as loggingModule from "../../utils/logging";
 
 type LoggerMock = {
@@ -207,5 +207,51 @@ describe("handleClientErrorReport", () => {
       note: expect.stringContaining("extras truncated"),
     });
     expect(typeof fields.report.extras.bytes).toBe("number");
+  });
+});
+
+describe("handleClientEventReport", () => {
+  it("accepts anonymous payloads and logs info", async () => {
+    requireAccessUserMock.mockResolvedValueOnce(null);
+    const logger = createLoggerStub();
+    loggerForRequestMock.mockReturnValueOnce(logger as unknown as loggingModule.Logger);
+
+    const env = createEnv();
+    const payload = {
+      event: "signup_flow.result",
+      source: "web",
+      properties: { status: "pending_email" },
+    };
+    const req = new Request("https://app.example/api/observability/client-events", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const res = await handleClientEventReport(req, env);
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(logger.info).toHaveBeenCalledWith("client.event", {
+      event: payload.event,
+      source: payload.source,
+      properties: payload.properties,
+      user_email: null,
+    });
+  });
+
+  it("validates payloads", async () => {
+    loggerForRequestMock.mockReturnValue(createLoggerStub() as unknown as loggingModule.Logger);
+    requireAccessUserMock.mockResolvedValue(null);
+    const env = createEnv();
+    const req = new Request("https://app.example/api/observability/client-events", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ event: "" }),
+    });
+
+    const res = await handleClientEventReport(req, env);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("Validation failed");
   });
 });

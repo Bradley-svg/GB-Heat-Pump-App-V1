@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { LoginPage } from "./LoginPage";
 import { SignupPage } from "./SignupPage";
+import { SignupCompletePage } from "./SignupCompletePage";
 import { ForgotPasswordPage } from "./ForgotPasswordPage";
 import { ResetPasswordPage } from "./ResetPasswordPage";
 
@@ -11,6 +12,7 @@ export function AuthRoutes() {
       <Route index element={<Navigate to="login" replace />} />
       <Route path="login" element={<LoginPage />} />
       <Route path="signup" element={<SignupPage />} />
+      <Route path="signup/complete" element={<SignupCompletePage />} />
       <Route path="forgot" element={<ForgotPasswordPage />} />
       <Route path="reset" element={<ResetPasswordPage />} />
       <Route path="*" element={<Navigate to="login" replace />} />

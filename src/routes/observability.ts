@@ -1,10 +1,11 @@
 import type { Env } from "../env";
 import { requireAccessUser } from "../lib/access";
-import { ClientErrorReportSchema } from "../schemas/observability";
-import type { ClientErrorReport } from "../schemas/observability";
+import { ClientErrorReportSchema, ClientEventReportSchema } from "../schemas/observability";
+import type { ClientErrorReport, ClientEventReport } from "../schemas/observability";
 import { loggerForRequest } from "../utils/logging";
 import { json } from "../utils/responses";
 import { validationErrorResponse, validateWithSchema } from "../utils/validation";
+import { requireAccessUser } from "../lib/access";
 
 const ROUTE_PATH = "/api/observability/client-errors";
 const DEFAULT_MAX_PAYLOAD_BYTES = 16_384;
@@ -67,6 +68,29 @@ export async function handleClientErrorReport(req: Request, env: Env) {
 
   log.error("ui.error_boundary", logPayload);
 
+  return json({ ok: true }, { status: 202 });
+}
+
+export async function handleClientEventReport(req: Request, env: Env) {
+  let payload: unknown;
+  try {
+    payload = await req.json();
+  } catch {
+    return json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const parsed = validateWithSchema<ClientEventReport>(ClientEventReportSchema, payload);
+  if (!parsed.success) {
+    return validationErrorResponse(parsed.issues);
+  }
+  const body = parsed.data;
+  const user = await requireAccessUser(req, env);
+  const log = loggerForRequest(req, { route: "/api/observability/client-events" });
+  log.info("client.event", {
+    event: body.event,
+    source: body.source ?? "unknown",
+    properties: body.properties ?? {},
+    user_email: user?.email ?? null,
+  });
   return json({ ok: true }, { status: 202 });
 }
 

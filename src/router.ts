@@ -35,7 +35,7 @@ import {
   handleCreateCommissioningRun,
   handleListCommissioningRuns,
 } from "./routes/commissioning-runs";
-import { handleClientErrorReport } from "./routes/observability";
+import { handleClientErrorReport, handleClientEventReport } from "./routes/observability";
 import { bindRequestLogger, loggerForRequest, releaseRequestLogger } from "./utils/logging";
 import { recordOpsMetric } from "./lib/ops-metrics";
 import {
@@ -88,6 +88,7 @@ router
     "/api/observability/client-errors",
     withAccess((req, env) => handleClientErrorReport(req, env)),
   )
+  .post("/api/observability/client-events", (req, env) => handleClientEventReport(req, env))
   .post(
     "/api/ingest/:profile",
     withParam("profile", (req, env, profile) => handleIngest(req, env, profile)),
