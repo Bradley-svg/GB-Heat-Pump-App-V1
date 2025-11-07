@@ -17,12 +17,13 @@ Body:
 {
   "email": "demo@example.com",
   "resetUrl": "https://app.greenbro.com/auth/reset?token=...",
-  "token": "<raw token>",
   "expiresAt": "2025-02-01T10:15:00.000Z"
 }
 ```
 
-Consumers should treat `token` as sensitive (never log it) and rely on `resetUrl` for end-user links. The signature header enables downstream verification:
+Host the webhook inside GreenBro-controlled infrastructure (e.g., a Workers route protected by Cloudflare Access) so the `resetUrl` never leaves our perimeter. Downstream providers (SendGrid, SES, etc.) should only receive templated emails after your webhook validates `x-reset-signature`.
+
+The signature header enables downstream verification:
 
 ```bash
 # Example verification using OpenSSL
@@ -35,7 +36,7 @@ printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SECRET" -binary | openssl bas
 
 ## 2. Provisioning Steps
 
-1. **Create the webhook endpoint** with your delivery provider (SendGrid Inbound Parse, SES Lambda, internal service, etc.). Ensure it supports HTTPS and bearer-token auth.
+1. **Create the webhook endpoint** inside the GreenBro VPC/Workers account (protect it with Cloudflare Access if exposed). That handler can then call your email/SMS provider after verifying the HMAC signature.
 2. **Bind secrets** via wrangler:
    ```bash
    # preview
@@ -69,8 +70,7 @@ printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SECRET" -binary | openssl bas
 - `auth.password_reset.notify_failed` → indicates upstream failure bubbled to the API (User gets a 502).
 
 ### Provider-side
-- Enable provider-specific hooks (SendGrid Event Webhook, SES complaints/bounces topic, Twilio SMS delivery receipts).
-- Route failures to the Ops Slack channel for quick triage.
+- Your internal webhook should validate `x-reset-signature`, then call the provider (SendGrid, SES, Twilio). Enable their event hooks (bounces, complaints, delivery failures) and route alerts to the Ops Slack channel.
 
 ### Synthetic test
 - Weekly cron (GitHub Action/Lambda) that hits `/api/auth/recover` with a sandbox email and asserts the provider sends a message. Alert if no email is received within 5 minutes.
@@ -91,4 +91,3 @@ Copy the IDs into `wrangler.toml` (default block + `[env.production]`). Validati
 ---
 
 Keep this playbook next to the deployment runbook. When onboarding new engineers, walk through a full dry run (preview secrets, test email, Datadog dashboard) so they understand the surface area before touching production.
-

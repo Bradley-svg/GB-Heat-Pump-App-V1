@@ -33,11 +33,11 @@ export interface LoginResponse {
 }
 
 export interface SignupResponse {
-  user: AuthUser;
+  ok: boolean;
 }
 
-export async function signup(api: ApiClient, payload: SignupPayload): Promise<SignupResponse> {
-  return api.post<SignupResponse>("/api/auth/signup", payload);
+export async function signup(api: ApiClient, payload: SignupPayload): Promise<void> {
+  await api.post<SignupResponse>("/api/auth/signup", payload);
 }
 
 export async function login(api: ApiClient, payload: LoginPayload): Promise<LoginResponse> {

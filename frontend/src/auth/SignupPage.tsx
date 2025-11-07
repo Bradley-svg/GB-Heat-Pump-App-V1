@@ -20,6 +20,7 @@ export function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -38,6 +39,7 @@ export function SignupPage() {
 
     setSubmitting(true);
     setError(null);
+    setSuccessMessage(null);
     try {
       await signup(api, {
         email,
@@ -47,12 +49,20 @@ export function SignupPage() {
         phone: phone || undefined,
         company: company || undefined,
       });
-      await currentUser.refresh();
-      navigate("/app", { replace: true });
+      let refreshed = false;
+      try {
+        await currentUser.refresh();
+        refreshed = true;
+      } catch (refreshError) {
+        console.warn("auth.signup.refresh_failed", refreshError);
+      }
+      if (refreshed) {
+        navigate("/app", { replace: true });
+      } else {
+        setSuccessMessage("If that email is registered, check your inbox for next steps.");
+      }
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        setError("An account with that email already exists.");
-      } else if (err instanceof ApiError && err.status === 400) {
+      if (err instanceof ApiError && err.status === 400) {
         setError("Some of the submitted information was invalid. Please check and try again.");
       } else {
         setError("We couldn't create your account. Please try again.");
@@ -82,6 +92,7 @@ export function SignupPage() {
         }}
       >
         {error ? <div className="auth-error">{error}</div> : null}
+        {successMessage ? <div className="auth-info">{successMessage}</div> : null}
         <div className="auth-grid">
           <label className="auth-field">
             <span>First name</span>

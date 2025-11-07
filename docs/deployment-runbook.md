@@ -14,6 +14,8 @@ The platform now deploys a single Worker (`gb-heat-pump-app-v1`). Key bindings a
 
 > When `INGEST_IP_LIMIT_PER_MIN` is greater than zero, bind `INGEST_IP_BUCKETS` (KV) in the target environment. The Worker now fails validation instead of silently falling back to per-isolate token buckets. Use the namespace created via `wrangler kv namespace create greenbro-ingest-ip` (preview + production IDs) for all deployments.
 
+> `AUTH_IP_BUCKETS` (single binding in `wrangler.toml`) should point at the `greenbro-auth-ip` namespace you provisioned via `wrangler kv namespace create ...`. The IDs live in the password manager; update them in one place (global binding) rather than duplicating under `[env.production]`.
+
 > `ACCESS_AUD` values are managed in Cloudflare Access and stored only via `wrangler secret put`. Rotate/update them alongside the Access application policies described in `docs/platform-setup-guide.md`.
 
 ### Password reset webhook + auth KV bindings

@@ -6,7 +6,6 @@ const log = systemLogger({ scope: "password-reset" });
 export interface PasswordResetNotificationPayload {
   email: string;
   resetUrl: string;
-  token: string;
   expiresAt: string;
 }
 

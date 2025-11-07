@@ -69,7 +69,7 @@ export async function handleSignup(req: Request, env: Env) {
   const existing = await env.DB.prepare(`SELECT id FROM users WHERE email = ?1`).bind(email).first();
   if (existing) {
     log.warn("auth.signup.email_exists", { email: maskEmail(email) });
-    return json({ error: EMAIL_ALREADY_REGISTERED }, { status: 409 });
+    return json({ ok: true }, { status: 202 });
   }
 
   const iterations = resolvePasswordIterations(env);
@@ -120,19 +120,8 @@ export async function handleSignup(req: Request, env: Env) {
 
   log.info("auth.signup.success", { user_id: userId, email: maskEmail(email) });
 
-  const { cookie, session } = await createSession(env, userId);
-  return json(
-    {
-      user: {
-        email,
-        roles: [DEFAULT_ROLE],
-        firstName: input.firstName,
-        lastName: input.lastName,
-        sessionExpiresAt: session.expiresAt,
-      },
-    },
-    { status: 201, headers: { "Set-Cookie": cookie } },
-  );
+  const { cookie } = await createSession(env, userId);
+  return json({ ok: true }, { status: 202, headers: { "Set-Cookie": cookie } });
 }
 
 export async function handleLogin(req: Request, env: Env) {
@@ -247,7 +236,6 @@ export async function handleRecover(req: Request, env: Env) {
     await sendPasswordResetNotification(env, {
       email,
       resetUrl,
-      token,
       expiresAt,
     });
   } catch (error) {

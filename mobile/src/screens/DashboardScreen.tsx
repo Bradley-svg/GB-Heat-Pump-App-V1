@@ -212,7 +212,7 @@ function deriveKpis(data: FleetSummaryResult["data"]): DashboardKpi[] {
     return [
       { label: "Outlet Temp", value: "--", unit: "°C" },
       { label: "COP", value: "--" },
-      { label: "Energy Today", value: "--", unit: "kWh" },
+      { label: "Thermal Output (kW)", value: "--", unit: "kW" },
     ];
   }
 
@@ -235,9 +235,9 @@ function deriveKpis(data: FleetSummaryResult["data"]): DashboardKpi[] {
       delta: undefined,
     },
     {
-      label: "Energy Today",
+      label: "Thermal Output (kW)",
       value: formatNumber(latestTrend?.thermalKW ?? null, 1),
-      unit: "kWh",
+      unit: "kW",
       delta: undefined,
     },
   ];

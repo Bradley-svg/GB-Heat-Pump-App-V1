@@ -88,7 +88,7 @@ describe("DashboardScreen", () => {
     );
 
     expect(getByText("Fleet 80% Online")).toBeTruthy();
-    expect(getByText("Energy Today")).toBeTruthy();
+    expect(getByText("Thermal Output (kW)")).toBeTruthy();
     fireEvent.press(getByText("Start Commissioning"));
     expect(onShowToast).toHaveBeenCalledWith(
       "Commissioning workflow created",

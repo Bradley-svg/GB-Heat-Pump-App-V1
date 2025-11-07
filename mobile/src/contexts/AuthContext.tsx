@@ -4,6 +4,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -17,6 +18,10 @@ import {
   clearSessionCookie,
   loadSessionCookie,
   persistSessionCookie,
+  getCachedSessionCookie,
+  persistPendingLogoutCookie,
+  loadPendingLogoutCookie,
+  clearPendingLogoutCookie,
 } from "../services/session-storage";
 import { fetchCurrentUser } from "../services/user-service";
 
@@ -39,6 +44,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [user, setUser] = useState<AuthUser | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [error, setError] = useState<string | null>(null);
+  const pendingLogoutFlush = useRef(false);
+
+  const flushPendingLogout = useCallback(async () => {
+    if (pendingLogoutFlush.current) return;
+    pendingLogoutFlush.current = true;
+    try {
+      const cookie = await loadPendingLogoutCookie();
+      if (!cookie) return;
+      setSessionCookie(cookie);
+      try {
+        await logoutSession();
+        await clearPendingLogoutCookie();
+      } catch (err) {
+        console.warn("auth.pending_logout_failed", err);
+      } finally {
+        setSessionCookie(undefined);
+      }
+    } finally {
+      pendingLogoutFlush.current = false;
+    }
+  }, []);
 
   const hydrateFromStorage = useCallback(async () => {
     const storedCookie = await loadSessionCookie();
@@ -63,7 +89,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     void hydrateFromStorage();
-  }, [hydrateFromStorage]);
+    void flushPendingLogout();
+  }, [hydrateFromStorage, flushPendingLogout]);
 
   const login = useCallback(async (email: string, password: string) => {
     setStatus("authenticating");
@@ -85,23 +112,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const logout = useCallback(async () => {
-    const fallbackStatus: AuthStatus = user ? "authenticated" : "anonymous";
     setStatus("authenticating");
+    setError(null);
+    const activeCookie = getCachedSessionCookie();
     try {
       await logoutSession();
+    } catch (err) {
+      if (activeCookie) {
+        await persistPendingLogoutCookie(activeCookie);
+        void flushPendingLogout();
+      }
+      console.warn("auth.logout_failed", err);
+    } finally {
       await clearSessionCookie();
       setSessionCookie(undefined);
       setUser(null);
       setStatus("anonymous");
-      setError(null);
-    } catch (err) {
-      setStatus(fallbackStatus);
-      const message =
-        err instanceof Error ? err.message : "Unable to sign out. Try again.";
-      setError(message);
-      throw err;
     }
-  }, [user]);
+  }, [flushPendingLogout]);
 
   const refresh = useCallback(async () => {
     try {

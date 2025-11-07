@@ -108,9 +108,3 @@ bucket_name = "greenbro-app-static"
 binding = "INGEST_IP_BUCKETS"
 id = "a5ea436cc7854b0a8ce5bab3e3551455"
 preview_id = "623e877af5934787b541a5711fe2151c"
-
-[[env.production.kv_namespaces]]
-binding = "AUTH_IP_BUCKETS"
-id = "9d1a0f8cbe2545afa46a9d12dfe7c4b3"
-preview_id = "6c84b7f2da474d1f9efc3a8c2a1be4d5"
-
