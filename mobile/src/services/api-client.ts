@@ -17,6 +17,12 @@ interface RequestOptions {
   query?: Record<string, string | number | undefined>;
 }
 
+const getSessionCookie = (): string | undefined => {
+  const cookie =
+    process.env.EXPO_PUBLIC_SESSION_COOKIE ?? process.env.SESSION_COOKIE;
+  return cookie && cookie.trim().length > 0 ? cookie.trim() : undefined;
+};
+
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
   const url = new URL(buildApiUrl(path));
   if (query) {
@@ -44,9 +50,15 @@ async function handleResponse<T>(response: Response): Promise<T> {
 export const apiClient = {
   async get<T>(path: string, options: RequestOptions = {}): Promise<T> {
     const url = buildUrl(path, options.query);
+    const sessionCookie = getSessionCookie();
     const response = await fetch(url, {
       method: "GET",
       credentials: "include",
+      headers: sessionCookie
+        ? {
+            Cookie: sessionCookie,
+          }
+        : undefined,
       signal: options.signal,
     });
     return handleResponse<T>(response);

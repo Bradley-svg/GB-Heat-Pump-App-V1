@@ -2,12 +2,12 @@
 
 Follow this loop whenever you need to validate the Expo client against production telemetry.
 
-1. **Configure the API base**
+1. **Configure the API base + cookie**
    ```bash
-   # In your shell (or .env.local)
-   export EXPO_PUBLIC_API_BASE=https://app.greenbro.com
+   cp mobile/.env.example mobile/.env
+   # Edit the file to set EXPO_PUBLIC_API_BASE and EXPO_PUBLIC_SESSION_COOKIE
    ```
-   You can point to staging by swapping the URL; `app-config.ts` sanitises the value and the fallback stays production-safe.
+   Or export the vars inline (`export EXPO_PUBLIC_API_BASE=...`). These propagate into `api-client.ts`, so both the dashboard and alerts fetch from the live worker with the same cookie the web client uses.
 
 2. **Install and launch the Expo dev client**
    ```bash
