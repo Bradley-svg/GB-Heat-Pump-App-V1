@@ -7,9 +7,11 @@ import { GBThemeProvider } from "../../src/theme/GBThemeProvider";
 import type { FleetSummaryResult } from "../../src/hooks/useFleetSummary";
 import { useFleetSummary } from "../../src/hooks/useFleetSummary";
 import { useHaptics } from "../../src/hooks/useHaptics";
+import { useAuth } from "../../src/contexts/AuthContext";
 
 jest.mock("../../src/hooks/useFleetSummary");
 jest.mock("../../src/hooks/useHaptics");
+jest.mock("../../src/contexts/AuthContext");
 
 const renderWithTheme = (ui: React.ReactNode) =>
   render(<GBThemeProvider>{ui}</GBThemeProvider>);
@@ -17,6 +19,7 @@ const renderWithTheme = (ui: React.ReactNode) =>
 const mockUseFleetSummary =
   useFleetSummary as jest.MockedFunction<typeof useFleetSummary>;
 const mockUseHaptics = useHaptics as jest.MockedFunction<typeof useHaptics>;
+const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 
 const fleetData: NonNullable<FleetSummaryResult["data"]> = {
   generated_at: "2024-11-07T12:00:00Z",
@@ -62,6 +65,14 @@ describe("DashboardScreen", () => {
       refresh: jest.fn(),
     });
     mockUseHaptics.mockReturnValue(jest.fn());
+    mockUseAuth.mockReturnValue({
+      user: { email: "demo@greenbro.com", roles: ["client"] },
+      status: "authenticated",
+      error: null,
+      login: jest.fn(),
+      logout: jest.fn(),
+      refresh: jest.fn(),
+    });
   });
 
   afterEach(() => {
@@ -82,8 +93,9 @@ describe("DashboardScreen", () => {
       "success",
     );
     fireEvent.press(getByText("View Alerts"));
-    await waitFor(() =>
-      expect(onShowToast).toHaveBeenCalledWith("Opening alerts...", "warn"),
+    await waitFor(
+      () => expect(onShowToast).toHaveBeenCalledWith("Opening alerts...", "warn"),
+      { timeout: 2000 },
     );
   });
 

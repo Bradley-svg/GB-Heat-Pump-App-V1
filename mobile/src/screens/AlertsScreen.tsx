@@ -113,9 +113,10 @@ export const AlertsScreen: React.FC<AlertsScreenProps> = ({ onShowToast }) => {
         {status === "loading" && !data ? (
           <ActivityIndicator color={colors.primary} />
         ) : (
-          filteredAlerts.map((alert) => (
+          filteredAlerts.map((alert, index) => (
             <GBListItem
               key={alert.alert_id}
+              testID={`alert-row-${index}`}
               title={alert.summary ?? alert.alert_type ?? "Alert"}
               subtitle={`${alert.site ?? "Unknown site"} | ${new Date(
                 alert.created_at,
@@ -156,6 +157,7 @@ export const AlertsScreen: React.FC<AlertsScreenProps> = ({ onShowToast }) => {
                   </Text>
                 </GBCard>
                 <GBButton
+                  testID="alert-ack-button"
                   label="Mark as Acknowledged"
                   onPress={() => {
                     onShowToast("Acknowledged (mock)", "success");

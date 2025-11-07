@@ -4,14 +4,13 @@
 Automate the dashboard + alerts happy paths on iOS and Android simulators so UI regressions are caught pre-merge.
 
 ## Current status
-- `expo-dev-client`, `detox`, and `@config-plugins/detox` are installed (see `mobile/package.json`).
-- `mobile/detox.config.ts` wires up placeholder build commands for `ios.sim.debug` and `android.emu.debug`.
-- Jest runner config + global init live under `mobile/e2e/`, with a skipped `auth.spec.ts` that we will flesh out once dedicated test accounts exist.
+- `expo-dev-client`, `detox`, and `@config-plugins/detox` live in `mobile/package.json`.
+- `mobile/detox.config.ts` defines `ios.sim.debug` / `android.emu.debug` builds, plus Jest runner + init script in `mobile/e2e/`.
+- Credential helper + Detox specs (`auth.spec.ts`, `dashboard.spec.ts`, `alerts.spec.ts`) exercise login, KPI refresh, severity filters, and acknowledgement flows. All specs expect `MOBILE_E2E_EMAIL` / `MOBILE_E2E_PASSWORD` to be set.
 
 ## Remaining work
-1. Provision deterministic test credentials (non-prod) and surface them via secrets for Detox.
-2. Update `mobile/e2e/auth.spec.ts` (and add dashboard/alerts specs) to drive the new login screen, KPI scroll, and alert acknowledgement flows.
-3. Document simulator provisioning (`xcrun simctl`, AVD Manager) and add an Actions workflow that runs `npm run mobile:e2e:test:ios` / `...:android` nightly.
-4. Once stable, remove the `.skip` guard so Detox gates PRs touching `mobile/`.
+1. Provision deterministic test credentials (non-prod) and surface them via secrets for Detox/CI.
+2. Document simulator provisioning (`xcrun simctl`, AVD Manager) and add an Actions workflow that runs `npm run mobile:e2e:test:ios` / `...:android` nightly (record logs for debugging).
+3. Once the nightly run is stable, gate PRs touching `mobile/` on the Detox lane.
 
 Until then, continue using `docs/mobile-validation.md` for manual checks after every feature.

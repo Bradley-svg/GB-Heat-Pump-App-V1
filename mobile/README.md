@@ -14,10 +14,13 @@ Copy `.env.example` to `.env` and set any overrides you need:
 ```
 EXPO_PUBLIC_API_BASE=https://app.greenbro.com
 EXPO_PUBLIC_SESSION_COOKIE=
+MOBILE_E2E_EMAIL=
+MOBILE_E2E_PASSWORD=
 ```
 
 - `EXPO_PUBLIC_API_BASE` defaults to production; override for staging/local tunnels.
 - `EXPO_PUBLIC_SESSION_COOKIE` is only for CI/headless automation. Leave it blank locally and **never** commit a real cookie.
+- `MOBILE_E2E_EMAIL` / `MOBILE_E2E_PASSWORD` power the Detox login flow; point them at a dedicated test account.
 
 ## Authentication
 
@@ -26,14 +29,16 @@ The app now launches with a native login screen backed by `/api/auth/login`. Cre
 ## Common scripts
 
 ```bash
-npm run mobile:install      # install dependencies (run from repo root)
-npm run mobile:start        # expo start (tunnel recommended for devices)
-npm run mobile:lint         # ESLint with import/style constraints as errors
-npm run mobile:test         # Jest + RTL with coverage thresholds (80/55/85/85)
+npm run mobile:install          # install dependencies (run from repo root)
+npm run mobile:start            # expo start (tunnel recommended for devices)
+npm run mobile:lint             # ESLint with import/style constraints as errors
+npm run mobile:test             # Jest + RTL with coverage thresholds (80/55/85/85)
 npm run mobile:e2e:build:ios    # detox build for the iOS simulator (requires prebuild)
-npm run mobile:e2e:test:ios     # run the detox suite on iOS (pending test data)
+npm run mobile:e2e:test:ios     # run the detox suite on iOS (uses MOBILE_E2E_* env vars)
 npm run mobile:e2e:build:android
 npm run mobile:e2e:test:android
 ```
+
+Need to debug Detox locally? Append `-- --record-logs all --debug-synchronization 500` to capture verbose logs.
 
 See `docs/mobile-validation.md` for the on-device QA loop and `docs/mobile-e2e-plan.md` for Detox rollout details.

@@ -15,6 +15,7 @@ import { GBCard } from "../components/GBCard";
 import { GBKpiTile } from "../components/GBKpiTile";
 import { GBListItem } from "../components/GBListItem";
 import { GBStatusPill } from "../components/GBStatusPill";
+import { useAuth } from "../contexts/AuthContext";
 import {
   useFleetSummary,
   type FleetSummaryResult,
@@ -39,6 +40,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   onShowToast,
 }) => {
   const { spacing, colors } = useTheme();
+  const { logout } = useAuth();
   const haptic = useHaptics();
   const [ctaPressed, setCtaPressed] = useState(false);
   const { data, status, error, refresh } = useFleetSummary({
@@ -77,6 +79,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       );
     }
   }, [haptic, onShowToast]);
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await logout();
+      onShowToast("Signed out", "success");
+    } catch {
+      onShowToast("Unable to sign out. Try again.", "error");
+    }
+  }, [logout, onShowToast]);
 
   if (!data && status === "loading") {
     return (
@@ -173,6 +184,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           subtitle={`${data?.kpis.open_alerts ?? 0} open issues`}
           rightAccessory="badge"
           badgeLabel={String(data?.kpis.open_alerts ?? 0)}
+        />
+        <GBListItem
+          title="Sign out"
+          subtitle="Return to login"
+          rightAccessory="chevron"
+          onPress={handleLogout}
+          testID="quicklink-logout"
         />
       </View>
     </ScrollView>

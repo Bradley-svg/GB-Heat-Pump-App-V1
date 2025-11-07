@@ -61,6 +61,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           <View>
             <Text style={[styles.label, { color: colors.text }]}>Email</Text>
             <TextInput
+              testID="login-email"
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
@@ -80,6 +81,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           <View>
             <Text style={[styles.label, { color: colors.text }]}>Password</Text>
             <TextInput
+              testID="login-password"
               secureTextEntry
               style={[
                 styles.input,
@@ -102,6 +104,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           ) : null}
           <GBButton
             label="Sign in"
+            testID="login-submit"
             onPress={handleSubmit}
             disabled={submitDisabled}
             loading={status === "authenticating"}
