@@ -1,6 +1,10 @@
 import { buildApiUrl } from "../config/app-config";
-import { getTelemetryGrant, setTelemetryGrant } from "./telemetry-auth";
-import { clearTelemetryGrant as clearStoredTelemetryGrant } from "./session-storage";
+import { getTelemetryGrant, setTelemetryGrant, type TelemetryGrant } from "./telemetry-auth";
+import {
+  clearTelemetryGrant as clearStoredTelemetryGrant,
+  persistTelemetryGrant,
+} from "./session-storage";
+import { refreshTelemetryGrant } from "./auth-service";
 
 type EventProperties = Record<string, string | number | boolean | null | undefined>;
 
@@ -19,63 +23,95 @@ export async function reportClientEvent(
   properties?: EventProperties,
   options: TelemetryOptions = {},
 ): Promise<TelemetryResult> {
+  const overrideToken = options.tokenOverride?.trim();
+  const telemetry = getTelemetryGrant();
+  const initialToken = overrideToken?.length ? overrideToken : telemetry?.token;
+  const tokenSource =
+    overrideToken?.length ? "override" : telemetry?.token ? "grant" : "none";
+
+  return sendTelemetryEvent({
+    event,
+    properties,
+    source: options.source ?? "mobile",
+    token: initialToken,
+    tokenSource,
+    attemptedRefresh: false,
+  });
+}
+
+interface SendParams {
+  event: string;
+  properties?: EventProperties;
+  source: string;
+  token?: string | null;
+  tokenSource: "override" | "grant" | "none";
+  attemptedRefresh: boolean;
+}
+
+async function sendTelemetryEvent(params: SendParams): Promise<TelemetryResult> {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
+  if (params.token) {
+    headers.Authorization = `Bearer ${params.token}`;
+  }
   try {
-    const url = buildApiUrl("/api/observability/client-events");
-    const headers: Record<string, string> = {
-      "content-type": "application/json",
-    };
-    const overrideToken = options.tokenOverride?.trim();
-    const telemetry = getTelemetryGrant();
-    const token = overrideToken?.length ? overrideToken : telemetry?.token;
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-    const response = await fetch(url, {
+    const response = await fetch(buildApiUrl("/api/observability/client-events"), {
       method: "POST",
       credentials: "omit",
       headers,
       body: JSON.stringify({
-        event,
-        source: options.source ?? "mobile",
+        event: params.event,
+        source: params.source,
         timestamp: new Date().toISOString(),
-        properties,
+        properties: params.properties,
       }),
     });
-    if (!response.ok) {
-      console.warn("telemetry.event_failed.http", {
-        event,
-        status: response.status,
-        statusText: response.statusText,
-      });
-      await maybeClearTelemetryGrant({
-        status: response.status,
-        overrideToken,
-        activeToken: telemetry?.token,
-      });
-      return { ok: false, status: response.status };
+    if (response.ok) {
+      return { ok: true };
     }
-    return { ok: true };
+
+    if (
+      response.status === 401 &&
+      params.tokenSource === "grant" &&
+      !params.attemptedRefresh
+    ) {
+      const refreshed = await attemptTelemetryRefresh();
+      if (refreshed) {
+        return sendTelemetryEvent({
+          ...params,
+          token: refreshed.token,
+          attemptedRefresh: true,
+        });
+      }
+    }
+
+    if (response.status === 401 && params.tokenSource === "grant") {
+      await clearStoredTelemetryGrant();
+      setTelemetryGrant(null);
+    }
+
+    console.warn("telemetry.event_failed.http", {
+      event: params.event,
+      status: response.status,
+      statusText: response.statusText,
+    });
+
+    return { ok: false, status: response.status };
   } catch (error) {
-    console.warn("telemetry.event_failed", { event, error });
+    console.warn("telemetry.event_failed", { event: params.event, error });
     return { ok: false };
   }
 }
 
-async function maybeClearTelemetryGrant(params: {
-  status?: number;
-  overrideToken?: string | null;
-  activeToken?: string | null;
-}) {
-  if (params.status !== 401) {
-    return;
+async function attemptTelemetryRefresh(): Promise<TelemetryGrant | null> {
+  try {
+    const refreshed = await refreshTelemetryGrant();
+    setTelemetryGrant(refreshed);
+    await persistTelemetryGrant(refreshed);
+    return refreshed;
+  } catch (error) {
+    console.warn("telemetry.refresh_failed", { error });
+    return null;
   }
-  const isUsingOverride =
-    typeof params.overrideToken === "string" &&
-    params.overrideToken.trim().length > 0 &&
-    params.overrideToken !== params.activeToken;
-  if (isUsingOverride) {
-    return;
-  }
-  await clearStoredTelemetryGrant();
-  setTelemetryGrant(null);
 }

@@ -60,6 +60,17 @@ export async function resendVerification(email: string): Promise<void> {
   await apiClient.post("/api/auth/verify/resend", { email });
 }
 
+export async function refreshTelemetryGrant(): Promise<TelemetryGrant> {
+  const response = await apiClient.post<{ telemetry?: TelemetryGrant }>(
+    "/api/auth/telemetry-token",
+    {},
+  );
+  if (!response.telemetry?.token) {
+    throw new Error("Telemetry token refresh failed");
+  }
+  return response.telemetry;
+}
+
 async function safeJson<T>(response: Response): Promise<T> {
   const text = await response.text();
   if (!text) return {} as T;

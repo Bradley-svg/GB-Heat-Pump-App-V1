@@ -25,6 +25,8 @@ RETENTION_BACKUP_PREFIX = "data-retention"
 ENVIRONMENT = "production"
 AUTH_IP_LIMIT_PER_MIN = "60"
 AUTH_IP_BLOCK_SECONDS = "300"
+CLIENT_EVENT_LIMIT_PER_MIN = "120"
+CLIENT_EVENT_BLOCK_SECONDS = "60"
 # Ingest controls are provided via `wrangler secret put` per environment:
 #   INGEST_ALLOWED_ORIGINS
 #   INGEST_RATE_LIMIT_PER_MIN
@@ -85,6 +87,12 @@ id = "1fe35e38017042a0bdbb551e68b5823e"
 # Preview/dev namespace (create via `wrangler kv namespace create greenbro-auth-ip --env preview`)
 preview_id = "6c84b7f2da474d1f9efc3a8c2a1be4d5"
 
+[[kv_namespaces]]
+binding = "CLIENT_EVENT_IP_BUCKETS"
+# TODO: Replace with the KV namespace IDs created via `wrangler kv namespace create greenbro-client-event-ip`
+id = "REPLACE_WITH_CLIENT_EVENT_IP_KV_ID"
+preview_id = "REPLACE_WITH_CLIENT_EVENT_IP_KV_PREVIEW_ID"
+
 [env.local]
   [env.local.vars]
   APP_BASE_URL = "http://127.0.0.1:8787/app"
@@ -95,6 +103,8 @@ preview_id = "6c84b7f2da474d1f9efc3a8c2a1be4d5"
   INGEST_IP_BLOCK_SECONDS = "60"
   AUTH_IP_LIMIT_PER_MIN = "25"
   AUTH_IP_BLOCK_SECONDS = "300"
+  CLIENT_EVENT_LIMIT_PER_MIN = "0"
+  CLIENT_EVENT_BLOCK_SECONDS = "60"
   # Enable the Access shim for local Miniflare sessions (adjust as needed).
   ALLOW_DEV_ACCESS_SHIM = "true"
   DEV_ALLOW_USER = '{"email":"local-admin@example.com","roles":["admin"],"clientIds":["profile-west"]}'
@@ -113,6 +123,8 @@ preview_id = "6c84b7f2da474d1f9efc3a8c2a1be4d5"
   ENVIRONMENT = "production"
   AUTH_IP_LIMIT_PER_MIN = "60"
   AUTH_IP_BLOCK_SECONDS = "300"
+  CLIENT_EVENT_LIMIT_PER_MIN = "120"
+  CLIENT_EVENT_BLOCK_SECONDS = "60"
   INGEST_FAILURE_LIMIT_PER_MIN = "60"
   INGEST_IP_LIMIT_PER_MIN = "240"
   INGEST_IP_BLOCK_SECONDS = "60"
@@ -135,6 +147,11 @@ preview_id = "623e877af5934787b541a5711fe2151c"
 binding = "AUTH_IP_BUCKETS"
 id = "1fe35e38017042a0bdbb551e68b5823e"
 preview_id = "6c84b7f2da474d1f9efc3a8c2a1be4d5"
+
+[[env.production.kv_namespaces]]
+binding = "CLIENT_EVENT_IP_BUCKETS"
+id = "REPLACE_WITH_CLIENT_EVENT_IP_KV_ID"
+preview_id = "REPLACE_WITH_CLIENT_EVENT_IP_KV_PREVIEW_ID"
 
 [[env.production.r2_buckets]]
 binding = "GB_BUCKET"

@@ -62,6 +62,9 @@ export interface Env {
   EMAIL_VERIFICATION_WEBHOOK_SECRET?: string;
   EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS?: string;
   CLIENT_EVENT_RETENTION_DAYS?: string;
+  CLIENT_EVENT_LIMIT_PER_MIN?: string;
+  CLIENT_EVENT_BLOCK_SECONDS?: string;
+  CLIENT_EVENT_IP_BUCKETS?: KvNamespace;
   CLIENT_EVENT_TOKEN_SECRET: string;
   CLIENT_EVENT_TOKEN_TTL_SECONDS?: string;
 }
@@ -585,9 +588,58 @@ const EnvSchema = z
             path: ["AUTH_IP_BUCKETS"],
             code: z.ZodIssueCode.custom,
             message: "AUTH_IP_BUCKETS KV namespace must be bound when AUTH_IP_LIMIT_PER_MIN is greater than zero",
+        });
+      }
+    }
+
+    const clientEventLimitRaw =
+      typeof value.CLIENT_EVENT_LIMIT_PER_MIN === "string" ?
+        value.CLIENT_EVENT_LIMIT_PER_MIN.trim() :
+        "";
+    if (clientEventLimitRaw) {
+      const parsed = Number.parseInt(clientEventLimitRaw, 10);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        ctx.addIssue({
+          path: ["CLIENT_EVENT_LIMIT_PER_MIN"],
+          code: z.ZodIssueCode.custom,
+          message: "CLIENT_EVENT_LIMIT_PER_MIN must be zero or a positive integer",
+        });
+      }
+    }
+
+    const clientEventBlockRaw =
+      typeof value.CLIENT_EVENT_BLOCK_SECONDS === "string" ?
+        value.CLIENT_EVENT_BLOCK_SECONDS.trim() :
+        "";
+    if (clientEventBlockRaw) {
+      const parsed = Number.parseInt(clientEventBlockRaw, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        ctx.addIssue({
+          path: ["CLIENT_EVENT_BLOCK_SECONDS"],
+          code: z.ZodIssueCode.custom,
+          message: "CLIENT_EVENT_BLOCK_SECONDS must be a positive integer when set",
+        });
+      }
+    }
+
+    const clientEventLimit = Number.parseInt(clientEventLimitRaw || "0", 10);
+    if (clientEventLimit > 0) {
+      const bucket = value.CLIENT_EVENT_IP_BUCKETS as KvNamespace | undefined;
+      if (!bucket || typeof bucket.get !== "function" || typeof bucket.put !== "function") {
+        if (isLocalEnv) {
+          console.warn(
+            "CLIENT_EVENT_LIMIT_PER_MIN is enabled without a CLIENT_EVENT_IP_BUCKETS binding; falling back to in-memory token buckets per isolate.",
+          );
+        } else {
+          ctx.addIssue({
+            path: ["CLIENT_EVENT_IP_BUCKETS"],
+            code: z.ZodIssueCode.custom,
+            message:
+              "CLIENT_EVENT_IP_BUCKETS KV namespace must be bound when CLIENT_EVENT_LIMIT_PER_MIN is greater than zero",
           });
         }
       }
+    }
     }
   });
 

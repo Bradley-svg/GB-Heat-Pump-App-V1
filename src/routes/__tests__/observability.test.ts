@@ -14,6 +14,7 @@ import { checkIpRateLimit } from "../../lib/ip-rate-limit";
 
 import * as clientEventsModule from "../../lib/client-events";
 import * as telemetryTokenModule from "../../lib/auth/telemetry-token";
+import { createTestKvNamespace } from "../../../tests/helpers/kv";
 
 
 
@@ -74,13 +75,10 @@ function createEnv(overrides: Partial<Env> = {}): Env {
 
     INGEST_SIGNATURE_TOLERANCE_SECS: "300",
     CLIENT_EVENT_TOKEN_SECRET: "test-telemetry-token-secret-rotate-1234567890",
-
-
-
     CLIENT_EVENT_TOKEN_TTL_SECONDS: "900",
-
-
-
+    CLIENT_EVENT_LIMIT_PER_MIN: "0",
+    CLIENT_EVENT_BLOCK_SECONDS: "60",
+    CLIENT_EVENT_IP_BUCKETS: createTestKvNamespace(),
 
     ...overrides,
 
@@ -582,25 +580,15 @@ describe("handleClientEventReport", () => {
 
 
     expect(mockedRateLimit).toHaveBeenCalledWith(
-
       expect.any(Request),
-
       env,
-
       "/api/observability/client-events",
-
       expect.objectContaining({
-
-        limitEnvKey: "AUTH_IP_LIMIT_PER_MIN",
-
-        blockEnvKey: "AUTH_IP_BLOCK_SECONDS",
-
-        kvBindingKey: "AUTH_IP_BUCKETS",
-
+        limitEnvKey: "CLIENT_EVENT_LIMIT_PER_MIN",
+        blockEnvKey: "CLIENT_EVENT_BLOCK_SECONDS",
+        kvBindingKey: "CLIENT_EVENT_IP_BUCKETS",
       }),
-
     );
-
   });
 
 

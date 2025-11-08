@@ -24,6 +24,7 @@ import { checkIpRateLimit } from "../lib/ip-rate-limit";
 import { sendPasswordResetNotification, sendEmailVerificationNotification } from "../lib/notifications/password-reset";
 import { issueEmailVerification, consumeEmailVerification } from "../lib/auth/email-verification";
 import { maskEmail } from "../utils/mask";
+import { requireAccessUser } from "../lib/access";
 
 const EMAIL_ALREADY_REGISTERED = "Email is already registered";
 const INVALID_CREDENTIALS = "Invalid email or password";
@@ -458,6 +459,19 @@ export async function handleVerifyEmail(req: Request, env: Env) {
     },
     { headers: { "Set-Cookie": cookie } },
   );
+}
+
+export async function handleTelemetryToken(req: Request, env: Env) {
+  const user = await requireAccessUser(req, env);
+  if (!user) {
+    return json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const telemetry = await issueTelemetryToken(env, {
+    email: user.email,
+    roles: user.roles,
+    clientIds: user.clientIds ?? [],
+  });
+  return json({ telemetry }, { status: 200 });
 }
 
 export async function handleResendVerification(req: Request, env: Env) {

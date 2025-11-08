@@ -78,9 +78,9 @@ export async function handleClientErrorReport(req: Request, env: Env) {
 
 export async function handleClientEventReport(req: Request, env: Env) {
   const rateLimit = await checkIpRateLimit(req, env, EVENTS_ROUTE_PATH, {
-    limitEnvKey: "AUTH_IP_LIMIT_PER_MIN",
-    blockEnvKey: "AUTH_IP_BLOCK_SECONDS",
-    kvBindingKey: "AUTH_IP_BUCKETS",
+    limitEnvKey: "CLIENT_EVENT_LIMIT_PER_MIN",
+    blockEnvKey: "CLIENT_EVENT_BLOCK_SECONDS",
+    kvBindingKey: "CLIENT_EVENT_IP_BUCKETS",
     defaultLimit: 120,
     defaultBlockSeconds: 60,
   });

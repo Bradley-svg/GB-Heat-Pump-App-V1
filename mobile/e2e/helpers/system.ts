@@ -2,7 +2,13 @@ import { device } from "detox";
 import { spawnSync } from "node:child_process";
 
 function runOrThrow(command: string, args: string[]) {
-  const result = spawnSync(command, args, { stdio: "inherit" });
+  const result = spawnSync(command, args, {
+    stdio: "inherit",
+    shell: process.platform === "win32",
+  });
+  if (result.error) {
+    throw result.error;
+  }
   if (result.status !== 0) {
     throw new Error(`Command failed: ${command} ${args.join(" ")}`);
   }
