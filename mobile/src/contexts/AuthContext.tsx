@@ -26,7 +26,7 @@ import {
   clearTelemetryGrant,
 } from "../services/session-storage";
 import { fetchCurrentUser } from "../services/user-service";
-import { reportClientEvent } from "../services/telemetry";
+import { reportClientEvent, type TelemetryResult } from "../services/telemetry";
 import { getTelemetryGrant, setTelemetryGrant } from "../services/telemetry-auth";
 import { subscribePendingLogoutWatchers } from "../utils/pending-logout";
 
@@ -51,6 +51,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [error, setError] = useState<string | null>(null);
   const pendingLogoutFlush = useRef(false);
 
+  const clearTelemetryState = useCallback(async () => {
+    await clearTelemetryGrant();
+    setTelemetryGrant(null);
+  }, []);
+
+  const handleTelemetryResult = useCallback(
+    async (result: TelemetryResult, tokenOverride?: string | null) => {
+      if (!result.ok && result.status === 401 && !tokenOverride) {
+        await clearTelemetryState();
+      }
+    },
+    [clearTelemetryState],
+  );
+
   const flushPendingLogout = useCallback(async () => {
     if (pendingLogoutFlush.current) return;
     pendingLogoutFlush.current = true;
@@ -61,12 +75,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       try {
         await logoutSession();
         await clearPendingLogoutCookie();
-        void reportClientEvent("auth.pending_logout.drained", undefined, {
-          tokenOverride: pending.telemetry?.token,
-        });
+        const drained = await reportClientEvent(
+          "auth.pending_logout.drained",
+          undefined,
+          {
+            tokenOverride: pending.telemetry?.token,
+          },
+        );
+        await handleTelemetryResult(drained, pending.telemetry?.token ?? null);
       } catch (err) {
         console.warn("auth.pending_logout_failed", err);
-        void reportClientEvent(
+        const failed = await reportClientEvent(
           "auth.pending_logout.flush_failed",
           {
             message: err instanceof Error ? err.message : String(err),
@@ -75,20 +94,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
             tokenOverride: pending.telemetry?.token,
           },
         );
+        await handleTelemetryResult(failed, pending.telemetry?.token ?? null);
       } finally {
         setSessionCookie(undefined);
       }
     } finally {
       pendingLogoutFlush.current = false;
     }
-  }, []);
+  }, [handleTelemetryResult]);
 
   const hydrateFromStorage = useCallback(async () => {
     const storedCookie = await loadSessionCookie();
     const storedTelemetry = await loadTelemetryGrant();
     if (!storedCookie) {
-      await clearTelemetryGrant();
-      setTelemetryGrant(null);
+      await clearTelemetryState();
       setSessionCookie(undefined);
       setStatus("anonymous");
       setUser(null);
@@ -102,13 +121,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setStatus("authenticated");
     } catch {
       await clearSessionCookie();
-      await clearTelemetryGrant();
-      setTelemetryGrant(null);
+      await clearTelemetryState();
       setSessionCookie(undefined);
       setUser(null);
       setStatus("anonymous");
     }
-  }, []);
+  }, [clearTelemetryState]);
 
   useEffect(() => {
     void hydrateFromStorage();
@@ -133,22 +151,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         setTelemetryGrant(result.telemetry);
         await persistTelemetryGrant(result.telemetry);
       } else {
-        setTelemetryGrant(null);
-        await clearTelemetryGrant();
+        await clearTelemetryState();
       }
       setUser(result.user);
       setStatus("authenticated");
       return result.user;
     } catch (err) {
       setStatus("anonymous");
-      await clearTelemetryGrant();
-      setTelemetryGrant(null);
+      await clearTelemetryState();
       const message =
         err instanceof Error ? err.message : "Unable to sign in. Try again.";
       setError(message);
       throw err instanceof Error ? err : new Error(message);
     }
-  }, []);
+  }, [clearTelemetryState]);
 
   const logout = useCallback(async () => {
     setStatus("authenticating");
@@ -157,21 +173,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     const telemetryGrant = getTelemetryGrant();
     try {
       await logoutSession();
-      void reportClientEvent(
+      const completed = await reportClientEvent(
         "auth.logout.completed",
         { mode: "server" },
         { tokenOverride: telemetryGrant?.token },
       );
+      await handleTelemetryResult(completed, telemetryGrant?.token ?? null);
     } catch (err) {
       if (activeCookie) {
         await persistPendingLogoutCookie(activeCookie, telemetryGrant ?? null);
-        void reportClientEvent("auth.pending_logout.queued", undefined, {
-          tokenOverride: telemetryGrant?.token,
-        });
+        const queued = await reportClientEvent(
+          "auth.pending_logout.queued",
+          undefined,
+          {
+            tokenOverride: telemetryGrant?.token,
+          },
+        );
+        await handleTelemetryResult(queued, telemetryGrant?.token ?? null);
         void flushPendingLogout();
       }
       console.warn("auth.logout_failed", err);
-      void reportClientEvent(
+      const failed = await reportClientEvent(
         "auth.logout.server_failed",
         {
           message: err instanceof Error ? err.message : String(err),
@@ -180,15 +202,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           tokenOverride: telemetryGrant?.token,
         },
       );
+      await handleTelemetryResult(failed, telemetryGrant?.token ?? null);
     } finally {
       await clearSessionCookie();
-      await clearTelemetryGrant();
-      setTelemetryGrant(null);
+      await clearTelemetryState();
       setSessionCookie(undefined);
       setUser(null);
       setStatus("anonymous");
     }
-  }, [flushPendingLogout]);
+  }, [flushPendingLogout, handleTelemetryResult, clearTelemetryState]);
 
   const refresh = useCallback(async () => {
     try {
@@ -197,14 +219,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setStatus("authenticated");
     } catch (err) {
       await clearSessionCookie();
-      await clearTelemetryGrant();
-      setTelemetryGrant(null);
+      await clearTelemetryState();
       setSessionCookie(undefined);
       setUser(null);
       setStatus("anonymous");
       throw err;
     }
-  }, []);
+  }, [clearTelemetryState]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

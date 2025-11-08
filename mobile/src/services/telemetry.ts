@@ -1,5 +1,6 @@
 import { buildApiUrl } from "../config/app-config";
-import { getTelemetryGrant } from "./telemetry-auth";
+import { getTelemetryGrant, setTelemetryGrant } from "./telemetry-auth";
+import { clearTelemetryGrant as clearStoredTelemetryGrant } from "./session-storage";
 
 type EventProperties = Record<string, string | number | boolean | null | undefined>;
 
@@ -8,11 +9,16 @@ interface TelemetryOptions {
   tokenOverride?: string | null;
 }
 
+export type TelemetryResult = {
+  ok: boolean;
+  status?: number;
+};
+
 export async function reportClientEvent(
   event: string,
   properties?: EventProperties,
   options: TelemetryOptions = {},
-): Promise<boolean> {
+): Promise<TelemetryResult> {
   try {
     const url = buildApiUrl("/api/observability/client-events");
     const headers: Record<string, string> = {
@@ -24,7 +30,7 @@ export async function reportClientEvent(
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
-    await fetch(url, {
+    const response = await fetch(url, {
       method: "POST",
       credentials: "omit",
       headers,
@@ -35,9 +41,41 @@ export async function reportClientEvent(
         properties,
       }),
     });
-    return true;
+    if (!response.ok) {
+      console.warn("telemetry.event_failed.http", {
+        event,
+        status: response.status,
+        statusText: response.statusText,
+      });
+      await maybeClearTelemetryGrant({
+        status: response.status,
+        overrideToken,
+        activeToken: telemetry?.token,
+      });
+      return { ok: false, status: response.status };
+    }
+    return { ok: true };
   } catch (error) {
     console.warn("telemetry.event_failed", { event, error });
-    return false;
+    return { ok: false };
   }
+}
+
+async function maybeClearTelemetryGrant(params: {
+  status?: number;
+  overrideToken?: string | null;
+  activeToken?: string | null;
+}) {
+  if (params.status !== 401) {
+    return;
+  }
+  const isUsingOverride =
+    typeof params.overrideToken === "string" &&
+    params.overrideToken.trim().length > 0 &&
+    params.overrideToken !== params.activeToken;
+  if (isUsingOverride) {
+    return;
+  }
+  await clearStoredTelemetryGrant();
+  setTelemetryGrant(null);
 }

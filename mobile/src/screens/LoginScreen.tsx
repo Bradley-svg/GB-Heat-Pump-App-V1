@@ -35,9 +35,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [resendPending, setResendPending] = useState(false);
   const emitResendEvent = (status: string) => {
-    void reportClientEvent("signup_flow.resend", { status }).then((ok) => {
-      if (!ok) {
-        console.warn("signup_flow.resend.telemetry_failed", { status });
+    void reportClientEvent("signup_flow.resend", { status }).then((result) => {
+      if (!result.ok) {
+        console.warn("signup_flow.resend.telemetry_failed", {
+          status,
+          telemetry_status: result.status,
+        });
       }
     });
   };
