@@ -10,11 +10,21 @@ The platform now deploys a single Worker (`gb-heat-pump-app-v1`). Key bindings a
 
 | Worker script | Primary URLs | D1 database (name -> id) | R2 buckets (binding -> name) | Secrets to provision |
 |---------------|--------------|--------------------------|------------------------------|----------------------|
-| `gb-heat-pump-app-v1` | `https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev` | `GREENBRO_DB` -> `ee7ad98b-3629-4985-bd7d-a60c401953a7` | `GB_BUCKET`->`greenbro-brand`; `APP_STATIC`->`greenbro-app-static` | `ACCESS_AUD`, `ACCESS_JWKS_URL` (`https://bradleyayliffl.cloudflareaccess.com/cdn-cgi/access/certs`), `CURSOR_SECRET`, `ASSET_SIGNING_SECRET`, optional `ALLOWED_PREFIXES`, ingestion limits (`INGEST_ALLOWED_ORIGINS`, `INGEST_RATE_LIMIT_PER_MIN=120`, `INGEST_SIGNATURE_TOLERANCE_SECS=300`, `INGEST_IP_LIMIT_PER_MIN`, `INGEST_IP_BLOCK_SECONDS`) |
+| `gb-heat-pump-app-v1` | `https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev` | `GREENBRO_DB` -> `ee7ad98b-3629-4985-bd7d-a60c401953a7` | `GB_BUCKET`->`greenbro-brand`; `APP_STATIC`->`greenbro-app-static` | `ACCESS_AUD`, `ACCESS_JWKS_URL` (`https://bradleyayliffl.cloudflareaccess.com/cdn-cgi/access/certs`), `CURSOR_SECRET`, `ASSET_SIGNING_SECRET`, optional `ALLOWED_PREFIXES`, ingestion limits (`INGEST_ALLOWED_ORIGINS`, `INGEST_RATE_LIMIT_PER_MIN=120`, `INGEST_SIGNATURE_TOLERANCE_SECS=300`, `INGEST_IP_LIMIT_PER_MIN`, `INGEST_IP_BLOCK_SECONDS`), telemetry auth (`CLIENT_EVENT_LIMIT_PER_MIN`, `CLIENT_EVENT_BLOCK_SECONDS`) |
 
 > When `INGEST_IP_LIMIT_PER_MIN` is greater than zero, bind `INGEST_IP_BUCKETS` (KV) in the target environment. The Worker now fails validation instead of silently falling back to per-isolate token buckets. Use the namespace created via `wrangler kv namespace create greenbro-ingest-ip` (preview + production IDs) for all deployments.
 
 > `AUTH_IP_BUCKETS` (single binding in `wrangler.toml`) should point at the `greenbro-auth-ip` namespace you provisioned via `wrangler kv namespace create ...`. The IDs live in the password manager; update them in one place (global binding) rather than duplicating under `[env.production]`.
+
+> `CLIENT_EVENT_IP_BUCKETS` is now a first-class binding used to throttle `/api/observability/client-events`. Provision preview + production namespaces via `wrangler kv namespace create greenbro-client-event-ip` (add `--env production` for prod) and keep the IDs recorded in the secret-management entry. The worker refuses to deploy if `CLIENT_EVENT_LIMIT_PER_MIN > 0` without this binding, preventing client-event spikes from taking down login endpoints.
+
+### Telemetry token issuance
+
+Mobile clients now call `POST /api/auth/telemetry-token` to refresh their short-lived telemetry JWTs using the existing session. During deployments:
+
+1. Run `wrangler deploy` (preview) and hit `/api/auth/telemetry-token` through the staging Access app to confirm it returns `{ telemetry: { token, expiresAt } }` for an authenticated operator. _(The endpoint intentionally rejects unauthenticated curl calls.)_
+2. Once preview is green, run `wrangler deploy --env production`.
+3. After rollout, watch `telemetry.event_failed.http` logs and the `signup_flow.resend` dashboards for the first hour; a spike in 401s usually means telemetry tokens are not being refreshed correctly.
 
 > `ACCESS_AUD` values are managed in Cloudflare Access and stored only via `wrangler secret put`. Rotate/update them alongside the Access application policies described in `docs/platform-setup-guide.md`.
 
