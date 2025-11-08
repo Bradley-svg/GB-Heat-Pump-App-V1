@@ -7,9 +7,9 @@ import { resendVerification } from "../services/auth-service";
 import { ApiError } from "../services/api-client";
 import { trackClientEvent } from "../services/telemetry";
 
-type SignupCompleteState = {
+interface SignupCompleteState {
   email?: string;
-};
+}
 
 export function SignupCompletePage() {
   const api = useApiClient();
@@ -34,7 +34,7 @@ export function SignupCompletePage() {
     try {
       await resendVerification(api, trimmed);
       setResendStatus("success");
-      trackClientEvent("signup_flow.resend", { status: "ok" });
+      void trackClientEvent("signup_flow.resend", { status: "ok" });
     } catch (err) {
       const message =
         err instanceof ApiError && err.status === 400 ?
@@ -42,10 +42,14 @@ export function SignupCompletePage() {
           "We couldn't resend the verification email. Try again shortly.";
       setResendError(message);
       setResendStatus("error");
-      trackClientEvent("signup_flow.resend", {
+      void trackClientEvent("signup_flow.resend", {
         status: err instanceof ApiError ? err.status : "error",
       });
     }
+  }
+
+  function handleResendSubmit(event: React.FormEvent<HTMLFormElement>) {
+    void handleResend(event);
   }
 
   return (
@@ -76,7 +80,7 @@ export function SignupCompletePage() {
       <div className="auth-message-card">
         <p>Finish setup in three quick steps:</p>
         <ol style={{ marginLeft: "1.2rem" }}>
-          <li>Open the "Verify your GREENBRO account" email.</li>
+          <li>Open the &ldquo;Verify your GREENBRO account&rdquo; email.</li>
           <li>Select the button inside the message to confirm your address.</li>
           <li>
             Prefer to paste the token manually?{" "}
@@ -86,7 +90,7 @@ export function SignupCompletePage() {
           </li>
         </ol>
         <hr style={{ border: "none", borderTop: "1px solid rgba(255,255,255,0.08)", margin: "1rem 0" }} />
-        <form onSubmit={handleResend} className="resend-form">
+        <form onSubmit={handleResendSubmit} className="resend-form">
           <label className="auth-field">
             <span>Need another email?</span>
             <input

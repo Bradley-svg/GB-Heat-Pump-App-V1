@@ -47,12 +47,16 @@ export function VerifyEmailPage() {
     }
   }
 
+  function handleFormSubmit(event: React.FormEvent<HTMLFormElement>) {
+    void handleSubmit(event);
+  }
+
   return (
     <AuthLayout
       title="Verify your email"
       subtitle="Paste the code from your inbox to finish setting up your account."
     >
-      <form className="auth-form" onSubmit={handleSubmit}>
+      <form className="auth-form" onSubmit={handleFormSubmit}>
         {error ? <div className="auth-error">{error}</div> : null}
         <label className="auth-field">
           <span>Verification token</span>

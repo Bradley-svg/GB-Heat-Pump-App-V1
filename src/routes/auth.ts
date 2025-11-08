@@ -26,7 +26,6 @@ import { issueEmailVerification, consumeEmailVerification } from "../lib/auth/em
 import { maskEmail } from "../utils/mask";
 import { requireAccessUser } from "../lib/access";
 
-const EMAIL_ALREADY_REGISTERED = "Email is already registered";
 const INVALID_CREDENTIALS = "Invalid email or password";
 const DEFAULT_ROLE = "client";
 const PASSWORD_RESET_TTL_MINUTES = 60;

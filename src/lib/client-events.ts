@@ -51,7 +51,10 @@ function serializeProperties(
 
 function truncateJson(payload: string): string {
   if (!payload) return payload;
-  let end = Math.max(1, Math.floor((MAX_PROPERTIES_BYTES / encoder.encode(payload).length) * payload.length));
+  const end = Math.max(
+    1,
+    Math.floor((MAX_PROPERTIES_BYTES / encoder.encode(payload).length) * payload.length),
+  );
   let candidate = payload.slice(0, end);
   while (candidate.length > 0 && encoder.encode(candidate).length > MAX_PROPERTIES_BYTES) {
     candidate = candidate.slice(0, -1);
@@ -64,4 +67,3 @@ function sanitizeText(value: string | null | undefined): string | null {
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
 }
-
