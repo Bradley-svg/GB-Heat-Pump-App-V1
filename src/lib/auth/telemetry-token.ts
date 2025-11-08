@@ -1,4 +1,5 @@
-import { SignJWT, jwtVerify } from "jose";
+import { jwtVerify } from "jose";
+import { SignJWT } from "jose/jwt/sign";
 import type { JWTPayload } from "jose";
 
 import type { Env, User } from "../../env";
@@ -161,4 +162,3 @@ function sanitizeClientIds(input: unknown): string[] {
     .map((value) => (typeof value === "string" ? value.trim() : ""))
     .filter((value) => value.length > 0);
 }
-

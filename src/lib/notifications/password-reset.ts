@@ -4,16 +4,18 @@ import { maskEmail } from "../../utils/mask";
 
 const log = systemLogger({ scope: "user-notifications" });
 
-export interface PasswordResetNotificationPayload {
+interface BaseNotificationPayload {
   email: string;
-  resetUrl: string;
   expiresAt: string;
+  [key: string]: unknown;
 }
 
-export interface EmailVerificationNotificationPayload {
-  email: string;
+export interface PasswordResetNotificationPayload extends BaseNotificationPayload {
+  resetUrl: string;
+}
+
+export interface EmailVerificationNotificationPayload extends BaseNotificationPayload {
   verifyUrl: string;
-  expiresAt: string;
 }
 
 function bytesToBase64(bytes: ArrayBuffer): string {
@@ -38,11 +40,11 @@ async function signPayload(secret: string, body: string): Promise<string> {
   return bytesToBase64(digest);
 }
 
-async function dispatchUserNotification(
+async function dispatchUserNotification<T extends BaseNotificationPayload>(
   scope: string,
   endpoint: string | undefined,
   secret: string | undefined,
-  payload: Record<string, unknown>,
+  payload: T,
 ): Promise<void> {
   if (!endpoint) {
     throw new Error(`${scope}_WEBHOOK_URL is not configured`);
