@@ -25,9 +25,12 @@ import {
   loadTelemetryGrant,
   clearTelemetryGrant,
 } from "../services/session-storage";
-import { fetchCurrentUser } from "../services/user-service";
 import { reportClientEvent, type TelemetryResult } from "../services/telemetry";
-import { getTelemetryGrant, setTelemetryGrant } from "../services/telemetry-auth";
+import {
+  getTelemetryGrant,
+  setTelemetryGrant,
+} from "../services/telemetry-auth";
+import { fetchCurrentUser } from "../services/user-service";
 import { subscribePendingLogoutWatchers } from "../utils/pending-logout";
 
 type AuthStatus = "loading" | "authenticating" | "authenticated" | "anonymous";
@@ -140,31 +143,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     return cleanup;
   }, [flushPendingLogout]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    setStatus("authenticating");
-    setError(null);
-    try {
-      const result = await loginWithCredentials({ email, password });
-      await persistSessionCookie(result.cookie);
-      setSessionCookie(result.cookie);
-      if (result.telemetry?.token) {
-        setTelemetryGrant(result.telemetry);
-        await persistTelemetryGrant(result.telemetry);
-      } else {
+  const login = useCallback(
+    async (email: string, password: string) => {
+      setStatus("authenticating");
+      setError(null);
+      try {
+        const result = await loginWithCredentials({ email, password });
+        await persistSessionCookie(result.cookie);
+        setSessionCookie(result.cookie);
+        if (result.telemetry?.token) {
+          setTelemetryGrant(result.telemetry);
+          await persistTelemetryGrant(result.telemetry);
+        } else {
+          await clearTelemetryState();
+        }
+        setUser(result.user);
+        setStatus("authenticated");
+        return result.user;
+      } catch (err) {
+        setStatus("anonymous");
         await clearTelemetryState();
+        const message =
+          err instanceof Error ? err.message : "Unable to sign in. Try again.";
+        setError(message);
+        throw err instanceof Error ? err : new Error(message);
       }
-      setUser(result.user);
-      setStatus("authenticated");
-      return result.user;
-    } catch (err) {
-      setStatus("anonymous");
-      await clearTelemetryState();
-      const message =
-        err instanceof Error ? err.message : "Unable to sign in. Try again.";
-      setError(message);
-      throw err instanceof Error ? err : new Error(message);
-    }
-  }, [clearTelemetryState]);
+    },
+    [clearTelemetryState],
+  );
 
   const logout = useCallback(async () => {
     setStatus("authenticating");

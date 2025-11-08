@@ -1,13 +1,20 @@
-import { buildApiUrl } from "../config/app-config";
 import { ApiError } from "./api-client";
-import { getTelemetryGrant, setTelemetryGrant, type TelemetryGrant } from "./telemetry-auth";
+import { refreshTelemetryGrant } from "./auth-service";
 import {
   clearTelemetryGrant as clearStoredTelemetryGrant,
   persistTelemetryGrant,
 } from "./session-storage";
-import { refreshTelemetryGrant } from "./auth-service";
+import {
+  getTelemetryGrant,
+  setTelemetryGrant,
+  type TelemetryGrant,
+} from "./telemetry-auth";
+import { buildApiUrl } from "../config/app-config";
 
-type EventProperties = Record<string, string | number | boolean | null | undefined>;
+type EventProperties = Record<
+  string,
+  string | number | boolean | null | undefined
+>;
 
 interface TelemetryOptions {
   source?: string;
@@ -27,8 +34,11 @@ export async function reportClientEvent(
   const overrideToken = options.tokenOverride?.trim();
   const telemetry = getTelemetryGrant();
   const initialToken = overrideToken?.length ? overrideToken : telemetry?.token;
-  const tokenSource =
-    overrideToken?.length ? "override" : telemetry?.token ? "grant" : "none";
+  const tokenSource = overrideToken?.length
+    ? "override"
+    : telemetry?.token
+      ? "grant"
+      : "none";
 
   return sendTelemetryEvent({
     event,
@@ -49,7 +59,9 @@ interface SendParams {
   attemptedRefresh: boolean;
 }
 
-async function sendTelemetryEvent(params: SendParams): Promise<TelemetryResult> {
+async function sendTelemetryEvent(
+  params: SendParams,
+): Promise<TelemetryResult> {
   const headers: Record<string, string> = {
     "content-type": "application/json",
   };
@@ -57,17 +69,20 @@ async function sendTelemetryEvent(params: SendParams): Promise<TelemetryResult> 
     headers.Authorization = `Bearer ${params.token}`;
   }
   try {
-    const response = await fetch(buildApiUrl("/api/observability/client-events"), {
-      method: "POST",
-      credentials: "omit",
-      headers,
-      body: JSON.stringify({
-        event: params.event,
-        source: params.source,
-        timestamp: new Date().toISOString(),
-        properties: params.properties,
-      }),
-    });
+    const response = await fetch(
+      buildApiUrl("/api/observability/client-events"),
+      {
+        method: "POST",
+        credentials: "omit",
+        headers,
+        body: JSON.stringify({
+          event: params.event,
+          source: params.source,
+          timestamp: new Date().toISOString(),
+          properties: params.properties,
+        }),
+      },
+    );
     if (response.ok) {
       return { ok: true };
     }

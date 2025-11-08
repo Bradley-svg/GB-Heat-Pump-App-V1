@@ -1,9 +1,11 @@
-import { AppState, type AppStateStatus } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
+import { AppState, type AppStateStatus } from "react-native";
 
 export type PendingLogoutCallback = () => void;
 
-export function subscribePendingLogoutWatchers(callback: PendingLogoutCallback): () => void {
+export function subscribePendingLogoutWatchers(
+  callback: PendingLogoutCallback,
+): () => void {
   const appStateSubscription = AppState.addEventListener(
     "change",
     (nextState: AppStateStatus) => {
@@ -15,7 +17,8 @@ export function subscribePendingLogoutWatchers(callback: PendingLogoutCallback):
 
   let lastOnline: boolean | null = null;
   const netInfoUnsubscribe = NetInfo.addEventListener((state) => {
-    const isOnline = Boolean(state.isConnected) && state.isInternetReachable !== false;
+    const isOnline =
+      Boolean(state.isConnected) && state.isInternetReachable !== false;
     if (isOnline && (lastOnline === null || lastOnline === false)) {
       callback();
     }

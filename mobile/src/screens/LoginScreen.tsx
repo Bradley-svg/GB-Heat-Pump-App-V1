@@ -12,10 +12,10 @@ import {
 import { GBButton } from "../components/GBButton";
 import { GBCard } from "../components/GBCard";
 import { useAuth } from "../contexts/AuthContext";
-import { useTheme } from "../theme/GBThemeProvider";
-import { resendVerification } from "../services/auth-service";
 import { ApiError } from "../services/api-client";
+import { resendVerification } from "../services/auth-service";
 import { reportClientEvent } from "../services/telemetry";
+import { useTheme } from "../theme/GBThemeProvider";
 
 interface LoginScreenProps {
   onSuccess?: () => void;
@@ -84,9 +84,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     } catch (err) {
       const statusCode = err instanceof ApiError ? err.status : "error";
       const message =
-        err instanceof ApiError && err.status === 429 ?
-          "Please wait before requesting another verification email." :
-          "We couldn't resend the verification email. Try again soon.";
+        err instanceof ApiError && err.status === 429
+          ? "Please wait before requesting another verification email."
+          : "We couldn't resend the verification email. Try again soon.";
       setResendError(message);
       setResendMessage(null);
       emitResendEvent(

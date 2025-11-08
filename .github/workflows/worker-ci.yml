@@ -72,9 +72,9 @@ jobs:
       - name: Verify shim flags are disabled
         run: npm run check:prod-shim
 
-      - name: Validate D1 migrations locally
+      - name: Validate D1 migrations remotely
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork != true }}
-        run: npm run migrate:apply:local
+        run: npm run migrate:apply
 
       - name: Run unit tests
         run: npm run test

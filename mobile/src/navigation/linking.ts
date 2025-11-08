@@ -31,7 +31,7 @@ export function sanitizeLinkPath(rawPath?: string | null): string {
     return FALLBACK_SEGMENT;
   }
 
-  let working = rawPath.trim();
+  const working = rawPath.trim();
   if (!working) {
     return FALLBACK_SEGMENT;
   }

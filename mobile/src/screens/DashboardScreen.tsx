@@ -21,14 +21,17 @@ import {
   type FleetSummaryResult,
 } from "../hooks/useFleetSummary";
 import { useHaptics } from "../hooks/useHaptics";
-import { useTheme } from "../theme/GBThemeProvider";
 import type { RootTabsParamList } from "../navigation/AppNavigator";
+import { useTheme } from "../theme/GBThemeProvider";
 
 interface DashboardScreenProps {
   onShowToast: (message: string, type: "success" | "warn" | "error") => void;
 }
 
-type DashboardScreenNavProps = BottomTabScreenProps<RootTabsParamList, "Dashboard">;
+type DashboardScreenNavProps = BottomTabScreenProps<
+  RootTabsParamList,
+  "Dashboard"
+>;
 type DashboardProps = DashboardScreenProps & DashboardScreenNavProps;
 
 type DashboardKpi = {

@@ -27,7 +27,10 @@ describe("linking.getStateFromPath", () => {
   });
 
   it("maps to Alerts when provided with extra query params", () => {
-    const state = linking.getStateFromPath?.("alerts?token=123", linking.config);
+    const state = linking.getStateFromPath?.(
+      "alerts?token=123",
+      linking.config,
+    );
     expect(state?.routes?.[0]?.name).toBe("Alerts");
   });
 });

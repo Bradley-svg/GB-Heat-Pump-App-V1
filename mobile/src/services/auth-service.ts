@@ -1,6 +1,6 @@
 import { apiClient } from "./api-client";
-import { buildApiUrl } from "../config/app-config";
 import type { TelemetryGrant } from "./telemetry-auth";
+import { buildApiUrl } from "../config/app-config";
 
 export interface LoginPayload {
   email: string;

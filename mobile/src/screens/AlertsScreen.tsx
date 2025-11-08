@@ -16,8 +16,8 @@ import { GBCard } from "../components/GBCard";
 import { GBListItem } from "../components/GBListItem";
 import { GBStatusPill } from "../components/GBStatusPill";
 import { useAlertsFeed, type AlertRecord } from "../hooks/useAlertsFeed";
-import { useTheme } from "../theme/GBThemeProvider";
 import type { RootTabsParamList } from "../navigation/AppNavigator";
+import { useTheme } from "../theme/GBThemeProvider";
 
 const severityOptions = ["All", "Critical", "Warning", "Info"] as const;
 

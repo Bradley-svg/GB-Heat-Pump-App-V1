@@ -1,4 +1,5 @@
 import * as SecureStore from "expo-secure-store";
+
 import type { TelemetryGrant } from "./telemetry-auth";
 
 const COOKIE_KEY = "gb_session_cookie";
@@ -18,7 +19,9 @@ export async function clearSessionCookie(): Promise<void> {
   await SecureStore.deleteItemAsync(COOKIE_KEY);
 }
 
-export async function persistTelemetryGrant(grant: TelemetryGrant): Promise<void> {
+export async function persistTelemetryGrant(
+  grant: TelemetryGrant,
+): Promise<void> {
   await SecureStore.setItemAsync(
     TELEMETRY_GRANT_KEY,
     JSON.stringify({
@@ -44,7 +47,10 @@ export async function clearTelemetryGrant(): Promise<void> {
   await SecureStore.deleteItemAsync(TELEMETRY_GRANT_KEY);
 }
 
-export async function persistPendingLogoutCookie(cookie: string, telemetry?: TelemetryGrant | null): Promise<void> {
+export async function persistPendingLogoutCookie(
+  cookie: string,
+  telemetry?: TelemetryGrant | null,
+): Promise<void> {
   const payload: PendingLogoutRecord = {
     cookie,
     telemetry: normalizeTelemetryGrant(telemetry),
@@ -57,7 +63,11 @@ export async function loadPendingLogoutCookie(): Promise<PendingLogoutRecord | n
   if (!stored) return null;
   try {
     const parsed = JSON.parse(stored);
-    if (parsed && typeof parsed.cookie === "string" && parsed.cookie.length > 0) {
+    if (
+      parsed &&
+      typeof parsed.cookie === "string" &&
+      parsed.cookie.length > 0
+    ) {
       return {
         cookie: parsed.cookie,
         telemetry: normalizeTelemetryGrant(parsed.telemetry),
