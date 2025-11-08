@@ -1,4 +1,5 @@
 import { buildApiUrl } from "../config/app-config";
+import { ApiError } from "./api-client";
 import { getTelemetryGrant, setTelemetryGrant, type TelemetryGrant } from "./telemetry-auth";
 import {
   clearTelemetryGrant as clearStoredTelemetryGrant,
@@ -111,7 +112,10 @@ async function attemptTelemetryRefresh(): Promise<TelemetryGrant | null> {
     await persistTelemetryGrant(refreshed);
     return refreshed;
   } catch (error) {
-    console.warn("telemetry.refresh_failed", { error });
+    const status = error instanceof ApiError ? error.status : undefined;
+    console.warn("telemetry.refresh_failed", { status, error });
+    await clearStoredTelemetryGrant();
+    setTelemetryGrant(null);
     return null;
   }
 }

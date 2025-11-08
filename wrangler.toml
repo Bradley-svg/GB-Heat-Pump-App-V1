@@ -89,9 +89,8 @@ preview_id = "6c84b7f2da474d1f9efc3a8c2a1be4d5"
 
 [[kv_namespaces]]
 binding = "CLIENT_EVENT_IP_BUCKETS"
-# TODO: Replace with the KV namespace IDs created via `wrangler kv namespace create greenbro-client-event-ip`
-id = "REPLACE_WITH_CLIENT_EVENT_IP_KV_ID"
-preview_id = "REPLACE_WITH_CLIENT_EVENT_IP_KV_PREVIEW_ID"
+id = "1fe35e38017042a0bdbb551e68b5823e"
+preview_id = "6c84b7f2da474d1f9efc3a8c2a1be4d5"
 
 [env.local]
   [env.local.vars]
@@ -150,8 +149,8 @@ preview_id = "6c84b7f2da474d1f9efc3a8c2a1be4d5"
 
 [[env.production.kv_namespaces]]
 binding = "CLIENT_EVENT_IP_BUCKETS"
-id = "REPLACE_WITH_CLIENT_EVENT_IP_KV_ID"
-preview_id = "REPLACE_WITH_CLIENT_EVENT_IP_KV_PREVIEW_ID"
+id = "1fe35e38017042a0bdbb551e68b5823e"
+preview_id = "6c84b7f2da474d1f9efc3a8c2a1be4d5"
 
 [[env.production.r2_buckets]]
 binding = "GB_BUCKET"
