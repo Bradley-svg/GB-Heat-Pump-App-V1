@@ -63,7 +63,7 @@ router
   .post("/api/auth/reset", (req, env) => handleReset(req, env))
   .post("/api/auth/verify", (req, env) => handleVerifyEmail(req, env))
   .post("/api/auth/verify/resend", (req, env) => handleResendVerification(req, env))
-  .post("/api/auth/telemetry-token", withAccess((req, env) => handleTelemetryToken(req, env)))
+  .post("/api/auth/telemetry-token", (req, env) => handleTelemetryToken(req, env))
   .get("/api/me", withAccess((req, env) => handleMe(req, env)))
   .get("/api/fleet/summary", withAccess((req, env) => handleFleetSummary(req, env)))
   .get(

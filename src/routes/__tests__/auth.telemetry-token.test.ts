@@ -1,20 +1,16 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { handleTelemetryToken } from "../auth";
-import * as accessModule from "../../lib/access";
 import { createWorkerEnv } from "../../../tests/helpers/worker-env";
+import { seedTestUser } from "../../../tests/helpers/user";
+import { createSession } from "../../lib/auth/sessions";
 
 describe("handleTelemetryToken", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("returns 401 when no user is authenticated", async () => {
+  it("returns 401 when no session or Access context is provided", async () => {
     const { env, dispose } = await createWorkerEnv();
-    vi.spyOn(accessModule, "requireAccessUser").mockResolvedValueOnce(null);
     try {
       const res = await handleTelemetryToken(
-        new Request("https://app.test/api/auth/telemetry-token"),
+        new Request("https://app.test/api/auth/telemetry-token", { method: "POST" }),
         env,
       );
       expect(res.status).toBe(401);
@@ -23,18 +19,16 @@ describe("handleTelemetryToken", () => {
     }
   });
 
-  it("returns a fresh telemetry grant when session is valid", async () => {
+  it("returns a telemetry grant when a valid session cookie is present", async () => {
     const { env, dispose } = await createWorkerEnv();
-    vi.spyOn(accessModule, "requireAccessUser").mockResolvedValueOnce({
-      email: "mobile@example.com",
-      roles: ["client"],
-      clientIds: ["profile-west"],
-    });
     try {
-      const res = await handleTelemetryToken(
-        new Request("https://app.test/api/auth/telemetry-token"),
-        env,
-      );
+      const { userId } = await seedTestUser(env, { roles: ["client"] });
+      const { cookie } = await createSession(env, userId);
+      const req = new Request("https://app.test/api/auth/telemetry-token", {
+        method: "POST",
+        headers: { cookie },
+      });
+      const res = await handleTelemetryToken(req, env);
       expect(res.status).toBe(200);
       const body = (await res.json()) as { telemetry?: { token?: string } };
       expect(body.telemetry?.token).toBeDefined();

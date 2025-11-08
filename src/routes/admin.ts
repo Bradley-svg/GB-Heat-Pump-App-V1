@@ -171,5 +171,6 @@ export async function handleAdminOverview(req: Request, env: Env) {
 export async function handleFleetAdminOverview(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
+  if (!userIsAdmin(user)) return json({ error: "Forbidden" }, { status: 403 });
   return buildOverviewResponse(req, env, user, "/api/fleet/admin-overview");
 }

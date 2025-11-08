@@ -2,6 +2,7 @@ import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 import type { JWTPayload } from "jose";
 import { deriveUserFromClaims, landingFor } from "../rbac";
 import type { Env, User } from "../env";
+import { nowISO } from "../utils";
 import { loggerForRequest } from "../utils/logging";
 import { extractSessionToken, lookupSession } from "./auth/sessions";
 
@@ -150,6 +151,7 @@ export async function requireAccessUser(
     try {
       const { payload } = await jwtVerify(jwt, getJwks(env), { audience: env.ACCESS_AUD });
       const user = deriveUserFromClaims(payload as JWTPayload);
+      await syncAccessUserState(env, req, user);
       cacheRequestUser(req, user);
       return user;
     } catch (error) {
@@ -229,6 +231,31 @@ export function userIsAdmin(user: User) {
 }
 
 export { landingFor };
+
+async function syncAccessUserState(env: Env, req: Request, user: User) {
+  const email = user.email?.trim().toLowerCase();
+  if (!email) {
+    return;
+  }
+  const rolesJson = JSON.stringify(user.roles ?? []);
+  const clientIdsJson = JSON.stringify(user.clientIds ?? []);
+  try {
+    await env.DB.prepare(
+      `UPDATE users
+          SET roles = ?1,
+              client_ids = ?2,
+              updated_at = ?3
+        WHERE lower(email) = ?4`,
+    )
+      .bind(rolesJson, clientIdsJson, nowISO(), email)
+      .run();
+  } catch (error) {
+    loggerForRequest(req, { scope: "access" }).warn("access.role_sync_failed", {
+      email,
+      error,
+    });
+  }
+}
 
 function safeDecodeJwt(token: string): JWTPayload | null {
   try {
