@@ -39,6 +39,27 @@ npm run mobile:e2e:test:android
 
 Need to debug Detox locally? Append `-- --record-logs all --debug-synchronization 500` to capture verbose logs.
 
+## Cloud builds (EAS)
+
+Local `expo run:ios` builds only succeed on macOS. On Windows/Linux, or anytime you need store-ready binaries, use Expo Application Services:
+
+1. Install the CLI once: `npm install -g eas-cli` (or run through `npx eas`).
+2. Authenticate: `eas login` (use the shared Expo account in the password vault).
+3. Kick off preview builds:
+   ```bash
+   eas build -p ios --profile preview --non-interactive
+   eas build -p android --profile preview --non-interactive
+   ```
+4. Watch the dashboard (https://expo.dev/accounts/<org>/projects/greenbro-mobile/builds) and download the `.ipa` / `.apk` artifacts when they finish. For Android you can also run `eas build:run -p android --latest`.
+5. Install the artifacts on your simulator/device, then run:
+   ```bash
+   npx uri-scheme open greenbro://alerts --ios
+   npx uri-scheme open greenbro://alerts --android
+   ```
+   to validate deep links, and use the new Detox helpers (`xcrun simctl ui ...` / `adb shell settings put secure ui_night_mode ...`) to confirm live theme swaps.
+
+Document every build in the release ticket (profile, commit, download URL) so reviewers can verify we tested the exact binaries headed to the stores.
+
 ## Store versioning
 
 - `mobile/app.json` now tracks `ios.buildNumber` (string) and `android.versionCode` (integer). Before every release:

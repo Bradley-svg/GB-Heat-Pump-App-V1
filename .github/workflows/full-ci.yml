@@ -75,7 +75,6 @@ jobs:
     needs: dependency-audit
     env:
       EXPO_PUBLIC_API_BASE: ${{ secrets.EXPO_PUBLIC_API_BASE }}
-      EXPO_PUBLIC_SESSION_COOKIE: ${{ secrets.MOBILE_SESSION_COOKIE }}
 
     steps:
       - name: Checkout repository

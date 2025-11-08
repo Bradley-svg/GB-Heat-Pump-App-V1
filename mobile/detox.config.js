@@ -1,6 +1,12 @@
-﻿module.exports = {
-  testRunner: "jest",
-  runnerConfig: "e2e/jest.config.js",
+/** @type {Detox.DetoxConfig} */
+module.exports = {
+  testRunner: {
+    type: "jest",
+    args: {
+      $0: "jest",
+      config: require.resolve("./e2e/jest.config.js"),
+    },
+  },
   apps: {
     "ios.sim.debug": {
       type: "ios.app",

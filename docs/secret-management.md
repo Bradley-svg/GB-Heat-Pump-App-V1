@@ -27,6 +27,7 @@ The Worker code reads each secret from the runtime `env` object. No secret value
 | `PERF_ACCESS_JWT` | Repository secret | Optional Cloudflare Access JWT for authenticated smoke runs. | Issue via `cloudflared access login` or Access service token. Omit when targeting a public staging environment. Rotate whenever Access policies change. |
 | `CLOUDFLARE_ACCOUNT_ID` | Repository secret | Required by `.github/workflows/kv-fallback-monitor.yml` to tail Workers logs. | Use the same account ID referenced in `wrangler.toml`. |
 | `CLOUDFLARE_API_TOKEN` | Repository secret | API token with Workers Tail permission so the KV fallback monitor can stream logs. | Scope minimally to `Workers Tail` + `Workers Scripts:Read`; rotate alongside other automation tokens. |
+| `CLOUDFLARE_API_TOKEN_D1` | Repository secret | Writable API token used by `worker-ci.yml` to run `wrangler d1 migrations apply` remotely. | Scope to `Workers Scripts:Edit`, `Workers KV Storage:Edit`, and `D1:Edit`. Rotate annually or immediately after incident response. |
 
 Document the last rotation timestamp in the release log and update the values whenever the Worker URL or Access application changes.
 
