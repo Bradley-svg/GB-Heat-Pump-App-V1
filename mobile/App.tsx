@@ -1,15 +1,11 @@
 import React, { useState } from "react";
-import {
-  NavigationContainer,
-  DarkTheme,
-  DefaultTheme,
-  type LinkingOptions,
-} from "@react-navigation/native";
+import { NavigationContainer, DarkTheme, DefaultTheme } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, View } from "react-native";
-import AppNavigator, { type RootTabsParamList } from "./src/navigation/AppNavigator";
-import { GBThemeProvider, useColorScheme } from "./src/theme/GBThemeProvider";
+import AppNavigator from "./src/navigation/AppNavigator";
+import { linking } from "./src/navigation/linking";
+import { GBThemeProvider, useColorScheme, useTheme } from "./src/theme/GBThemeProvider";
 import { GBToast } from "./src/components/GBToast";
 import { AuthProvider, useAuth } from "./src/contexts/AuthContext";
 import { LoginScreen } from "./src/screens/LoginScreen";
@@ -41,22 +37,12 @@ export default function App() {
   );
 }
 
-const linking: LinkingOptions<RootTabsParamList> = {
-  prefixes: ["greenbro://"],
-  config: {
-    screens: {
-      Dashboard: "",
-      Device: "device",
-      Alerts: "alerts",
-    },
-  },
-};
-
 const AuthGate: React.FC<{
   onShowToast: (message: string, type: "success" | "warn" | "error") => void;
 }> = ({ onShowToast }) => {
   const { status, user } = useAuth();
   const scheme = useColorScheme();
+  const { colors } = useTheme();
 
   if (status === "loading") {
     return (
@@ -76,12 +62,26 @@ const AuthGate: React.FC<{
   }
 
   return (
-    <NavigationContainer
-      linking={linking}
-      theme={scheme === "dark" ? DarkTheme : DefaultTheme}
-    >
-      <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-      <AppNavigator onShowToast={onShowToast} />
-    </NavigationContainer>
+    <>
+      <View
+        testID="theme-probe"
+        accessibilityLabel={`theme-${scheme}`}
+        style={{
+          position: "absolute",
+          width: 0,
+          height: 0,
+          opacity: 0,
+          backgroundColor: colors.surface,
+        }}
+        pointerEvents="none"
+      />
+      <NavigationContainer
+        linking={linking}
+        theme={scheme === "dark" ? DarkTheme : DefaultTheme}
+      >
+        <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+        <AppNavigator onShowToast={onShowToast} />
+      </NavigationContainer>
+    </>
   );
 };
