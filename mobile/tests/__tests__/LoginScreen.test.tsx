@@ -11,18 +11,15 @@ import { ApiError } from "../../src/services/api-client";
 jest.mock("../../src/contexts/AuthContext");
 jest.mock("../../src/services/auth-service");
 jest.mock("../../src/services/telemetry");
-jest.mock(
-"react-native/Libraries/Components/Keyboard/KeyboardAvoidingView",
-() => {
+jest.mock("react-native/Libraries/Components/Keyboard/KeyboardAvoidingView", () => {
   const React = require("react");
-  const View = require("react-native/Libraries/Components/View/View");
-  const MockKeyboardAvoidingView = React.forwardRef((props, ref) =>
-    React.createElement(View, { ...props, ref }),
+  const { View } = require("react-native");
+  const MockKeyboardAvoidingView = React.forwardRef(({ children, ...props }, ref) =>
+    React.createElement(View, { ...props, ref }, children),
   );
   MockKeyboardAvoidingView.displayName = "MockKeyboardAvoidingView";
   return { __esModule: true, default: MockKeyboardAvoidingView };
-},
-);
+});
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockResend = resendVerification as jest.MockedFunction<typeof resendVerification>;

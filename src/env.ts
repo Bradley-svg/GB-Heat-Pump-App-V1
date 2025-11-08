@@ -62,6 +62,8 @@ export interface Env {
   EMAIL_VERIFICATION_WEBHOOK_SECRET?: string;
   EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS?: string;
   CLIENT_EVENT_RETENTION_DAYS?: string;
+  CLIENT_EVENT_TOKEN_SECRET: string;
+  CLIENT_EVENT_TOKEN_TTL_SECONDS?: string;
 }
 
 export type User = {
@@ -492,6 +494,39 @@ const EnvSchema = z
           path: ["CLIENT_EVENT_RETENTION_DAYS"],
           code: z.ZodIssueCode.custom,
           message: "CLIENT_EVENT_RETENTION_DAYS must be a positive integer when set",
+        });
+      }
+    }
+
+    const telemetryTokenSecretRaw =
+      typeof value.CLIENT_EVENT_TOKEN_SECRET === "string" ?
+        value.CLIENT_EVENT_TOKEN_SECRET.trim() :
+        "";
+    if (!telemetryTokenSecretRaw) {
+      ctx.addIssue({
+        path: ["CLIENT_EVENT_TOKEN_SECRET"],
+        code: z.ZodIssueCode.custom,
+        message: "CLIENT_EVENT_TOKEN_SECRET must be set",
+      });
+    } else if (telemetryTokenSecretRaw.length < 32) {
+      ctx.addIssue({
+        path: ["CLIENT_EVENT_TOKEN_SECRET"],
+        code: z.ZodIssueCode.custom,
+        message: "CLIENT_EVENT_TOKEN_SECRET must be at least 32 characters",
+      });
+    }
+
+    const telemetryTokenTtlRaw =
+      typeof value.CLIENT_EVENT_TOKEN_TTL_SECONDS === "string" ?
+        value.CLIENT_EVENT_TOKEN_TTL_SECONDS.trim() :
+        "";
+    if (telemetryTokenTtlRaw) {
+      const parsed = Number.parseInt(telemetryTokenTtlRaw, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        ctx.addIssue({
+          path: ["CLIENT_EVENT_TOKEN_TTL_SECONDS"],
+          code: z.ZodIssueCode.custom,
+          message: "CLIENT_EVENT_TOKEN_TTL_SECONDS must be a positive integer when set",
         });
       }
     }

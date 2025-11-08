@@ -13,13 +13,11 @@ Copy `.env.example` to `.env` and set any overrides you need:
 
 ```
 EXPO_PUBLIC_API_BASE=https://app.greenbro.com
-EXPO_PUBLIC_SESSION_COOKIE=
 MOBILE_E2E_EMAIL=
 MOBILE_E2E_PASSWORD=
 ```
 
 - `EXPO_PUBLIC_API_BASE` defaults to production; override for staging/local tunnels.
-- `EXPO_PUBLIC_SESSION_COOKIE` is only for CI/headless automation. Leave it blank locally and **never** commit a real cookie.
 - `MOBILE_E2E_EMAIL` / `MOBILE_E2E_PASSWORD` power the Detox login flow; point them at a dedicated test account.
 
 ## Authentication

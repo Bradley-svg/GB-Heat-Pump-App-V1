@@ -85,6 +85,8 @@ export async function createWorkerEnv(overrides: Partial<Env> = {}): Promise<Wor
     EMAIL_VERIFICATION_WEBHOOK_SECRET: "dev-verification-secret",
     EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS: "300",
     CLIENT_EVENT_RETENTION_DAYS: "60",
+    CLIENT_EVENT_TOKEN_SECRET: "integration-telemetry-token-secret-rotate-1234567890",
+    CLIENT_EVENT_TOKEN_TTL_SECONDS: "900",
   };
 
   const env: Env = { ...baseEnv, ...overrides, DB };

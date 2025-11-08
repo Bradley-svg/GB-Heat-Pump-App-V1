@@ -113,27 +113,34 @@ function resolveDevUser(env: Env): User | null {
   return user;
 }
 
-export async function requireAccessUser(req: Request, env: Env): Promise<User | null> {
+export async function requireAccessUser(
+  req: Request,
+  env: Env,
+  options?: { allowSession?: boolean },
+): Promise<User | null> {
   const cached = getCachedRequestUser(req);
   if (cached !== undefined) {
     return cached;
   }
 
-  const sessionToken = extractSessionToken(req);
-  if (sessionToken) {
-    try {
-      const session = await lookupSession(env, sessionToken);
-      if (session) {
-        const user: User = {
-          email: session.email,
-          roles: normalizeRoles(session.roles),
-          clientIds: normalizeClientIds(session.clientIds),
-        };
-        cacheRequestUser(req, user);
-        return user;
+  const allowSession = options?.allowSession ?? true;
+  if (allowSession) {
+    const sessionToken = extractSessionToken(req);
+    if (sessionToken) {
+      try {
+        const session = await lookupSession(env, sessionToken);
+        if (session) {
+          const user: User = {
+            email: session.email,
+            roles: normalizeRoles(session.roles),
+            clientIds: normalizeClientIds(session.clientIds),
+          };
+          cacheRequestUser(req, user);
+          return user;
+        }
+      } catch (error) {
+        loggerForRequest(req, { scope: "access" }).error("access.session_lookup_failed", { error });
       }
-    } catch (error) {
-      loggerForRequest(req, { scope: "access" }).error("access.session_lookup_failed", { error });
     }
   }
 

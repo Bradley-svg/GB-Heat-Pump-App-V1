@@ -25,6 +25,8 @@ function createEnv(overrides: Partial<Env> = {}): Env {
     INGEST_IP_BLOCK_SECONDS: "60",
     ENVIRONMENT: "test",
     INGEST_IP_BUCKETS: createTestKvNamespace(),
+    CLIENT_EVENT_TOKEN_SECRET: "test-telemetry-token-secret-rotate-1234567890",
+    CLIENT_EVENT_TOKEN_TTL_SECONDS: "900",
     ...overrides,
   } as Env;
 }

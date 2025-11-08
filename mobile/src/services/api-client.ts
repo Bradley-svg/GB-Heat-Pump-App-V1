@@ -17,13 +17,7 @@ interface RequestOptions {
   query?: Record<string, string | number | undefined>;
 }
 
-const resolveEnvCookie = (): string | undefined => {
-  const cookie =
-    process.env.EXPO_PUBLIC_SESSION_COOKIE ?? process.env.SESSION_COOKIE;
-  return cookie && cookie.trim().length > 0 ? cookie.trim() : undefined;
-};
-
-let sessionCookie: string | undefined = resolveEnvCookie();
+let sessionCookie: string | undefined;
 
 export function setSessionCookie(cookie?: string) {
   sessionCookie =

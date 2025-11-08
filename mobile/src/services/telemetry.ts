@@ -1,11 +1,11 @@
 import { buildApiUrl } from "../config/app-config";
-import { getSessionCookie } from "./api-client";
+import { getTelemetryGrant } from "./telemetry-auth";
 
 type EventProperties = Record<string, string | number | boolean | null | undefined>;
 
 interface TelemetryOptions {
   source?: string;
-  cookie?: string | null;
+  tokenOverride?: string | null;
 }
 
 export async function reportClientEvent(
@@ -18,12 +18,15 @@ export async function reportClientEvent(
     const headers: Record<string, string> = {
       "content-type": "application/json",
     };
-    const cookie = options.cookie ?? getSessionCookie();
-    if (cookie) {
-      headers.Cookie = cookie;
+    const overrideToken = options.tokenOverride?.trim();
+    const telemetry = getTelemetryGrant();
+    const token = overrideToken?.length ? overrideToken : telemetry?.token;
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
     }
     await fetch(url, {
       method: "POST",
+      credentials: "omit",
       headers,
       body: JSON.stringify({
         event,

@@ -28,6 +28,12 @@ function createEnv(overrides: Partial<Env> = {}): Env {
     ENVIRONMENT: "test",
     INGEST_IP_BUCKETS: createTestKvNamespace(),
     AUTH_IP_BUCKETS: createTestKvNamespace(),
+    PASSWORD_RESET_WEBHOOK_URL: "https://hooks.test/password-reset",
+    PASSWORD_RESET_WEBHOOK_SECRET: "dev-reset-secret",
+    EMAIL_VERIFICATION_WEBHOOK_URL: "https://hooks.test/email-verification",
+    EMAIL_VERIFICATION_WEBHOOK_SECRET: "dev-email-secret",
+    CLIENT_EVENT_TOKEN_SECRET: "test-telemetry-token-secret-rotate-1234567890",
+    CLIENT_EVENT_TOKEN_TTL_SECONDS: "900",
   } satisfies Partial<Env>;
   return { ...base, ...overrides } as Env;
 }

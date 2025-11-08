@@ -19,6 +19,7 @@ import {
   generateToken,
   hashToken,
 } from "../lib/auth/sessions";
+import { issueTelemetryToken } from "../lib/auth/telemetry-token";
 import { checkIpRateLimit } from "../lib/ip-rate-limit";
 import { sendPasswordResetNotification, sendEmailVerificationNotification } from "../lib/notifications/password-reset";
 import { issueEmailVerification, consumeEmailVerification } from "../lib/auth/email-verification";
@@ -224,19 +225,27 @@ export async function handleLogin(req: Request, env: Env) {
     return json({ error: "Email verification required" }, { status: 403 });
   }
 
+  const roles = parseStoredRoles(userRow.roles);
+  const clientIds = parseStoredClientIds(userRow.client_ids);
   const { cookie, session } = await createSession(env, userRow.id);
+  const telemetry = await issueTelemetryToken(env, {
+    email,
+    roles,
+    clientIds,
+  });
   log.info("auth.login.success", { user_id: userRow.id, session_id: session.id });
 
   return json(
     {
       user: {
         email,
-        roles: parseStoredRoles(userRow.roles),
-        clientIds: parseStoredClientIds(userRow.client_ids),
+        roles,
+        clientIds,
         firstName: userRow.first_name ?? null,
         lastName: userRow.last_name ?? null,
         sessionExpiresAt: session.expiresAt,
       },
+      telemetry,
     },
     { headers: { "Set-Cookie": cookie } },
   );
@@ -425,19 +434,27 @@ export async function handleVerifyEmail(req: Request, env: Env) {
     .bind(userRow.id, nowISO())
     .run();
 
+  const roles = parseStoredRoles(userRow.roles);
+  const clientIds = parseStoredClientIds(userRow.client_ids);
   const { cookie, session } = await createSession(env, userRow.id);
+  const telemetry = await issueTelemetryToken(env, {
+    email: userRow.email,
+    roles,
+    clientIds,
+  });
   log.info("auth.verify.success", { user_id: userRow.id });
 
   return json(
     {
       user: {
         email: userRow.email,
-        roles: parseStoredRoles(userRow.roles),
-        clientIds: parseStoredClientIds(userRow.client_ids),
+        roles,
+        clientIds,
         firstName: userRow.first_name ?? null,
         lastName: userRow.last_name ?? null,
         sessionExpiresAt: session.expiresAt,
       },
+      telemetry,
     },
     { headers: { "Set-Cookie": cookie } },
   );

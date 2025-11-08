@@ -1,5 +1,6 @@
 import { apiClient } from "./api-client";
 import { buildApiUrl } from "../config/app-config";
+import type { TelemetryGrant } from "./telemetry-auth";
 
 export interface LoginPayload {
   email: string;
@@ -17,13 +18,14 @@ export interface AuthUser {
 
 interface LoginResponse {
   user: AuthUser;
+  telemetry?: TelemetryGrant;
 }
 
 const SESSION_COOKIE_NAME = "gb_session";
 
 export async function loginWithCredentials(
   payload: LoginPayload,
-): Promise<{ user: AuthUser; cookie: string }> {
+): Promise<{ user: AuthUser; cookie: string; telemetry?: TelemetryGrant }> {
   const response = await fetch(buildApiUrl("/api/auth/login"), {
     method: "POST",
     headers: {
@@ -47,7 +49,7 @@ export async function loginWithCredentials(
   if (!sessionCookie) {
     throw new Error("Missing session cookie");
   }
-  return { user: body.user, cookie: sessionCookie };
+  return { user: body.user, cookie: sessionCookie, telemetry: body.telemetry };
 }
 
 export async function logoutSession(): Promise<void> {

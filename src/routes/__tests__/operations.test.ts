@@ -74,6 +74,8 @@ function createTestEnv() {
     INGEST_ALLOWED_ORIGINS: "https://devices.example.com",
     INGEST_RATE_LIMIT_PER_MIN: "120",
     INGEST_SIGNATURE_TOLERANCE_SECS: "300",
+    CLIENT_EVENT_TOKEN_SECRET: "test-telemetry-token-secret-rotate-1234567890",
+    CLIENT_EVENT_TOKEN_TTL_SECONDS: "900",
   } as unknown as Env;
 
   return { env, sqlite };

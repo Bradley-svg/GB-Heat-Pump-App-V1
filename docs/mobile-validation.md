@@ -2,13 +2,12 @@
 
 Follow this loop whenever you need to validate the Expo client against production telemetry.
 
-1. **Configure the API base (cookie optional for automation)**
+1. **Configure the API base**
    ```bash
    cp mobile/.env.example mobile/.env
    # Set EXPO_PUBLIC_API_BASE (prod or staging)
-   # Leave EXPO_PUBLIC_SESSION_COOKIE blank unless scripting headless flows
    ```
-   Everyday validation should rely on the in-app login screen; the cookie env is reserved for CI or scripted tests.
+   Everyday validation must rely on the in-app login screen; do not paste server-issued cookies into env files or scripts.
 
 2. **Install and launch the Expo dev client**
    ```bash

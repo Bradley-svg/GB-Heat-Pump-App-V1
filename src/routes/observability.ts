@@ -1,5 +1,6 @@
 import type { Env } from "../env";
 import { requireAccessUser } from "../lib/access";
+import { authenticateTelemetryRequest } from "../lib/auth/telemetry-token";
 import { ClientErrorReportSchema, ClientEventReportSchema } from "../schemas/observability";
 import type { ClientErrorReport, ClientEventReport } from "../schemas/observability";
 import { loggerForRequest } from "../utils/logging";
@@ -91,7 +92,10 @@ export async function handleClientEventReport(req: Request, env: Env) {
     return response;
   }
 
-  const user = await requireAccessUser(req, env);
+  const telemetryUser = await authenticateTelemetryRequest(req, env);
+  const user =
+    telemetryUser ??
+    (await requireAccessUser(req, env, { allowSession: false }));
   if (!user) {
     return json({ error: "Unauthorized" }, { status: 401 });
   }

@@ -51,6 +51,8 @@ function baseEnv(overrides: Partial<Env> = {}): Env {
     INGEST_IP_LIMIT_PER_MIN: "0",
     INGEST_IP_BLOCK_SECONDS: "60",
     INGEST_IP_BUCKETS: createTestKvNamespace(),
+    CLIENT_EVENT_TOKEN_SECRET: "test-telemetry-token-secret-rotate-1234567890",
+    CLIENT_EVENT_TOKEN_TTL_SECONDS: "900",
     ...overrides,
   };
 }

@@ -22,3 +22,4 @@ ENVIRONMENT=development
 ALLOW_DEV_ACCESS_SHIM=true
 DEV_ALLOW_USER={"email":"local-admin@example.com","roles":["admin"],"clientIds":["profile-west"]}
 PASSWORD_RESET_WEBHOOK_SECRET=dev-reset-secret
+CLIENT_EVENT_TOKEN_SECRET=local-dev-telemetry-token-secret-rotate-123456
