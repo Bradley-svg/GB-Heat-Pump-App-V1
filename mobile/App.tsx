@@ -3,11 +3,12 @@ import {
   NavigationContainer,
   DarkTheme,
   DefaultTheme,
+  type LinkingOptions,
 } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, View } from "react-native";
-import AppNavigator from "./src/navigation/AppNavigator";
+import AppNavigator, { type RootTabsParamList } from "./src/navigation/AppNavigator";
 import { GBThemeProvider, useColorScheme } from "./src/theme/GBThemeProvider";
 import { GBToast } from "./src/components/GBToast";
 import { AuthProvider, useAuth } from "./src/contexts/AuthContext";
@@ -40,6 +41,17 @@ export default function App() {
   );
 }
 
+const linking: LinkingOptions<RootTabsParamList> = {
+  prefixes: ["greenbro://"],
+  config: {
+    screens: {
+      Dashboard: "",
+      Device: "device",
+      Alerts: "alerts",
+    },
+  },
+};
+
 const AuthGate: React.FC<{
   onShowToast: (message: string, type: "success" | "warn" | "error") => void;
 }> = ({ onShowToast }) => {
@@ -64,7 +76,10 @@ const AuthGate: React.FC<{
   }
 
   return (
-    <NavigationContainer theme={scheme === "dark" ? DarkTheme : DefaultTheme}>
+    <NavigationContainer
+      linking={linking}
+      theme={scheme === "dark" ? DarkTheme : DefaultTheme}
+    >
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       <AppNavigator onShowToast={onShowToast} />
     </NavigationContainer>

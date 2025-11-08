@@ -7,7 +7,7 @@ import { DashboardScreen } from "../screens/DashboardScreen";
 import { DeviceDetailScreen } from "../screens/DeviceDetailScreen";
 import { useTheme } from "../theme/GBThemeProvider";
 
-type RootTabsParamList = {
+export type RootTabsParamList = {
   Dashboard: undefined;
   Device: undefined;
   Alerts: undefined;
@@ -41,11 +41,11 @@ const AppNavigator: React.FC<Props> = ({ onShowToast }) => {
       })}
     >
       <Tab.Screen name="Dashboard">
-        {() => <DashboardScreen onShowToast={onShowToast} />}
+        {(props) => <DashboardScreen {...props} onShowToast={onShowToast} />}
       </Tab.Screen>
       <Tab.Screen name="Device" component={DeviceDetailScreen} />
       <Tab.Screen name="Alerts">
-        {() => <AlertsScreen onShowToast={onShowToast} />}
+        {(props) => <AlertsScreen {...props} onShowToast={onShowToast} />}
       </Tab.Screen>
     </Tab.Navigator>
   );

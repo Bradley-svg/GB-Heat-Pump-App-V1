@@ -1,5 +1,10 @@
 import React, { createContext, useContext, useMemo } from "react";
-import { Appearance, ColorSchemeName, Platform, ViewStyle } from "react-native";
+import {
+  ColorSchemeName,
+  Platform,
+  ViewStyle,
+  useColorScheme as useNativeColorScheme,
+} from "react-native";
 
 import tokens from "../../../shared/theme/greenbro.tokens.json";
 
@@ -22,7 +27,7 @@ const mapScheme = (scheme: ColorSchemeName): Palette =>
 export const GBThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const scheme = Appearance.getColorScheme();
+  const scheme = useNativeColorScheme() ?? "light";
 
   const value = useMemo<Theme>(
     () => ({
@@ -31,7 +36,7 @@ export const GBThemeProvider: React.FC<{ children: React.ReactNode }> = ({
       radii: tokens.radii,
       typeScale: tokens.typeScale,
       motion: tokens.motion,
-      colorScheme: scheme ?? "light",
+      colorScheme: scheme,
     }),
     [scheme],
   );

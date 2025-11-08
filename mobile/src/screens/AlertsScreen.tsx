@@ -1,4 +1,5 @@
-﻿import React, { useMemo, useState } from "react";
+﻿import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -16,6 +17,7 @@ import { GBListItem } from "../components/GBListItem";
 import { GBStatusPill } from "../components/GBStatusPill";
 import { useAlertsFeed, type AlertRecord } from "../hooks/useAlertsFeed";
 import { useTheme } from "../theme/GBThemeProvider";
+import type { RootTabsParamList } from "../navigation/AppNavigator";
 
 const severityOptions = ["All", "Critical", "Warning", "Info"] as const;
 
@@ -29,10 +31,13 @@ interface AlertsScreenProps {
   onShowToast: (message: string, type: "success" | "warn" | "error") => void;
 }
 
+type AlertsScreenNavProps = BottomTabScreenProps<RootTabsParamList, "Alerts">;
+type AlertsProps = AlertsScreenProps & AlertsScreenNavProps;
+
 type ThemeSpacing = ReturnType<typeof useTheme>["spacing"];
 type ThemeColors = ReturnType<typeof useTheme>["colors"];
 
-export const AlertsScreen: React.FC<AlertsScreenProps> = ({ onShowToast }) => {
+export const AlertsScreen: React.FC<AlertsProps> = ({ onShowToast }) => {
   const { spacing, colors } = useTheme();
   const [selectedSeverity, setSeverity] =
     useState<(typeof severityOptions)[number]>("All");

@@ -1,8 +1,8 @@
 ﻿import { MaterialIcons } from "@expo/vector-icons";
+import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Linking,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -22,10 +22,14 @@ import {
 } from "../hooks/useFleetSummary";
 import { useHaptics } from "../hooks/useHaptics";
 import { useTheme } from "../theme/GBThemeProvider";
+import type { RootTabsParamList } from "../navigation/AppNavigator";
 
 interface DashboardScreenProps {
   onShowToast: (message: string, type: "success" | "warn" | "error") => void;
 }
+
+type DashboardScreenNavProps = BottomTabScreenProps<RootTabsParamList, "Dashboard">;
+type DashboardProps = DashboardScreenProps & DashboardScreenNavProps;
 
 type DashboardKpi = {
   label: string;
@@ -36,8 +40,9 @@ type DashboardKpi = {
 type ThemeSpacing = ReturnType<typeof useTheme>["spacing"];
 type ThemeColors = ReturnType<typeof useTheme>["colors"];
 
-export const DashboardScreen: React.FC<DashboardScreenProps> = ({
+export const DashboardScreen: React.FC<DashboardProps> = ({
   onShowToast,
+  navigation,
 }) => {
   const { spacing, colors } = useTheme();
   const { logout } = useAuth();
@@ -61,24 +66,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     onShowToast("Commissioning workflow created", "success");
   };
 
-  const handleAlertsLink = useCallback(async () => {
+  const handleAlertsLink = useCallback(() => {
     void haptic("warning");
-    const alertsUrl = "greenbro://alerts";
-    try {
-      const canOpen = await Linking.canOpenURL(alertsUrl);
-      if (canOpen) {
-        await Linking.openURL(alertsUrl);
-        onShowToast("Opening alerts...", "warn");
-      } else {
-        onShowToast("Use the Alerts tab below to review issues.", "warn");
-      }
-    } catch {
-      onShowToast(
-        "Unable to open alerts link. Use the Alerts tab instead.",
-        "error",
-      );
-    }
-  }, [haptic, onShowToast]);
+    navigation.navigate("Alerts");
+    onShowToast("Opening alerts...", "warn");
+  }, [haptic, navigation, onShowToast]);
 
   const handleLogout = useCallback(async () => {
     try {

@@ -41,6 +41,14 @@ npm run mobile:e2e:test:android
 
 Need to debug Detox locally? Append `-- --record-logs all --debug-synchronization 500` to capture verbose logs.
 
+## Store versioning
+
+- `mobile/app.json` now tracks `ios.buildNumber` (string) and `android.versionCode` (integer). Before every release:
+  1. Bump both values (e.g., `buildNumber: "1.1.0"`, `versionCode: 2`), keeping them in sync with the app `version`.
+  2. Commit the change with a note referencing the release ticket.
+  3. Trigger `eas build` for iOS/Android and verify the metadata in App Store Connect / Play Console.
+- Keep a changelog of version codes in the release ticket so reviewers can confirm nothing was skipped.
+
 ## Detox prerequisites
 
 - Install Xcode command-line tools, Cocoapods (`sudo gem install cocoapods`), and Watchman (`brew install watchman`).

@@ -1,7 +1,5 @@
 import React from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
-import { Linking } from "react-native";
-
 import { DashboardScreen } from "../../src/screens/DashboardScreen";
 import { GBThemeProvider } from "../../src/theme/GBThemeProvider";
 import type { FleetSummaryResult } from "../../src/hooks/useFleetSummary";
@@ -58,8 +56,6 @@ const fleetData: NonNullable<FleetSummaryResult["data"]> = {
 describe("DashboardScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
-    jest.spyOn(Linking, "canOpenURL").mockResolvedValue(true);
     mockUseFleetSummary.mockReturnValue({
       data: fleetData,
       status: "success",
@@ -83,8 +79,9 @@ describe("DashboardScreen", () => {
 
   it("renders live KPI data and triggers CTA toasts", async () => {
     const onShowToast = jest.fn();
+    const navigation = { navigate: jest.fn() } as any;
     const { getByText } = renderWithTheme(
-      <DashboardScreen onShowToast={onShowToast} />,
+      <DashboardScreen navigation={navigation} route={{ key: "Dashboard", name: "Dashboard" } as any} onShowToast={onShowToast} />,
     );
 
     expect(getByText("Fleet 80% Online")).toBeTruthy();
@@ -95,10 +92,10 @@ describe("DashboardScreen", () => {
       "success",
     );
     fireEvent.press(getByText("View Alerts"));
-    await waitFor(
-      () => expect(onShowToast).toHaveBeenCalledWith("Opening alerts...", "warn"),
-      { timeout: 2000 },
-    );
+    await waitFor(() => {
+      expect(navigation.navigate).toHaveBeenCalledWith("Alerts");
+      expect(onShowToast).toHaveBeenCalledWith("Opening alerts...", "warn");
+    });
   });
 
   it("shows fallback values when fleet data is unavailable", () => {
@@ -108,8 +105,9 @@ describe("DashboardScreen", () => {
       error: null,
       refresh: jest.fn(),
     });
+    const navigation = { navigate: jest.fn() } as any;
     const { getAllByText } = renderWithTheme(
-      <DashboardScreen onShowToast={jest.fn()} />,
+      <DashboardScreen navigation={navigation} route={{ key: "Dashboard", name: "Dashboard" } as any} onShowToast={jest.fn()} />,
     );
 
     expect(getAllByText("--").length).toBeGreaterThan(0);
