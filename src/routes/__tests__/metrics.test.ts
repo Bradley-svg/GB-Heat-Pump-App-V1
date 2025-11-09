@@ -1,4 +1,4 @@
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Env, User } from "../../env";
 import * as accessModule from "../../lib/access";
@@ -173,6 +173,23 @@ describe("handleMetrics", () => {
     requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
     const logger = createLoggerStub();
     loggerForRequestMock.mockReturnValueOnce(logger as unknown as loggingModule.Logger);
+    loadSignupFunnelSummaryMock.mockResolvedValueOnce({
+      window_start: "2025-01-01T00:00:00.000Z",
+      window_days: 7,
+      submissions: 4,
+      authenticated: 3,
+      pending: 1,
+      errors: 0,
+      conversion_rate: 0.75,
+      pending_ratio: 0.25,
+      error_rate: 0.05,
+      resend_requests: 2,
+      resend_success: 2,
+      resend_errors: 0,
+      resend_error_rate: 0,
+      resend_status_counts: { ok: 2 },
+      pending_logout_failures: 0,
+    });
     const opsRows = [
       { route: "/api/ingest", status_code: 200, count: 50 },
       { route: "/api/ingest", status_code: 500, count: 10 },

@@ -6,7 +6,7 @@ const enableCoverage = isCi || process.env.VITEST_COVERAGE === "true";
 export default defineConfig({
   test: {
     environment: "node",
-    exclude: [...configDefaults.exclude, "frontend/**"],
+    exclude: [...configDefaults.exclude, "frontend/**", "mobile/**"],
     reporters: isCi
       ? [
           "default",

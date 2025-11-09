@@ -21,9 +21,9 @@ async function buildOverviewResponse(
   const log = loggerForRequest(req, { route: routeTag });
   const scope = buildDeviceScope(user);
   const url = new URL(req.url);
-  const paramsResult = AdminOverviewQuerySchema.safeParse({
-    limit: url.searchParams.get("limit"),
-  });
+  const limitParam = url.searchParams.get("limit");
+  const paramsInput = limitParam === null ? {} : { limit: limitParam };
+  const paramsResult = AdminOverviewQuerySchema.safeParse(paramsInput);
   if (!paramsResult.success) {
     return validationErrorResponse(paramsResult.error);
   }

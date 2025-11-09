@@ -219,6 +219,7 @@ export async function handleLogin(req: Request, env: Env) {
         verifyUrl: buildVerificationUrl(env, verification.token),
         expiresAt: verification.expiresAt,
       });
+      await recordVerificationSent(env, userRow.id);
     } catch (error) {
       log.error("auth.login.verification_resend_failed", { error });
     }
@@ -434,6 +435,8 @@ export async function handleVerifyEmail(req: Request, env: Env) {
     .bind(userRow.id, nowISO())
     .run();
 
+  await clearVerificationCooldown(env, userRow.id);
+
   const roles = parseStoredRoles(userRow.roles);
   const clientIds = parseStoredClientIds(userRow.client_ids);
   const { cookie, session } = await createSession(env, userRow.id);
@@ -524,6 +527,7 @@ export async function handleResendVerification(req: Request, env: Env) {
       verifyUrl: buildVerificationUrl(env, verification.token),
       expiresAt: verification.expiresAt,
     });
+    await recordVerificationSent(env, userRow.id);
   } catch (error) {
     log.error("auth.resend.delivery_failed", { user_id: userRow.id, error });
     return json({ error: "Unable to deliver verification email" }, { status: 502 });
@@ -547,7 +551,7 @@ function resolveVerificationResendCooldown(env: Env): number {
 
 async function readJson(req: Request): Promise<unknown> {
   try {
-    return await req.json();
+    return await req.clone().json();
   } catch {
     return null;
   }
@@ -558,29 +562,42 @@ async function verificationCooldownRemainingSeconds(
   userId: string,
   cooldownSeconds: number,
 ): Promise<number | null> {
-  const existingVerification = await env.DB
+  const cooldownRow = await env.DB
     .prepare(
-      `SELECT created_at
-         FROM email_verifications
-        WHERE user_id = ?1
-        ORDER BY datetime(created_at) DESC
-        LIMIT 1`,
+      `SELECT last_sent_at
+         FROM email_verification_cooldowns
+        WHERE user_id = ?1`,
     )
     .bind(userId)
-    .first<{ created_at: string }>();
-  if (!existingVerification?.created_at) {
+    .first<{ last_sent_at: string }>();
+  if (!cooldownRow?.last_sent_at) {
     return null;
   }
-  const createdAtMs = Date.parse(existingVerification.created_at);
-  if (!Number.isFinite(createdAtMs)) {
+  const lastSentMs = Date.parse(cooldownRow.last_sent_at);
+  if (!Number.isFinite(lastSentMs)) {
     return null;
   }
-  const elapsedMs = Date.now() - createdAtMs;
+  const elapsedMs = Date.now() - lastSentMs;
   const cooldownMs = cooldownSeconds * 1000;
   if (elapsedMs < cooldownMs) {
     return Math.ceil((cooldownMs - elapsedMs) / 1000);
   }
   return null;
+}
+
+async function recordVerificationSent(env: Env, userId: string): Promise<void> {
+  await env.DB
+    .prepare(
+      `INSERT INTO email_verification_cooldowns (user_id, last_sent_at)
+       VALUES (?1, ?2)
+       ON CONFLICT(user_id) DO UPDATE SET last_sent_at = excluded.last_sent_at`,
+    )
+    .bind(userId, nowISO())
+    .run();
+}
+
+async function clearVerificationCooldown(env: Env, userId: string): Promise<void> {
+  await env.DB.prepare(`DELETE FROM email_verification_cooldowns WHERE user_id = ?1`).bind(userId).run();
 }
 
 function validationError(error: z.ZodError) {
