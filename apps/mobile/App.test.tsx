@@ -1,0 +1,10 @@
+import { describe, expect, it } from "vitest";
+import renderer from "react-test-renderer";
+import App from "./App";
+
+describe("Mobile App", () => {
+  it("renders heading", () => {
+    const tree = renderer.create(<App />).toJSON();
+    expect(tree).toBeTruthy();
+  });
+});

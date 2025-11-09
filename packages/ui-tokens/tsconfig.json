@@ -1,0 +1,9 @@
+{
+  "extends": "../../shared/configs/tsconfig.package.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "resolveJsonModule": true,
+    "allowJs": true
+  },
+  "include": ["src", "greenbro.tokens.json"]
+}

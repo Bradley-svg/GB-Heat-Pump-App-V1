@@ -1,0 +1,26 @@
+{
+  "name": "@greenbro/sdk-rn",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "eslint src --config ../../shared/configs/eslint.react.mjs"
+  },
+  "dependencies": {
+    "@greenbro/sdk-core": "workspace:*",
+    "zod": "^3.23.8"
+  },
+  "peerDependencies": {
+    "@react-native-async-storage/async-storage": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.7"
+  }
+}

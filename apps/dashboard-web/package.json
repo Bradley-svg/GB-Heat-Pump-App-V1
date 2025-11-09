@@ -1,0 +1,30 @@
+{
+  "name": "@greenbro/dashboard-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --config ../../shared/configs/eslint.react.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@greenbro/sdk-web": "workspace:*",
+    "@greenbro/ui-react": "workspace:*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.4.2",
+    "@testing-library/react": "^14.2.1",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^24.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^5.2.8",
+    "vitest": "^4.0.7"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@greenbro/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
+    "test": "vitest run",
+    "lint": "eslint app --config ../../shared/configs/eslint.react.mjs"
+  },
+  "dependencies": {
+    "@greenbro/sdk-rn": "workspace:*",
+    "@greenbro/ui-rn": "workspace:*",
+    "expo": "~51.0.0",
+    "expo-status-bar": "~1.12.1",
+    "react": "18.3.1",
+    "react-native": "0.74.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.5",
+    "@types/react-native": "^0.73.0",
+    "react-test-renderer": "^18.3.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.7"
+  }
+}

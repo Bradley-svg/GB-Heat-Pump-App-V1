@@ -1,0 +1,9 @@
+{
+  "extends": "../../shared/configs/tsconfig.package.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "jsx": "react-jsx",
+    "types": ["react"]
+  },
+  "include": ["src"]
+}

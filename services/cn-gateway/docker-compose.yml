@@ -1,0 +1,19 @@
+version: "3.9"
+services:
+  gateway:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - KMS_KEY_VERSION=v1
+    depends_on:
+      - postgres
+  postgres:
+    image: postgres:14
+    environment:
+      - POSTGRES_USER=gateway
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=modea
+    ports:
+      - "5432:5432"
