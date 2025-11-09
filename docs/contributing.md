@@ -27,7 +27,10 @@ npm run typecheck
 npm run frontend:lint
 npm run test:ci
 npm run build
+npm run install-frontend:test
 ```
+
+`npm run install-frontend:test` runs the new regression driver that temporarily removes `npm` from `PATH` and ensures `scripts/install-frontend.mjs` fails loudly. Run this when you make installer-related tweaks to keep the failure path covered.
 
 ### Requiring the workflow before merges
 

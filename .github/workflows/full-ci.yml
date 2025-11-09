@@ -99,6 +99,9 @@ jobs:
         run: npm ci
         working-directory: frontend
 
+      - name: Verify install script failure path
+        run: npm run install-frontend:test
+
       - name: Install mobile dependencies
         run: npm run mobile:install
 
