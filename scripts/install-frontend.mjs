@@ -84,30 +84,49 @@ function runNpm(args) {
 function installWith(commandArgs, label) {
   console.log(`\n[install-frontend] Running ${label}...`);
   const result = runNpm(["--prefix", FRONTEND_DIR, ...commandArgs]);
-  if (typeof result.status === "number" && result.status !== 0) {
-    const combinedOutput = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-    const isForbidden = /E403|403 Forbidden/.test(combinedOutput);
-    if (isForbidden) {
-      console.error("[install-frontend] Received 403 from registry. Check NPM_REGISTRY_URL and credentials.");
-    }
-    return { ok: false, output: combinedOutput };
+  const combinedOutput = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  const exitCode =
+    typeof result.status === "number"
+      ? result.status
+      : result.error && typeof result.error.code === "number"
+        ? result.error.code
+        : 1;
+
+  if (result.error) {
+    console.error(`[install-frontend] ${label} spawn failed: ${result.error.message}`);
   }
-  return { ok: true, output: "" };
+
+  if (exitCode === 0) {
+    return { ok: true, output: "" };
+  }
+
+  const isForbidden = /E403|403 Forbidden/.test(combinedOutput);
+  if (isForbidden) {
+    console.error("[install-frontend] Received 403 from registry. Check NPM_REGISTRY_URL and credentials.");
+  }
+
+  return {
+    ok: false,
+    output: combinedOutput,
+    exitCode,
+    error: result.error,
+  };
 }
 
 let installSucceeded = false;
-let exitCode = 0;
+let exitCode = 1;
 
 try {
   const primary = installWith(["ci"], "npm ci");
   if (primary.ok) {
     installSucceeded = true;
+    exitCode = 0;
   } else {
     const fallback = installWith(["install", "--prefer-offline", "--no-audit", "--progress=false"], "npm install fallback");
     installSucceeded = fallback.ok;
+    exitCode = installSucceeded ? 0 : fallback.exitCode ?? 1;
     if (!installSucceeded) {
       console.error("[install-frontend] Failed to install frontend dependencies.");
-      exitCode = 1;
     }
   }
 } finally {

@@ -6,14 +6,20 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "scheme": "greenbro",
-    "updates": { "fallbackToCacheTimeout": 0 },
-    "assetBundlePatterns": ["**/*"],
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.greenbro.mobile",
       "buildNumber": "1.0.0",
       "infoPlist": {
-        "LSApplicationQueriesSchemes": ["greenbro"]
+        "LSApplicationQueriesSchemes": [
+          "greenbro"
+        ]
       }
     },
     "android": {
@@ -22,15 +28,31 @@
       "intentFilters": [
         {
           "action": "VIEW",
-          "data": [{ "scheme": "greenbro" }],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "data": [
+            {
+              "scheme": "greenbro"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ],
-      "queries": [{ "scheme": "greenbro" }]
+      "queries": [
+        {
+          "scheme": "greenbro"
+        }
+      ]
     },
-    "web": { "bundler": "metro" },
+    "web": {
+      "bundler": "metro"
+    },
     "extra": {
       "apiBase": "https://app.greenbro.com"
-    }
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
   }
 }
