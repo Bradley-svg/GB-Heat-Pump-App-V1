@@ -15,11 +15,11 @@ export type AlertLifecycleActionPayload =
   | {
       action: "acknowledge";
       comment?: string;
-      assignee?: string | null;
+      assignee?: string;
     }
   | {
       action: "assign";
-      assignee: string | null;
+      assignee: string;
       comment?: string;
     }
   | {

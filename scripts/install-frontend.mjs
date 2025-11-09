@@ -2,7 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const ROOT_DIR = dirname(THIS_FILE);
@@ -64,6 +64,16 @@ if (authToken) {
   const registryHost = new URL(registryUrl).host.replace(/\/$/, "");
   npmrcLines.push(`//${registryHost}/:_authToken=${authToken}\n`);
 }
+const npmrcExisted = existsSync(NPMRC_PATH);
+let originalNpmrc: string | null = null;
+if (npmrcExisted) {
+  try {
+    originalNpmrc = readFileSync(NPMRC_PATH, "utf8");
+  } catch (error) {
+    console.warn(`[install-frontend] Unable to read existing ${NPMRC_PATH}:`, error.message ?? error);
+  }
+}
+
 writeFileSync(NPMRC_PATH, npmrcLines.join(""));
 
 function runNpm(args) {
@@ -115,6 +125,7 @@ function installWith(commandArgs, label) {
 
 let installSucceeded = false;
 let exitCode = 1;
+const persistNpmrc = env.NPM_REGISTRY_PERSIST_NPMRC === "true";
 
 try {
   const primary = installWith(["ci"], "npm ci");
@@ -130,12 +141,25 @@ try {
     }
   }
 } finally {
-  if (env.NPM_REGISTRY_PERSIST_NPMRC !== "true") {
-    try {
-      rmSync(NPMRC_PATH);
-    } catch (error) {
-      if (error?.code !== "ENOENT") {
-        console.warn(`[install-frontend] Unable to clean up ${NPMRC_PATH}:`, error.message ?? error);
+  if (!persistNpmrc) {
+    if (npmrcExisted) {
+      if (originalNpmrc !== null) {
+        try {
+          writeFileSync(NPMRC_PATH, originalNpmrc);
+        } catch (error) {
+          console.warn(
+            `[install-frontend] Unable to restore previous ${NPMRC_PATH}:`,
+            error.message ?? error,
+          );
+        }
+      }
+    } else {
+      try {
+        rmSync(NPMRC_PATH);
+      } catch (error) {
+        if (error?.code !== "ENOENT") {
+          console.warn(`[install-frontend] Unable to clean up ${NPMRC_PATH}:`, error.message ?? error);
+        }
       }
     }
   }

@@ -100,9 +100,21 @@ export async function handleClientEventReport(req: Request, env: Env) {
     return json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  let rawBody = "";
+  try {
+    rawBody = await req.text();
+  } catch {
+    return json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const maxBytes = resolveMaxPayloadBytes(env);
+  if (encoder.encode(rawBody).length > maxBytes) {
+    return json({ error: "Payload too large" }, { status: 413 });
+  }
+
   let payload: unknown;
   try {
-    payload = await req.json();
+    payload = rawBody ? JSON.parse(rawBody) : {};
   } catch {
     return json({ error: "Invalid JSON" }, { status: 400 });
   }

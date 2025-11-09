@@ -73,12 +73,12 @@ export function applyLifecycleOptimistic(
       }
       copy.acknowledged_at = now;
       const normalizedAssignee = normalizeAssigneeInput(payload.assignee);
-      if (normalizedAssignee !== undefined) {
+      if (typeof normalizedAssignee === "string") {
         copy.assigned_to = normalizedAssignee;
       }
       const commentBody = optionalString(payload.comment);
       const metadata =
-        normalizedAssignee !== undefined ? { assignee: normalizedAssignee } : null;
+        typeof normalizedAssignee === "string" ? { assignee: normalizedAssignee } : null;
       if (commentBody || metadata) {
         copy.comments = [
           ...copy.comments,
@@ -88,10 +88,10 @@ export function applyLifecycleOptimistic(
       break;
     }
     case "assign": {
-      const assignee = normalizeAssigneeInput(payload.assignee) ?? null;
+      const assignee = normalizeAssigneeInput(payload.assignee) ?? payload.assignee ?? null;
       copy.assigned_to = assignee;
       const commentBody = optionalString(payload.comment);
-      const metadata = { assignee };
+      const metadata = assignee ? { assignee } : null;
       if (commentBody || metadata) {
         copy.comments = [
           ...copy.comments,

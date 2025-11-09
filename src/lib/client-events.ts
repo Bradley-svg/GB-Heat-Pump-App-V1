@@ -40,26 +40,20 @@ function serializeProperties(
   try {
     const json = JSON.stringify(properties);
     if (!json) return null;
-    if (encoder.encode(json).length <= MAX_PROPERTIES_BYTES) {
+    const encodedLength = encoder.encode(json).length;
+    if (encodedLength <= MAX_PROPERTIES_BYTES) {
       return json;
     }
-    return truncateJson(json);
+    const truncatedPayload = {
+      truncated: true,
+      bytes: encodedLength,
+      note: `properties truncated above ${MAX_PROPERTIES_BYTES} bytes`,
+      preview: json.slice(0, 256),
+    };
+    return JSON.stringify(truncatedPayload);
   } catch {
     return null;
   }
-}
-
-function truncateJson(payload: string): string {
-  if (!payload) return payload;
-  const end = Math.max(
-    1,
-    Math.floor((MAX_PROPERTIES_BYTES / encoder.encode(payload).length) * payload.length),
-  );
-  let candidate = payload.slice(0, end);
-  while (candidate.length > 0 && encoder.encode(candidate).length > MAX_PROPERTIES_BYTES) {
-    candidate = candidate.slice(0, -1);
-  }
-  return candidate;
 }
 
 function sanitizeText(value: string | null | undefined): string | null {
@@ -67,3 +61,8 @@ function sanitizeText(value: string | null | undefined): string | null {
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
 }
+
+export const __testables = {
+  serializeProperties,
+  MAX_PROPERTIES_BYTES,
+};

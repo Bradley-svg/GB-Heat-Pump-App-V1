@@ -144,7 +144,11 @@ export default function AlertsPage() {
       } else {
         const commentValue = optionalString(dialog.comment);
         if (dialog.action === "assign") {
-          const assigneeValue = normalizeAssigneeInput(dialog.assignee) ?? null;
+          const assigneeValue = normalizeAssigneeInput(dialog.assignee);
+          if (!assigneeValue) {
+            setActionError("Assignee is required");
+            return;
+          }
           const payload: AlertLifecycleActionPayload = {
             action: "assign",
             assignee: assigneeValue,
@@ -156,7 +160,7 @@ export default function AlertsPage() {
           const payload: AlertLifecycleActionPayload = {
             action: "acknowledge",
             comment: commentValue,
-            ...(assigneeValue !== undefined ? { assignee: assigneeValue } : {}),
+            ...(typeof assigneeValue === "string" ? { assignee: assigneeValue } : {}),
           };
           await performLifecycleAction(dialogAlert, payload);
         } else {

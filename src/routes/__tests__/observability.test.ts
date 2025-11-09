@@ -591,6 +591,25 @@ describe("handleClientEventReport", () => {
     );
   });
 
+  it("rejects client event payloads that exceed configured byte limit", async () => {
+    requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
+
+    const env = createEnv({ OBSERVABILITY_MAX_BYTES: "20" });
+    const payload = {
+      event: "signup_flow.result",
+      properties: { note: "A".repeat(100) },
+    };
+    const req = new Request("https://app.example/api/observability/client-events", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const res = await handleClientEventReport(req, env);
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ error: "Payload too large" });
+  });
+
 
 
   it("logs client events when authorized", async () => {
