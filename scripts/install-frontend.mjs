@@ -11,6 +11,7 @@ const FRONTEND_DIR = resolve(PROJECT_ROOT, "frontend");
 const NPMRC_PATH = resolve(FRONTEND_DIR, ".npmrc");
 
 const env = { ...process.env };
+const npmExecutable = process.platform === "win32" ? "cmd.exe" : "npm";
 
 const registryUrl = env.NPM_REGISTRY_URL?.trim() || "https://registry.npmjs.org/";
 const disableProxy = env.NPM_REGISTRY_DISABLE_PROXY === "true";
@@ -65,7 +66,7 @@ if (authToken) {
   npmrcLines.push(`//${registryHost}/:_authToken=${authToken}\n`);
 }
 const npmrcExisted = existsSync(NPMRC_PATH);
-let originalNpmrc: string | null = null;
+let originalNpmrc = null;
 if (npmrcExisted) {
   try {
     originalNpmrc = readFileSync(NPMRC_PATH, "utf8");
@@ -77,7 +78,9 @@ if (npmrcExisted) {
 writeFileSync(NPMRC_PATH, npmrcLines.join(""));
 
 function runNpm(args) {
-  const result = spawnSync("npm", args, {
+  const finalArgs =
+    process.platform === "win32" ? ["/d", "/s", "/c", "npm", ...args] : args;
+  const result = spawnSync(npmExecutable, finalArgs, {
     cwd: PROJECT_ROOT,
     env,
     encoding: "utf8",
