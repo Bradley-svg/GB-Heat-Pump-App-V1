@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pseudonymizeDeviceId, verifyPseudoCollision } from "./pseudonymize";
+import { pseudonymizeDeviceId } from "./pseudonymize";
 
 const KEY = Buffer.from("0123456789abcdef0123456789abcdef", "hex");
 
@@ -17,15 +17,5 @@ describe("pseudonymizeDeviceId", () => {
 
   it("throws when inputs missing", () => {
     expect(() => pseudonymizeDeviceId("", { key: KEY, keyVersion: "v1" })).toThrow();
-  });
-});
-
-describe("verifyPseudoCollision", () => {
-  it("detects equal prefixes", () => {
-    expect(verifyPseudoCollision("abcdef", "abcdef")).toBe(true);
-  });
-
-  it("detects differences", () => {
-    expect(verifyPseudoCollision("abcdef", "abcxyz")).toBe(false);
   });
 });

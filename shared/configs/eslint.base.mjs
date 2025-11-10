@@ -18,6 +18,13 @@ export default defineConfig([
       "@typescript-eslint/consistent-type-imports": ["error", { prefer: "type-imports" }],
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
       "no-console": ["error", { allow: ["warn", "error"] }],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "Literal[value=/\\b(name|address|ip|serial|gps|imei|imsi|bssid|ssid|lat|lng)\\b/i]",
+          message: "Forbidden identifier in Mode A clients/DTOs.",
+        },
+      ],
     },
   },
 ]);

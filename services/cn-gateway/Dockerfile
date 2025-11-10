@@ -5,7 +5,7 @@ RUN corepack enable && pnpm install --frozen-lockfile || pnpm install
 COPY . .
 RUN pnpm build
 
-FROM gcr.io/distroless/nodejs20
+FROM gcr.io/distroless/nodejs20-debian12
 WORKDIR /srv/app
 COPY --from=build /srv/app/dist ./dist
 ENV NODE_ENV=production

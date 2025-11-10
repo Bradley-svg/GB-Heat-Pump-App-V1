@@ -4,3 +4,4 @@ compatibility_date = "2024-05-20"
 
 [vars]
 ACCESS_AUD = "modea-dashboard"
+EXPORT_VERIFY_PUBKEY = ""

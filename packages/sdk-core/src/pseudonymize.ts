@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac } from "node:crypto";
 
 export interface PseudonymizeOptions {
   key: Buffer | string;
@@ -35,16 +35,4 @@ export function pseudonymizeDeviceId(deviceIdRaw: string, options: PseudonymizeO
     didPseudo: base64Url.slice(0, truncate),
     keyVersion: options.keyVersion,
   };
-}
-
-export function verifyPseudoCollision(existing: string, candidate: string): boolean {
-  const existingBuf = Buffer.from(existing);
-  const candidateBuf = Buffer.from(candidate);
-
-  const len = Math.min(existingBuf.length, candidateBuf.length);
-  if (len === 0) {
-    return false;
-  }
-
-  return timingSafeEqual(existingBuf.subarray(0, len), candidateBuf.subarray(0, len));
 }

@@ -4,6 +4,6 @@ import { mergeConfig } from "vitest/config";
 export default mergeConfig(baseConfig, {
   test: {
     include: ["**/*.test.tsx"],
-    environment: "node"
+    environment: "jsdom",
   },
 });

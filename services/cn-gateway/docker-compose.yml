@@ -1,14 +1,35 @@
 version: "3.9"
 services:
+  nginx:
+    image: nginx:1.25-alpine
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/gateway.conf:ro
+      - ./certs/server.crt:/etc/nginx/ssl/gateway.crt:ro
+      - ./certs/server.key:/etc/nginx/ssl/gateway.key:ro
+      - ./certs/client_ca.crt:/etc/nginx/ssl/ca.crt:ro
+    ports:
+      - "443:443"
+    depends_on:
+      - gateway
   gateway:
     build: .
+    env_file:
+      - .env
     ports:
       - "8080:8080"
     environment:
       - PORT=8080
       - KMS_KEY_VERSION=v1
+    secrets:
+      - export_sign_key
     depends_on:
       - postgres
+  node_exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    command:
+      - "--path.rootfs=/host"
+    volumes:
+      - /:/host:ro,rslave
   postgres:
     image: postgres:14
     environment:
@@ -17,3 +38,7 @@ services:
       - POSTGRES_DB=modea
     ports:
       - "5432:5432"
+
+secrets:
+  export_sign_key:
+    file: ./secrets/export_sign.key

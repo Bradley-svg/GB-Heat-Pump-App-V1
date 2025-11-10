@@ -41,6 +41,16 @@ export const DROP_FIELDS = [
   "image",
   "freeText",
   "rawPayload",
+  "hostname",
+  "ssid",
+  "wifi_ssid",
+  "bssid",
+  "router_mac",
+  "imei",
+  "imsi",
+  "meid",
+  "geohash",
+  "ssid_password",
 ] as const;
 
 export type DropField = (typeof DROP_FIELDS)[number];

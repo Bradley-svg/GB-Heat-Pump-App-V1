@@ -8,6 +8,7 @@
 - Overseas stakeholders only see pseudonymized telemetry (SAFE metrics) for dashboards + mobile.
 - Cloudflare Workers host the overseas API (`APP_API_BASE`); the CN gateway exposes `CN_GATEWAY_BASE`.
 - Mode A keeps PIPL filings out of scope by ensuring exports contain no personal data or mapping tables.
+- Exported data is pseudonymous. Re-identification is possible only inside CN under dual control; the mapping table never leaves CN. Cross-border filings for this telemetry stream are likely avoided, subject to counsel sign-off.
 
 **Trade-offs**
 - Regulatory certainty prioritized over analytics richness; customer support escalation requires CN re-identification path.
@@ -41,7 +42,7 @@
 | `device_serial`, `operator_*`, `address`, `gps`, `ip`, `mac` | Yes | No | DROP |
 | `supplyC`, `returnC`, `flowLps`, `powerKW`, `COP`, `pressure*`, `status_code`, `fault_code`, `control_mode`, `alerts`, `timestamp_minute`, `energyKWh`, `cycleCount`, `uptimeMinutes`, `firmware_version_major_minor` | No | Yes | Schema validated, timestamp rounded |
 
-DROP list: `name`, `address`, `phone`, `email`, `ip`, `mac`, `serial`, `deviceIdRaw`, `notes`, `gps`, `lat`, `lng`, `photo`, `image`, `freeText`, `rawPayload`.  
+DROP list: `name`, `address`, `phone`, `email`, `ip`, `mac`, `serial`, `deviceIdRaw`, `notes`, `gps`, `lat`, `lng`, `photo`, `image`, `freeText`, `rawPayload`, `hostname`, `ssid`, `wifi_ssid`, `bssid`, `router_mac`, `imei`, `imsi`, `meid`, `geohash`, `ssid_password`. Regex detectors catch embedded IP/MAC/IMEI strings anywhere in payloads; violations return HTTP 422 with an audit log entry.  
 SAFE metrics exported exactly match the schema enforced in `packages/sdk-core`.
 
 Edge cases: regex scrubbing for embedded MAC/IP, reject binary blobs, disable free-text diagnostics (HTTP 422).
@@ -69,30 +70,36 @@ flowchart LR
 
 ## 4. Pseudonymization Design
 
-`did_pseudo = base64url(HMAC_SHA256(device_id_raw, key=CN_KMS[key_version]))[:22]`
+`did_pseudo := base64url(HMAC_SHA256(device_id_raw, key=CN_KMS[v]))` truncated to the first 22 characters (~132 bits).
 
-- Truncated 22 chars; collision detection appends counter suffix.
+- Database enforces `UNIQUE(did_pseudo)`. On conflict, append a 2-character base32 counter suffix (length 22–24) and retry, ensuring deterministic linkage plus collision safety.
 - Keys rotated every 6 months (dual control). Mapping table stores `key_version` for historical linkages.
 - Re-identification requires signed ticket (security + compliance) executed inside CN enclave.
-- Replay protection via `seq` window (size 5) + timestamp tolerance ±2 minutes.
+- Replay protection via `seq` window (size 5) + timestamp tolerance ±120 seconds; out-of-window payloads and repeated `seq` values receive HTTP 409 and trigger audit logs.
+- CN gateway signs every outbound batch with Ed25519 (`X-Batch-Signature: base64(signature)`); the overseas API verifies signatures using a pinned CN public key. Signing keys live in CN KMS (alias `modea-batch-signing`) and rotate alongside pseudonymization keys.
 
 ## 5. APIs
 
 ### CN Gateway
-- `POST /ingest`: mTLS + HMAC header, JSON schema from `packages/sdk-core`. Rate limit 120 rpm/device. Returns `202`.
-- `POST /export`: forwarder pushes sanitized batches. Tracks `batchId` for idempotency.
+- `POST /ingest`: mTLS + HMAC header, JSON schema from `packages/sdk-core`. Reject if `timestamp` deviates >±120 seconds from gateway time. Maintain per-device ring buffers (size 5) to reject duplicate `seq` values with 409 responses. Rate limit 120 rpm/device. Returns `202`.
+- `POST /export`: forwarder pushes sanitized batches. Tracks `batchId` for idempotency and enforces the “important data” guard (no bucket exported with <5 devices per site/category).
 - `GET /health`: internal status incl. key version.
 - `GET /metrics`: Prometheus exposition (PII free).
+- Idempotency: every POST endpoint requires `Idempotency-Key`. Keys persist for 24 hours (Redis/DB keyed by profile + device). Replays within the TTL return the original 2xx/4xx result and emit a structured log entry.
 - `POST /admin/rotate-key`: dual-control endpoint.
 
 ### Overseas API (Cloudflare Worker)
-- `POST /api/ingest/:profileId`: receives pseudonymized batches w/ Access JWT.
+- `POST /api/ingest/:profileId`: receives pseudonymized batches w/ Access JWT and requires `X-Batch-Signature` (Ed25519) verified against the pinned CN public key.
 - `POST /api/heartbeat/:profileId`: key-version drift monitoring.
 - `GET /health`, `GET /metrics`.
 
 ## 6. Schemas & Storage
 
-**CN Postgres tables**: `mapping`, `audit_log`, `export_log`, `errors` (encrypted tablespaces, 24‑month retention).  
+**CN Postgres tables**: `mapping`, `audit_log`, `export_log`, `errors` (encrypted tablespaces, 24‑month retention). `audit_log.ip_hmac` persists `HMAC(ip, cn_kms_audit_key)` for abuse correlation; rotate the audit key quarterly and treat the field as personal data inside CN. Optional guardrail:
+```sql
+ALTER TABLE mapping
+  ADD CONSTRAINT did_len_chk CHECK (length(did_pseudo) BETWEEN 22 AND 24);
+```
 **Overseas D1/KV**: `devices`, `latest_state`, `telemetry`, `alerts`, `ops_metrics` with JSONB indexes and retention windows (18–24 months).
 
 ## 7. Security Controls Matrix
@@ -117,14 +124,26 @@ Access matrix ensures CN security/compliance maintain dual-control re-identifica
 
 ## 9. Hosting & Deployment
 
+- **Hosting decision**: Alibaba Cloud (Aliyun) selected for the CN gateway footprint. Managed Postgres + KMS, strong local support, and straightforward ICP/egress workflows outweigh vendor lock-in concerns.
+
+| Option | When to pick | Pros | Cons |
+| --- | --- | --- | --- |
+| On-prem (factory/DC) | Existing CN site + ops | Full control, no external vendors | Hardware, HA, power, ops burden |
+| Alibaba Cloud *(chosen)* | Need managed Postgres/KMS + mature CN support | Rich managed services, docs | Vendor lock-in, ICP/network approvals |
+| Tencent Cloud | Already in Tencent ecosystem | Good CN presence, security tooling | Service naming quirks |
+| Huawei Cloud | Hybrid/on-prem synergy | Solid hybrid stack | Similar vendor lock-in considerations |
+
+Minimal footprint (any option): CN gateway app (Docker/K8s), Postgres (managed preferred), managed KMS/HSM, optional Nginx/mTLS terminator. Acceptance criteria: private subnet carved out, outbound 443 egress open to overseas API, health/metrics reachable internally, and a named 24/7 ops owner.
+
 - CN gateway containerized (Dockerfile + compose). Nginx terminates TLS ahead of app. Postgres either managed or cluster-local.
+- `services/cn-gateway/nginx.conf` enforces mTLS (`ssl_client_certificate`, `ssl_verify_client on`, TLSv1.2+ only) with cert/key bundles mounted read-only inside the container.
 - Overseas API on Cloudflare Workers (wrangler).  
 - CI/CD pipeline: lint → test → build → security scan → deploy (staging) → approval → prod.
 
 ## 10. Observability & SLOs
 
-Metrics: `ingest_latency_ms`, `export_latency_ms`, `ingest_drop_rate`, `mapping_cache_hit_ratio`, `key_version_drift`, `pii_rejection_count`.  
-Prometheus alerts for high drop rate or key drift; Grafana dashboard template provided. Logs are structured (JSON) with hashed IDs only; retention 180d CN / 90d overseas.
+Metrics: `ingest_latency_ms`, `export_latency_ms`, `ingest_drop_rate`, `mapping_cache_hit_ratio`, `key_version_drift`, `pii_rejection_count`. All Prometheus metrics share the fixed label set `{component, region, profile, key_version}` to avoid high-cardinality explosions; `did_pseudo` never appears in metric labels.  
+Prometheus alerts for high drop rate or key drift; Grafana dashboard template provided. Logs are structured JSON with fields `{timestamp, level, component, region, profile, key_version, event, batchId, errorCode}`; PII/`did_pseudo` never appears. Retention 180d CN / 90d overseas.
 
 ## 11. DPIA-Lite & TIA Templates
 

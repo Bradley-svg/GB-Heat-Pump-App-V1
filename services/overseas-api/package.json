@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@greenbro/sdk-core": "workspace:*",
+    "@noble/ed25519": "^1.7.5",
     "itty-router": "^5.0.1",
     "zod": "^3.23.8"
   },
