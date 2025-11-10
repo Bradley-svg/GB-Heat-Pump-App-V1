@@ -10,7 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@fastify/helmet": "^12.5.1",
+    "@fastify/helmet": "^13.0.2",
     "@fastify/rate-limit": "^10.1.1",
     "@greenbro/sdk-core": "workspace:*",
     "fastify": "^4.28.1",
