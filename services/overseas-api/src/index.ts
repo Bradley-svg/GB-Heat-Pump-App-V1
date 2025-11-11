@@ -3,6 +3,7 @@ import { pseudonymizedRecordSchema } from "@greenbro/sdk-core";
 import { z } from "zod";
 import { verify } from "@noble/ed25519";
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import type { D1Database } from "@cloudflare/workers-types";
 
 const ingestSchema = z.object({
   batchId: z.string(),
@@ -20,6 +21,7 @@ const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 const DEFAULT_CLOCK_TOLERANCE = 5;
 
 export interface Env {
+  DB?: D1Database;
   EXPORT_VERIFY_PUBKEY?: string;
   ACCESS_AUD?: string;
   ACCESS_JWKS_URL?: string;
@@ -50,7 +52,17 @@ router.get("/health", (_req, env: Env) =>
   ),
 );
 
-router.post("/api/ingest/:profileId", async (request, env: Env) => {
+router.post("/api/ingest/:profileId", handleIngestRequest);
+
+router.post("/api/heartbeat/:profileId", handleHeartbeatRequest);
+
+router.all("*", () => new Response("not found", { status: 404 }));
+
+export default {
+  fetch: (request: Request, env: Env, ctx: ExecutionContext) => router.handle(request, env, ctx),
+};
+
+export async function handleIngestRequest(request: Request, env: Env) {
   try {
     await requireAccessJwt(request, env);
   } catch (error) {
@@ -60,9 +72,22 @@ router.post("/api/ingest/:profileId", async (request, env: Env) => {
   if (!token) {
     return new Response("missing token", { status: 401 });
   }
+  const profileId = getProfileId(request);
+  if (!profileId) {
+    return new Response("missing profileId", { status: 400 });
+  }
+  if (!env.DB) {
+    return new Response("storage unavailable", { status: 503 });
+  }
   const body = await request.json();
   const payload = ingestSchema.parse(body);
   await verifyBatchSignature(payload, request.headers.get("X-Batch-Signature") ?? "", env);
+  try {
+    await persistBatch(env.DB, profileId, payload);
+  } catch (error) {
+    console.error("ingest.persist_failed", error);
+    return new Response("unable to persist batch", { status: 500 });
+  }
   return new Response(
     JSON.stringify({
       status: "queued",
@@ -70,26 +95,33 @@ router.post("/api/ingest/:profileId", async (request, env: Env) => {
     }),
     { headers: { "Content-Type": "application/json" }, status: 202 },
   );
-});
+}
 
-router.post("/api/heartbeat/:profileId", async (request, env: Env) => {
+export async function handleHeartbeatRequest(request: Request, env: Env) {
   try {
     await requireAccessJwt(request, env);
   } catch (error) {
     return toResponse(error);
   }
+  const profileId = getProfileId(request);
+  if (!profileId) {
+    return new Response("missing profileId", { status: 400 });
+  }
+  if (!env.DB) {
+    return new Response("storage unavailable", { status: 503 });
+  }
   const body = await request.json();
   const payload = heartbeatSchema.parse(body);
+  try {
+    await recordHeartbeat(env.DB, profileId, payload);
+  } catch (error) {
+    console.error("heartbeat.persist_failed", error);
+    return new Response("unable to persist heartbeat", { status: 500 });
+  }
   return new Response(JSON.stringify({ status: "ok", keyVersion: payload.keyVersion }), {
     headers: { "Content-Type": "application/json" },
   });
-});
-
-router.all("*", () => new Response("not found", { status: 404 }));
-
-export default {
-  fetch: (request: Request, env: Env, ctx: ExecutionContext) => router.handle(request, env, ctx),
-};
+}
 
 async function requireAccessJwt(request: Request, env: Env) {
   const token =
@@ -133,6 +165,41 @@ function toResponse(error: unknown): Response {
   return new Response("unauthorized", { status: 401 });
 }
 
+function getProfileId(request: Request): string | null {
+  try {
+    const pathname = new URL(request.url).pathname;
+    const segments = pathname.split("/").filter(Boolean);
+    const profileId = segments[2];
+    return profileId && profileId.length ? profileId : null;
+  } catch {
+    return null;
+  }
+}
+
+async function persistBatch(envDb: D1Database, profileId: string, payload: z.infer<typeof ingestSchema>) {
+  const id = generateId();
+  const receivedAt = new Date().toISOString();
+  await envDb
+    .prepare(
+      `INSERT INTO ingest_batches (id, batch_id, profile_id, record_count, payload_json, received_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+    )
+    .bind(id, payload.batchId, profileId, payload.records.length, JSON.stringify(payload.records), receivedAt)
+    .run();
+}
+
+async function recordHeartbeat(envDb: D1Database, profileId: string, payload: z.infer<typeof heartbeatSchema>) {
+  const id = generateId();
+  const receivedAt = new Date().toISOString();
+  await envDb
+    .prepare(
+      `INSERT INTO ingest_heartbeats (id, profile_id, key_version, heartbeat_ts, received_at)
+       VALUES (?1, ?2, ?3, ?4, ?5)`,
+    )
+    .bind(id, profileId, payload.keyVersion, payload.timestamp, receivedAt)
+    .run();
+}
+
 function base64ToBytes(value: string): Uint8Array {
   if (typeof globalThis.atob === "function") {
     const binary = globalThis.atob(value);
@@ -147,4 +214,11 @@ function base64ToBytes(value: string): Uint8Array {
     return nodeBuffer.from(value, "base64");
   }
   throw new Error("Base64 decoding not supported in this environment");
+}
+
+function generateId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `batch-${Math.random().toString(36).slice(2)}`;
 }

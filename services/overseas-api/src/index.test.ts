@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sign } from "@noble/ed25519";
-import worker, { verifyBatchSignature } from "./index";
+import { handleHeartbeatRequest, handleIngestRequest, verifyBatchSignature } from "./index";
 import { jwtVerify } from "jose";
+import type { D1Database } from "@cloudflare/workers-types";
 
 vi.mock("jose", () => {
   const mockedVerify = vi.fn(async () => ({ payload: {} }));
@@ -14,6 +15,24 @@ vi.mock("jose", () => {
 const encoder = new TextEncoder();
 const TEST_PRIV = Uint8Array.from(Buffer.from("5d5f364b70e084d1bce27c8fef2331dfdac06badd7c534dc217446dae3a36d65", "hex"));
 const TEST_PUB = "OA2Av2wl9u8Xl7ngeJ8brBCI2TjUG1+4iZIUf33TkyE=";
+const createMockDb = () => {
+  const statements: Array<{ sql: string; params: unknown[] }> = [];
+  const db = {
+    statements,
+    prepare(sql: string) {
+      return {
+        bind: (...params: unknown[]) => ({
+          run: async () => {
+            statements.push({ sql, params });
+            return { success: true };
+          },
+        }),
+      };
+    },
+  };
+  return db as unknown as D1Database & { statements: Array<{ sql: string; params: unknown[] }> };
+};
+
 const BASE_ENV = {
   ACCESS_AUD: "test-aud",
   ACCESS_JWKS_URL: "https://access.example/cdn-cgi/access/certs",
@@ -55,7 +74,8 @@ describe("overseas worker", () => {
       },
       body: JSON.stringify({ batchId: "b2", records: [] }),
     });
-    const res = await worker.fetch(req, BASE_ENV as any, { waitUntil() {} } as any);
+    const env = { ...BASE_ENV, DB: createMockDb() } as any;
+    const res = await handleIngestRequest(req as any, env as any);
     expect(res.status).toBe(401);
   });
 
@@ -71,11 +91,12 @@ describe("overseas worker", () => {
       },
       body: JSON.stringify({ batchId: "b3", records: [] }),
     });
-    const res = await worker.fetch(req, BASE_ENV as any, { waitUntil() {} } as any);
+    const env = { ...BASE_ENV, DB: createMockDb() } as any;
+    const res = await handleIngestRequest(req as any, env as any);
     expect(res.status).toBe(403);
   });
 
-  it("accepts ingest when Access verification succeeds", async () => {
+  it("accepts ingest when Access verification succeeds and persists batch", async () => {
     const payload = {
       batchId: "b4",
       records: [
@@ -102,8 +123,39 @@ describe("overseas worker", () => {
       },
       body: JSON.stringify(payload),
     });
-    const res = await worker.fetch(req, BASE_ENV as any, { waitUntil() {} } as any);
+    const env = { ...BASE_ENV, DB: createMockDb() } as any;
+    const res = await handleIngestRequest(req as any, env as any);
     expect(res.status).toBe(202);
     expect(await res.json()).toMatchObject({ accepted: 1 });
+    expect(env.DB.statements).toHaveLength(1);
+    const [statement] = env.DB.statements;
+    expect(statement.sql).toContain("ingest_batches");
+    expect(statement.params[1]).toBe(payload.batchId);
+    expect(statement.params[2]).toBe("demo");
+    expect(statement.params[3]).toBe(payload.records.length);
+  });
+
+  it("records heartbeats to storage", async () => {
+    const heartbeatPayload = {
+      keyVersion: "v2",
+      timestamp: new Date().toISOString(),
+    };
+    const req = new Request("https://worker.test/api/heartbeat/demo", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "CF-Access-Jwt-Assertion": "good-token",
+      },
+      body: JSON.stringify(heartbeatPayload),
+    });
+    const env = { ...BASE_ENV, DB: createMockDb() } as any;
+    const res = await handleHeartbeatRequest(req as any, env as any);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ status: "ok", keyVersion: heartbeatPayload.keyVersion });
+    expect(env.DB.statements).toHaveLength(1);
+    const [statement] = env.DB.statements;
+    expect(statement.sql).toContain("ingest_heartbeats");
+    expect(statement.params[1]).toBe("demo");
+    expect(statement.params[2]).toBe(heartbeatPayload.keyVersion);
   });
 });

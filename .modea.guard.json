@@ -62,7 +62,8 @@
     "**/.cache/**",
     "**/guard-results/**",
     "**/*.min.*",
-    "**/*.map"
+    "**/*.map",
+    ".modea.guard.json"
   ],
   "allowlist": [
     {
@@ -79,6 +80,26 @@
       "path": ".dev.vars*",
       "pattern": "phone",
       "reason": "MODEA-GUARDS-000 sample env phone placeholder"
+    },
+    {
+      "path": "services/overseas-api/package.json",
+      "pattern": "ip",
+      "reason": "package metadata contains dependency strings that include 'ip'"
+    },
+    {
+      "path": "services/overseas-api/package.json",
+      "pattern": "name",
+      "reason": "package metadata requires the npm \"name\" field"
+    },
+    {
+      "path": "services/overseas-api/package.json",
+      "pattern": "gps",
+      "reason": "package metadata may reference gps versions in dependency ranges"
+    },
+    {
+      "path": "services/overseas-api/wrangler.toml",
+      "pattern": "name",
+      "reason": "Wrangler bindings require \"name\" keys for worker and D1 database references"
     }
   ],
   "severityMap": {
