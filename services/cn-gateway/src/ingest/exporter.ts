@@ -21,6 +21,7 @@ export class BatchExporter {
   private flushing = false;
   private timer?: NodeJS.Timeout;
   private backoffMs = config.EXPORT_FLUSH_INTERVAL_MS;
+  private accessWarningLogged = false;
 
   enqueue(record: ExportRecord) {
     if (!config.EXPORT_ENABLED) {
@@ -63,13 +64,10 @@ export class BatchExporter {
 
     try {
       const signature = await signBatch(bodyBuffer, config.EXPORT_SIGNING_KEY_PATH);
+      const headers = this.buildRequestHeaders(signature, checksum);
       const response = await fetch(`${config.APP_API_BASE}/api/ingest/${config.EXPORT_PROFILE_ID}`, {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-batch-signature": signature,
-          "x-checksum-sha256": checksum
-        },
+        headers,
         body: bodyBuffer
       });
       const status = response.status;
@@ -105,5 +103,27 @@ export class BatchExporter {
        VALUES ($1, $2, $3, now(), $4, $5)`,
       [batchId, recordCount, status, responseCode, checksum]
     );
+  }
+
+  private buildRequestHeaders(signature: string, checksum: string) {
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+      "x-batch-signature": signature,
+      "x-checksum-sha256": checksum
+    };
+    if (config.CF_ACCESS_CLIENT_ID && config.CF_ACCESS_CLIENT_SECRET) {
+      headers["CF-Access-Client-Id"] = config.CF_ACCESS_CLIENT_ID;
+      headers["CF-Access-Client-Secret"] = config.CF_ACCESS_CLIENT_SECRET;
+    } else if ((config.CF_ACCESS_CLIENT_ID || config.CF_ACCESS_CLIENT_SECRET) && !this.accessWarningLogged) {
+      this.accessWarningLogged = true;
+      logger.warn(
+        {
+          hasClientId: Boolean(config.CF_ACCESS_CLIENT_ID),
+          hasClientSecret: Boolean(config.CF_ACCESS_CLIENT_SECRET)
+        },
+        "Cloudflare Access service token configuration is incomplete; exporter requests may be rejected"
+      );
+    }
+    return headers;
   }
 }

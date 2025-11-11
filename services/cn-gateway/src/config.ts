@@ -45,6 +45,8 @@ const EnvSchema = z.object({
   METRICS_ENABLED: bool(true),
   ADMIN_TOKEN: z.string().optional(),
   ADMIN_TOTP_SECRET: z.string().optional(),
+  CF_ACCESS_CLIENT_ID: z.string().optional(),
+  CF_ACCESS_CLIENT_SECRET: z.string().optional(),
   DEV_KMS_KEY: z.string().optional(),
   ALIBABA_REGION: z.string().optional(),
   ALIBABA_ACCESS_KEY_ID: z.string().optional(),
