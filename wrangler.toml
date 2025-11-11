@@ -96,17 +96,59 @@ preview_id = "a6960d661b5f4b1fbb66a26675ed8caf"
   [env.local.vars]
   APP_BASE_URL = "http://127.0.0.1:8787/app"
   APP_API_BASE = "http://127.0.0.1:8787"
+  APP_ASSET_BASE = "http://127.0.0.1:8787/app/assets/"
+  RETURN_DEFAULT = "https://www.greenbro.co.za/"
+  TIMEZONE = "Africa/Johannesburg"
   ENVIRONMENT = "development"
   TELEMETRY_REFACTOR_MODE = "compare"
+  ALLOWED_PREFIXES = "brand/"
+  TELEMETRY_RETENTION_DAYS = "90"
+  RETENTION_BACKUP_PREFIX = "data-retention"
   INGEST_IP_LIMIT_PER_MIN = "0"
   INGEST_IP_BLOCK_SECONDS = "60"
+  INGEST_FAILURE_LIMIT_PER_MIN = "60"
   AUTH_IP_LIMIT_PER_MIN = "25"
   AUTH_IP_BLOCK_SECONDS = "300"
   CLIENT_EVENT_LIMIT_PER_MIN = "0"
   CLIENT_EVENT_BLOCK_SECONDS = "60"
+  CLIENT_EVENT_RETENTION_DAYS = "60"
+  EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS = "300"
+  HEARTBEAT_INTERVAL_SECS = "30"
+  OFFLINE_MULTIPLIER = "6"
+  EMAIL_VERIFICATION_WEBHOOK_URL = "https://hooks.dev/email-verification"
+  EMAIL_VERIFICATION_WEBHOOK_SECRET = "dev-secret-1234567890"
   # Enable the Access shim for local Miniflare sessions (adjust as needed).
   ALLOW_DEV_ACCESS_SHIM = "true"
   DEV_ALLOW_USER = '{"email":"local-admin@example.com","roles":["admin"],"clientIds":["profile-west"]}'
+
+[[env.local.d1_databases]]
+binding = "DB"
+database_name = "GREENBRO_DB"
+database_id = "ee7ad98b-3629-4985-bd7d-a60c401953a7"
+
+[[env.local.kv_namespaces]]
+binding = "INGEST_IP_BUCKETS"
+id = "fe26ff4c2f884bfdb43a27814b139046"
+
+[[env.local.kv_namespaces]]
+binding = "AUTH_IP_BUCKETS"
+id = "6c84b7f2da474d1f9efc3a8c2a1be4d5"
+
+[[env.local.kv_namespaces]]
+binding = "CLIENT_EVENT_IP_BUCKETS"
+id = "a6960d661b5f4b1fbb66a26675ed8caf"
+
+[[env.local.r2_buckets]]
+binding = "GB_BUCKET"
+bucket_name = "greenbro-brand"
+
+[[env.local.r2_buckets]]
+binding = "APP_STATIC"
+bucket_name = "greenbro-app-static"
+
+[[env.local.r2_buckets]]
+binding = "RETENTION_ARCHIVE"
+bucket_name = "greenbro-telemetry-archive"
 
 [env.production]
   [env.production.vars]

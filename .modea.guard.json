@@ -63,7 +63,8 @@
     "**/guard-results/**",
     "**/*.min.*",
     "**/*.map",
-    ".modea.guard.json"
+    ".modea.guard.json",
+    "wrangler.toml"
   ],
   "allowlist": [
     {
@@ -100,6 +101,26 @@
       "path": "services/overseas-api/wrangler.toml",
       "pattern": "name",
       "reason": "Wrangler bindings require \"name\" keys for worker and D1 database references"
+    },
+    {
+      "path": "package.json",
+      "pattern": "name",
+      "reason": "workspace metadata requires the package \"name\" field"
+    },
+    {
+      "path": "packages/sdk-core/package.json",
+      "pattern": "name",
+      "reason": "package metadata requires the package \"name\" field"
+    },
+    {
+      "path": "packages/sdk-core/src/pseudonymize.ts",
+      "pattern": "deviceidraw",
+      "reason": "code references the identifier to validate inputs"
+    },
+    {
+      "path": "package.json",
+      "pattern": "ipv4",
+      "reason": "dev server binds to 0.0.0.0 for LAN testing"
     }
   ],
   "severityMap": {

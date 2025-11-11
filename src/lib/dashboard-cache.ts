@@ -83,7 +83,7 @@ export async function getDashboardTokenSignature(
 ): Promise<string> {
   if (!scopes.length) return "0";
   await ensureTokens(env, area, scopes);
-  const placeholders = scopes.map((_, index) => `?${index + 3}`).join(",");
+  const placeholders = scopes.map((_, index) => `?${index + 2}`).join(",");
   const rows = await env.DB
     .prepare(
       `SELECT cache_scope, version
