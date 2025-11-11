@@ -1,6 +1,12 @@
-import { runTelemetryRetention } from "./src/jobs/retention";
-import { createWorkerEnv } from "./tests/helpers/worker-env";
-import { createMockR2Bucket } from "./tests/helpers/mock-r2";
+import { runTelemetryRetention } from "../../src/jobs/retention";
+import { createWorkerEnv } from "../../tests/helpers/worker-env";
+import { createMockR2Bucket } from "../../tests/helpers/mock-r2";
+
+/**
+ * Standalone helper to exercise the telemetry retention job locally.
+ * Run with `ts-node scripts/dev/run-retention-sample.ts` to perform
+ * a dry run followed by a real run against an in-memory D1 instance.
+ */
 
 async function main() {
   const now = new Date("2025-11-03T00:00:00Z");

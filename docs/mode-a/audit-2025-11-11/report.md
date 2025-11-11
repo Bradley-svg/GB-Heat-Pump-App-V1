@@ -107,14 +107,14 @@
 
 ### P2-modea-doc-drift — docs now match implementation
 - **Category:** Compliance / Documentation
-- **Where:** `docs/mode-a-operational-guidance.md`, `docs/important-data-checklist.md`
+- **Where:** `../../mode-a-operational-guidance.md`, `../../important-data-checklist.md`
 - **Evidence:** The guidance now explicitly calls out that `/api/ingest` returns `410` by default and SAFE metrics match the CN gateway list; the Important-Data checklist documents the Ed25519 secret + client-event backfill process.
 - **Impact:** Auditors can rely on the documentation to match shipped behavior.
 - **Fix:** Keep docs in sync whenever SAFE metrics or ingest modes change.
 
 ### Compliance guardrails — dual control & Ed25519 rotation runbook
 - **Category:** Compliance / Security
-- **Where:** `docs/dual-control-sop.md`, `docs/runbooks/ed25519-rotation.md`, `docs/important-data-checklist.md`
+- **Where:** `../../dual-control-sop.md`, `../../runbooks/ed25519-rotation.md`, `../../important-data-checklist.md`
 - **Evidence:** A dedicated dual-control SOP now details two-person approval for accessing the CN mapping table; the Important-Data checklist links to it. A new runbook explains the Ed25519 signer/verification rotation cadence, Wrangler secret updates, and health-check evidence capture.
 - **Impact:** Reduces single-operator risk during re-identification and ensures Ed25519 keys are rotated at least annually with auditable proof.
 - **Fix:** Store these runbooks with release artifacts and require tickets to reference the SOP/runbook IDs whenever re-ID or key-rotation work is executed.
@@ -132,7 +132,7 @@
 | Quarterly dual-control audit sampling with checklist export | Compliance Lead | Days 45-75 | 8 / 12 / 18 |
 
 ## Notes & References
-- Mode A guardrail checklist refreshed in `MODEA_GUARDS_CHECKLIST.md`.
-- Active P0/P1 triage tracked in `SECURITY_TRIAGE.md`.
-- SBOM / licenses summarized in `SBOM_AND_LICENSES.md`.
-- Open decisions captured in `OPEN_QUESTIONS.md`.
+- Mode A guardrail checklist refreshed in [`mode-a-guardrail-checklist.md`](./mode-a-guardrail-checklist.md).
+- Active P0/P1 triage tracked in [`security-triage.md`](./security-triage.md).
+- SBOM / licenses summarized in [`sbom-and-licenses.md`](./sbom-and-licenses.md).
+- Open decisions captured in [`open-questions.md`](./open-questions.md).

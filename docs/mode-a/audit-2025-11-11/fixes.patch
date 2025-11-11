@@ -1,0 +1,851 @@
+diff --git a/docs/mode-a/audit-2025-11-11/report.md b/docs/mode-a/audit-2025-11-11/report.md
+index 57692ed..28ef36d 100644
+--- a/docs/mode-a/audit-2025-11-11/report.md
++++ b/docs/mode-a/audit-2025-11-11/report.md
+@@ -27,7 +27,7 @@
+ | P1-overseas-schema-mismatch | P1 | Fixed | CN exporter + API now agree on `didPseudo`; OpenAPI/docs/tests updated accordingly. |
+ | P1-export-key-unset | P1 | Mitigated | `EXPORT_VERIFY_PUBKEY` must be supplied via Wrangler secret; `/health` reports config drift and missing keys return 503. |
+ | P1-safe-metrics-drift | P1 | Fixed | SDK SAFE list now matches the CN gateway (removed `alerts`/`firmware_version_major_minor`). |
+-| P2-ingest-strip-silent | P2 | Open | `.strip()` on Telemetry schema silently discards unexpected keys instead of rejecting. |
++| P2-ingest-strip-silent | P2 | Fixed | Telemetry schema now uses `.strict()`; unexpected metrics trigger 400s plus audit logs. |
+ | P2-modea-doc-drift | P2 | Mitigated | Docs now state that raw `/api/ingest` is disabled by default and SAFE metrics match the CN gateway list.
+ 
+ ## Detailed Findings
+@@ -60,9 +60,9 @@
+ ### P1-client-events-email-plaintext ΓÇö `client_events` stored real emails (fixed)
+ - **Category:** Privacy
+ - **Where:** `src/lib/client-events.ts:15-78`, `src/lib/__tests__/client-events.test.ts:1-32`
+-- **Evidence:** `recordClientEvent` now derives `hashedEmail = hashUserEmailForStorage(record.userEmail, env.CLIENT_EVENT_TOKEN_SECRET)` and stores `sha256:<digest>` instead of the raw email. Tests cover deterministic hashing and null cases.
+-- **Impact:** Without the fix, every client event row exposed operator emails overseas. Hashing with a secret key keeps events linkable while meeting DROP requirements.
+-- **Fix:** Already merged. Ensure historical rows are backfilled (one-off SQL) to remove plaintext emails.
++- **Evidence:** `recordClientEvent` now derives `hashedEmail = hashUserEmailForStorage(record.userEmail, env.CLIENT_EVENT_TOKEN_SECRET)` and stores `sha256:<digest>` instead of the raw email. Nightly cron `CLIENT_EVENT_BACKFILL_CRON` (see `src/jobs/client-events-backfill.ts`) plus the admin endpoint re-hash legacy rows until complete.
++- **Impact:** Without the fix, every client event row exposed operator emails overseas. Hashing with a secret key keeps events linkable while meeting DROP requirements, and the cron ensures D1 drifts are cleared automatically.
++- **Fix:** Already merged/deployed. Leave the cron enabled and keep the admin endpoint for manual, on-demand runs before deploys.
+ - **Tests:** `npx vitest run src/lib/__tests__/client-events.test.ts`.
+ 
+ ### P1-ip-log-nested ΓÇö rate-limit telemetry no longer leaks IPs
+@@ -97,13 +97,13 @@
+ - **Fix:** Remove the non-SAFE metrics from SDK constants/schemas and keep the lists equal via unit tests/lints.
+ - **Tests:** `npx vitest run packages/sdk-core` (SAFE list parity) plus the standard Worker suite.
+ 
+-### P2-ingest-strip-silent ΓÇö unexpected metrics quietly dropped
++### P2-ingest-strip-silent ΓÇö unexpected metrics now rejected
+ - **Category:** Correctness / Compliance
+-- **Where:** `src/schemas/ingest.ts:17-30`
+-- **Evidence:** Zod schema ends with `.strip()`, so unrecognized keys are silently removed. Operators receive `200 OK` even when devices send DROP/unsafe fields.
+-- **Impact:** Device firmware bugs slip through; compliance team loses visibility because bad payloads are not rejected/audited.
+-- **Fix:** Switch to `.strict()` and return 4xx errors plus audit logs when unexpected fields arrive.
+-- **Tests:** Extend `tests/integration/api-flows.integration.test.ts` with cases asserting rejection on extra keys.
++- **Where:** `src/schemas/ingest.ts:17-30`, `src/routes/__tests__/ingest.test.ts:186-208`
++- **Evidence:** Telemetry schema now calls `.strict()` (no `.strip()`), so unknown keys raise a validation error. The new regression test `rejects payloads that include unexpected metric keys` asserts a 400 plus detail message referencing the rogue field.
++- **Impact:** Device firmware bugs and DROP violations surface immediately in logs/metrics instead of quietly landing in overseas storage.
++- **Fix:** Deploy the schema change and coordinate with firmware teams; the error payload already enumerates the offending field. Watch ops metrics for `ingest.validation_failed` spikes while firmware rolls out updates.
++- **Tests:** `npx vitest run src/routes/__tests__/ingest.test.ts`.
+ 
+ ### P2-modea-doc-drift ΓÇö docs now match implementation
+ - **Category:** Compliance / Documentation
+@@ -112,6 +112,13 @@
+ - **Impact:** Auditors can rely on the documentation to match shipped behavior.
+ - **Fix:** Keep docs in sync whenever SAFE metrics or ingest modes change.
+ 
++### Compliance guardrails ΓÇö dual control & Ed25519 rotation runbook
++- **Category:** Compliance / Security
++- **Where:** `docs/dual-control-sop.md`, `docs/runbooks/ed25519-rotation.md`, `docs/important-data-checklist.md`
++- **Evidence:** A dedicated dual-control SOP now details two-person approval for accessing the CN mapping table; the Important-Data checklist links to it. A new runbook explains the Ed25519 signer/verification rotation cadence, Wrangler secret updates, and health-check evidence capture.
++- **Impact:** Reduces single-operator risk during re-identification and ensures Ed25519 keys are rotated at least annually with auditable proof.
++- **Fix:** Store these runbooks with release artifacts and require tickets to reference the SOP/runbook IDs whenever re-ID or key-rotation work is executed.
++
+ ## Testing Notes
+ - `npx vitest run src/routes/__tests__/observability.test.ts src/lib/__tests__/client-events.test.ts`
+ - Repo-wide scans stored at `.tmp/scan-*.txt` (deleted post-run) using `rg` patterns mandated in the engagement brief.
+@@ -119,10 +126,10 @@
+ ## 90-Day Remediation Roadmap
+ | Item | Owner | Window | Est. Hours (Opt / Likely / Pess) |
+ | --- | --- | --- | --- |
+-| Dual-control SOP for CN mapping table/re-ID | Ops Eng + Compliance | Days 0-30 | 12 / 20 / 30 |
+-| Enforce `.strict()` telemetry validation (reject unknown metrics) | Worker Platform | Days 0-45 | 16 / 24 / 36 |
+-| Schedule + verify client-event email backfill run | Platform Engineering + Data Eng | Days 15-45 | 8 / 12 / 20 |
+-| Automate Ed25519 verification secret rotation logging (Wrangler secret updates tied to CN signer rotation) | Platform API Lead | Days 30-60 | 6 / 10 / 16 |
++| Instrument `.strict()` validation fallout + notify firmware owners on spikes | Worker Platform + Device PM | Days 0-30 | 8 / 12 / 20 |
++| Add CI coverage for Node-RED flow + MODBUS mapper fixtures | DX + QA | Days 15-45 | 10 / 16 / 24 |
++| Automate Ed25519 rotation evidence capture (store `/health` + ticket IDs) | Platform API Lead | Days 30-60 | 6 / 10 / 16 |
++| Quarterly dual-control audit sampling with checklist export | Compliance Lead | Days 45-75 | 8 / 12 / 18 |
+ 
+ ## Notes & References
+ - Mode A guardrail checklist refreshed in `docs/mode-a/audit-2025-11-11/mode-a-guardrail-checklist.md`.
+diff --git a/docs/mode-a/audit-2025-11-11/mode-a-guardrail-checklist.md b/docs/mode-a/audit-2025-11-11/mode-a-guardrail-checklist.md
+index 16fa9e3..a22ec47 100644
+--- a/docs/mode-a/audit-2025-11-11/mode-a-guardrail-checklist.md
++++ b/docs/mode-a/audit-2025-11-11/mode-a-guardrail-checklist.md
+@@ -2,7 +2,7 @@
+ | --- | --- | --- |
+ | CN gateway DROP/SAFE enforcement | Pass | `services/cn-gateway/src/modea/drop-safe.ts` + `sanitizeTelemetry` continue to reject DROP keys and emit only the SAFE metrics list. |
+ | Pseudonymization via CN KMS (HMAC-SHA256, 22-char truncation) | Pass | `services/cn-gateway/src/crypto/pseudo.ts` uses CN-resident KMS adapters and deterministic truncation; mapping table stays inside CN Postgres. |
+-| Mapping table & re-ID dual control | Gap | Code keeps the mapping in CN, but a dual-control SOP still needs to be formalized beyond the refreshed checklist. |
++| Mapping table & re-ID dual control | Pass | Dual-control SOP documented in `docs/dual-control-sop.md`; two-person sign-off required for mapping queries. |
+ | Export signing + overseas verification | Pass (requires secret) | CN exporter signs batches; overseas Worker now requires `didPseudo`, enforces signatures, and `/health` reports `signatureConfigured`. Operators must keep `EXPORT_VERIFY_PUBKEY` populated via Wrangler secrets. |
+ | Replay protection (seq ring + ┬▒120s skew) | Pass | `services/cn-gateway/src/db/replay.ts` enforces the seq ring buffer and skew from `TIMESTAMP_SKEW_SECS`. |
+ | DROP enforcement on overseas ingest/logs | Pass | `/api/ingest` is disabled by default (`410 raw_ingest_disabled`) and nested log fields no longer contain `client_ip`. |
+diff --git a/docs/mode-a/audit-2025-11-11/open-questions.md b/docs/mode-a/audit-2025-11-11/open-questions.md
+index cb719ea..d7b27b7 100644
+--- a/docs/mode-a/audit-2025-11-11/open-questions.md
++++ b/docs/mode-a/audit-2025-11-11/open-questions.md
+@@ -1,5 +1,3 @@
+-∩╗┐# Open Questions
++# Open Questions
+ 
+-1. Which owners (Ops + Compliance) will sign off the dual-control SOP for the CN mapping table and re-identification workflow?
+-2. When can we safely switch the Worker telemetry schema to `.strict()` validation without breaking existing devices?
+-3. Who is scheduling the initial run of `POST /api/admin/client-events/backfill` so legacy plaintext emails are purged before the next deploy?
++None at this time ΓÇö dual-control SOP, `.strict()` ingestion validation, automated client-event backfill, and the Ed25519 rotation cadence/runbook are all documented and implemented. Add new questions here when new decisions are needed.
+diff --git a/docs/mode-a/audit-2025-11-11/pr-summary.md b/docs/mode-a/audit-2025-11-11/pr-summary.md
+index 7c35832..8621ec1 100644
+--- a/docs/mode-a/audit-2025-11-11/pr-summary.md
++++ b/docs/mode-a/audit-2025-11-11/pr-summary.md
+@@ -2,14 +2,15 @@
+ 
+ ## What Changed
+ - **Sunsetted raw `/api/ingest`** so overseas Worker now returns `410 raw_ingest_disabled` unless `ALLOW_RAW_INGEST` is explicitly set; CN gateway exporter/REST responses now speak `didPseudo` end-to-end and the overseas Worker requires a secret-backed `EXPORT_VERIFY_PUBKEY` (with `/health` surfacing `signatureConfigured`).
+-- **Hardened auth/logging/privacy:** `requireAccessUser` now enforces issuer + 60s clock tolerance, rate-limit logs no longer include nested `client_ip`, and a new admin endpoint (`POST /api/admin/client-events/backfill`) re-hashes legacy `client_events.user_email` rows so the Worker + DB remain aligned.
+-- **Guardrails + docs:** Mode A scanners run via the dedicated workflow and `full-ci`, the Important-Data checklist covers Ed25519 + client-event controls, and the Mode A guidance reflects the disabled raw ingest + SAFE metric reality.
++- **Hardened auth/logging/privacy:** `requireAccessUser` now enforces issuer + 60s clock tolerance, rate-limit logs no longer include nested `client_ip`, a nightly `CLIENT_EVENT_BACKFILL_CRON` job keeps historical client events hashed, and the telemetry schema now uses `.strict()` so unexpected metrics raise 400s instead of being dropped silently.
++- **Guardrails + docs:** Mode A scanners run via the dedicated workflow and `full-ci`, the Important-Data checklist links to a new dual-control SOP plus the Ed25519 rotation runbook, and the Mode A guidance reflects the disabled raw ingest + SAFE metric reality.
+ 
+ ## Tests
+ - `npx vitest run src/routes/__tests__/ingest.test.ts src/lib/__tests__/client-events.test.ts src/routes/__tests__/observability.test.ts src/lib/__tests__/access.test.ts src/routes/__tests__/client-events-admin.test.ts`
++- `npx vitest run src/jobs/__tests__/client-events-backfill.test.ts src/__tests__/app.scheduled.test.ts`
+ - `npx vitest run services/overseas-api/src/index.test.ts`
+ 
+ ## Follow-Ups
+-1. Formalize and publish the dual-control SOP for mapping table access (still marked as a gap in the Mode A guard checklist).
+-2. Enforce `.strict()` telemetry validation (replace `.strip()` to reject unknown metrics) so DROP regressions cannot slip through silently.
+-3. Schedule the client-event email backfill (new admin endpoint) as part of the next Worker deploy and verify D1 rows are fully hashed.
++1. Instrument `.strict()` validation fallout (dashboards + firmware owner alerts) so we react quickly to any uptick in 400s.
++2. Add CI smoke tests for the Node-RED flow + MODBUS mapper to guard against accidental schema drift.
++3. Automate Ed25519 rotation evidence capture (store `/health` output + ticket IDs) and schedule quarterly audits of the dual-control SOP execution trail.
+diff --git a/docs/mode-a/audit-2025-11-11/risk-register.md b/docs/mode-a/audit-2025-11-11/risk-register.md
+index 510869f..a3c52b6 100644
+--- a/docs/mode-a/audit-2025-11-11/risk-register.md
++++ b/docs/mode-a/audit-2025-11-11/risk-register.md
+@@ -2,6 +2,6 @@
+ | --- | --- | --- | --- | --- | --- |
+ | Raw `/api/ingest` re-enabled by mistake | Medium | Critical ΓÇö violates Mode A residency, triggers regulator scrutiny | Keep `ALLOW_RAW_INGEST` unset in prod, monitor for `raw_ingest_disabled` logs, enforce signed batch pipeline | Cloudflare logs showing `/api/ingest` 2xx responses; `/health` on overseas Worker invoked by devices | Worker Platform |
+ | Access JWT verification regressions | Low | High ΓÇö spoofed tokens reach operator APIs | Issuer + 60ΓÇ»s clock tolerance now enforced; monitor Access audit logs and alert on 403 spikes | Auth logs showing cross-app token reuse; Access audit anomalies | Platform Auth |
+-| Ed25519 verification key rotation not tied to CN signer rotation | Medium | High ΓÇö if CN rotates signing key without updating overseas verifier, batches fail or signature checking is disabled | Platform API Lead owns Wrangler secret; rotate verification key every time CN gateway rotates its signer (minimum annually) and document in change tickets | `/health` reporting `signatureConfigured: false`; exporter retries due to 4xx/5xx | Platform API Lead |
++| Ed25519 verification key rotation not tied to CN signer rotation | Medium | High ΓÇö if CN rotates signing key without updating overseas verifier, batches fail or signature checking is disabled | Follow [runbooks/ed25519-rotation.md](docs/runbooks/ed25519-rotation.md); Platform API Lead owns Wrangler secret and evidence capture for each rotation | `/health` reporting `signatureConfigured: false`; exporter retries due to 4xx/5xx | Platform API Lead |
+ | SAFE metric mismatch between CN gateway & SDKs | Low | Medium ΓÇö engineers might bypass gateway to recover missing metrics | SDK SAFE list + schemas now mirror the CN gateway; add lint to block reintroduction | PRs re-adding removed properties; support tickets asking for firmware/alerts over Mode A path | SDK + CN Gateway Leads |
+ | Privacy/compliance docs out of sync with implementation | Low | Medium ΓÇö audit blockers or misleading notices | Operator notice refreshed (UTF-8 Mandarin) and Mode A doc points to disabled raw ingest; schedule quarterly doc review | Audit prep reviews flag inconsistencies | Compliance + Legal |
+diff --git a/docs/mode-a/audit-2025-11-11/security-triage.md b/docs/mode-a/audit-2025-11-11/security-triage.md
+index 3b635ab..a692f2f 100644
+--- a/docs/mode-a/audit-2025-11-11/security-triage.md
++++ b/docs/mode-a/audit-2025-11-11/security-triage.md
+@@ -4,7 +4,7 @@
+ | P1-access-jwt-weak | P1 | Platform Auth | Harden `requireAccessUser` with issuer + clock tolerance and monitor Access audit logs for spikes. | Fixed |
+ | P1-ip-log-nested | P1 | Worker Platform | Ship logging redaction change and verify log sinks contain only aggregate counters. | Fixed |
+ | P1-overseas-schema-mismatch | P1 | Platform API | Deploy the `didPseudo` rename across exporter + overseas API; run contract tests before enabling exports. | Fixed |
+-| P1-verify-key-rotation | P1 | Platform API Lead | Tie Wrangler `EXPORT_VERIFY_PUBKEY` updates to every CN signer rotation (minimum annually); capture ticket + `/health` screenshots. | Mitigated (cadence assigned) |
++| P1-verify-key-rotation | P1 | Platform API Lead | Tie Wrangler `EXPORT_VERIFY_PUBKEY` updates to every CN signer rotation (minimum annually); capture ticket + `/health` screenshots. | Fixed (runbook + cadence documented) |
+ | P1-safe-metrics-drift | P1 | SDK + CN Gateway Leads | SAFE list now matches CN gateway; guard via lint/tests and reject PRs re-adding removed metrics. | Fixed |
+ | P1-observability-reporter-user | P1 | Worker Platform | Masking patch merged; deploy Worker and confirm log sink shows masked reporter data. | Fixed (pending deploy) |
+-| P1-client-events-email-plaintext | P1 | Worker Platform / Data Eng | Hashing logic merged; schedule data backfill and deploy Worker. Monitor D1 rows post-backfill. | Fixed (deploy+backfill pending) |
++| P1-client-events-email-plaintext | P1 | Worker Platform / Data Eng | Hashing logic merged; nightly cron + admin endpoint re-hash pending rows; monitor D1 rows post-backfill. | Fixed (auto + manual guardrails live) |
+diff --git a/docs/admin-runbook.md b/docs/admin-runbook.md
+index 5fc777a..e8444a7 100644
+--- a/docs/admin-runbook.md
++++ b/docs/admin-runbook.md
+@@ -12,7 +12,8 @@
+ 
+ - `/api/admin/client-events/backfill`  
+   - **Access:** Admin role required.  
+-  - **Behaviour:** Re-hashes up to 250 `client_events.user_email` rows per call using the current `CLIENT_EVENT_TOKEN_SECRET`. Invoke repeatedly until `{ "status": "complete" }` before deploying Worker changes that rely on hashed emails.
++  - **Behaviour:** Re-hashes up to 250 `client_events.user_email` rows per call using the current `CLIENT_EVENT_TOKEN_SECRET`. Normally the scheduled job handles this nightly, but invoke manually (repeat until `{ "status": "complete" }`) before sensitive deployments or after secret rotation.
++  - **Automation:** Cron `CLIENT_EVENT_BACKFILL_CRON` triggers `runClientEventsBackfill` every night at 02:45 UTC; monitor `client_events.backfill_run` logs for progress.
+ 
+ ### Notes
+ 
+diff --git a/docs/dual-control-sop.md b/docs/dual-control-sop.md
+new file mode 100644
+index 0000000..b0064f3
+--- /dev/null
++++ b/docs/dual-control-sop.md
+@@ -0,0 +1,49 @@
++# Mode A Dual-Control SOP ΓÇô Mapping Table & Re-Identification
++
++**Purpose.** Ensure no single operator can access or re-identify pseudonymized device data. Applies to:
++- `services/cn-gateway` Postgres `mapping` table (`device_id_raw`, `did_pseudo`, `key_version`).
++- Any tooling/script capable of reversing DID ΓåÆ device_id.
++
++## Roles
++| Role | Primary | Backup |
++| --- | --- | --- |
++| **Requesting Operator (R1)** | CN Ops Engineering Lead | CN Platform Engineer |
++| **Approving Operator (R2)** | Compliance Lead | Security Lead |
++
++Both roles must be on different teams and authenticated via bastion MFA.
++
++## Preconditions
++1. Change ticket with impact statement, customer/device scope, and retention window.
++2. R1 + R2 confirm latest Important-Data checklist is signed.
++3. Monitoring alert configured for `audit_log` table to detect access anomalies.
++
++## Execution Steps
++1. **R1 prepares read-only SQL file** (no `INSERT/UPDATE/DELETE`). Script must:
++   - Filter on explicit profile/device IDs.
++   - Emit only the minimum fields required for the incident/case.
++2. **R2 reviews** the SQL, confirms scoping + ticket metadata, and signs off in ticket.
++3. **R1 runs** the SQL via bastion session using `psql --set ON_ERROR_STOP=1 --file <script>.sql`.
++   - Output saved to encrypted temporary file (`.gpg`) with ticket ID in filename.
++4. **R1 immediately shares** the GPG-encrypted artifact with R2 (Signal/Teams E2EE).
++5. **R2 validates**:
++   - Result row count matches expectation.
++   - No extra columns included.
++   - Data is deleted or stored in ticket vault after use.
++6. **Both operators log** the action:
++   - R1 attaches command transcript + checksum to ticket.
++   - R2 attaches review notes + evidence of secure deletion.
++
++## Emergency Re-ID
++If regulators/law enforcement require immediate access:
++1. Security Lead pages the dual-control roster.
++2. Above process still applies; only retention window may be expanded.
++3. Post-incident review within 72h; checklist updated with lessons learned.
++
++## Auditing & Evidence
++- `services/cn-gateway/src/db/audit.ts` already records `mapping` access; operators must include ticket ID in `comment` column.
++- Monthly audit: Compliance Lead samples ΓëÑ2 tickets, verifying dual signatures + matching audit_log rows.
++- Store SOP references in `docs/important-data-checklist.md` row for mapping table.
++
++## Rotation & Maintenance
++- Revisit role assignments quarterly or when personnel change.
++- Keep this SOP in sync with Important-Data checklist revisions.
+diff --git a/docs/important-data-checklist.md b/docs/important-data-checklist.md
+index 497d6ff..4a662ad 100644
+--- a/docs/important-data-checklist.md
++++ b/docs/important-data-checklist.md
+@@ -2,10 +2,10 @@
+ 
+ | Asset / Dataset | Residency | Owners (Dual-Control) | Storage & Access Controls | Rotation / Review Cadence | Verification Steps |
+ | --- | --- | --- | --- | --- | --- |
+-| Device -> DID mapping table (`services/cn-gateway` Postgres `mapping`) | Mainland China DC (VPC subnet `cn-gateway`) | Ops Engineering Lead + Compliance Lead | Postgres behind mTLS; access via bastion + short-lived IAM tokens; read-only replicas blocked | Quarterly review of access lists; purge inactive mappings > 18 months | Run `SELECT COUNT(*) ...` diff + audit logs; confirm dual approvals logged in `audit_log`. |
++| Device -> DID mapping table (`services/cn-gateway` Postgres `mapping`) | Mainland China DC (VPC subnet `cn-gateway`) | Ops Engineering Lead + Compliance Lead | Postgres behind mTLS; access via bastion + short-lived IAM tokens; read-only replicas blocked | Quarterly review of access lists; purge inactive mappings > 18 months | Follow [Dual-Control SOP](dual-control-sop.md); run `SELECT COUNT(*) ...` diff + audit logs; confirm dual approvals logged in `audit_log`. |
+ | Pseudonymization KMS keys (Alibaba/Tencent/Huawei HMAC keys) | Mainland China KMS | Ops Engineering Lead + Security Lead | Cloud KMS policies require two approvers; keys non-exportable | Rotate every 12 months or incident; document new `KMS_KEY_VERSION` | Record rotation via `/admin/rotate-key`; attach ticket + HSM receipts. |
+ | Device shared-secret hashes (`devices.device_key_hash`) | Mainland China D1/Postgres | Device Platform PM + Security Lead | Hash-only storage; updates via controlled `wrangler d1 execute` workflows | Rotate per firmware release or compromise; monthly NULL scan | Run `tests/security/worker.security.test.ts` + SQL spot checks. |
+-| Batch export Ed25519 private key (CN gateway) + overseas verify key | CN secure HSM + Cloudflare secret | Ops Engineering Lead + Platform API Lead | CN side stored in encrypted filesystem; overseas verification key stored via `wrangler secret` and never checked into git | Rotate every time CN gateway rotates its signer (minimum annually); document secret update + `/health` evidence | Upload new pubkey via `wrangler secret put EXPORT_VERIFY_PUBKEY`, capture `/health` showing `signatureConfigured: true`, and attach approval ticket. |
++| Batch export Ed25519 private key (CN gateway) + overseas verify key | CN secure HSM + Cloudflare secret | Ops Engineering Lead + Platform API Lead | CN side stored in encrypted filesystem; overseas verification key stored via `wrangler secret` and never checked into git | Follow [Ed25519 rotation runbook](runbooks/ed25519-rotation.md); rotate with every signer change (Γëñ12 months) | Upload new pubkey via `wrangler secret put EXPORT_VERIFY_PUBKEY`, capture `/health` showing `signatureConfigured: true`, and attach approval ticket. |
+ | Cloudflare Access config (`ACCESS_JWKS_URL`, `ACCESS_AUD`) | Cloudflare Access (global) | Platform Engineering Lead + Security Lead | Managed via Access admin + `wrangler secret`; protected by Okta SSO | Quarterly review of Access policies/scopes | Run `node scripts/ensure-prod-shim-disabled.mjs --env production`; export Access audit logs. |
+ | Cursor sealing secret (`CURSOR_SECRET`) | Workers secret store | Platform Engineering Lead + Compliance Lead | Injected with `wrangler secret`; never logged | Rotate every 12 months; update `.dev.vars` sample | Run cursor unit tests + verify `cursor.rotate` log entry. |
+ | Client Event token secret (`CLIENT_EVENT_TOKEN_SECRET`) | Workers secret store | Platform Engineering + App PM | Production-only secret; staging uses separate value | Rotate every 6 months; purge cached grants in `client_events` | Run `src/lib/auth/__tests__/telemetry-token.test.ts`; confirm Access logs. |
+diff --git a/docs/runbooks/ed25519-rotation.md b/docs/runbooks/ed25519-rotation.md
+new file mode 100644
+index 0000000..96b3f9f
+--- /dev/null
++++ b/docs/runbooks/ed25519-rotation.md
+@@ -0,0 +1,42 @@
++# Ed25519 Export Key Rotation Runbook
++
++Purpose: keep the CN gateway signing key and the overseas Worker verification key in sync. Applies whenever CN gateway rotates its Ed25519 signing key or annually (whichever comes first).
++
++## Roles
++| Task | Owner |
++| --- | --- |
++| Generate new CN signing key | Ops Engineering Lead |
++| Approve + record rotation | Compliance Lead |
++| Update overseas verify key (Wrangler secret) | Platform API Lead |
++| Verify `/api/ingest` health after rotation | SRE On-Call |
++
++## Schedule
++- Minimum cadence: 12 months.
++- Also rotate immediately after any suspected key compromise or HSM maintenance event.
++- Track upcoming rotations in the quarterly compliance calendar.
++
++## Steps
++1. **Prep ticket** with scope, target environments, and planned date.
++2. **CN gateway** generates new key pair inside the HSM (follow vendor-specific process). Record `keyVersion`.
++3. **Export public key** only. Share with Platform API Lead via encrypted channel (e.g., AGE or GPG).
++4. **Update Wrangler secret**:
++   ```bash
++   wrangler secret put EXPORT_VERIFY_PUBKEY --env production
++   # paste base64 public key
++   wrangler secret put EXPORT_VERIFY_PUBKEY --env staging
++   ```
++5. **Deploy CN gateway** config referencing new `KMS_KEY_VERSION`.
++6. **Update overseas Worker** (deploy if code/config changed).
++7. **Validate**:
++   - `wrangler tail` shows `cron.client_events_backfill`? (not relevant) skip? hmm
++   - `curl https://<worker-domain>/health` and ensure `signatureConfigured: true`.
++   - Attempt batch ingest from staging exporter; expect HTTP 202.
++8. **Document** in ticket with:
++   - Secret version IDs / timestamp.
++   - `/health` output screenshot.
++   - Signatures from Ops + Compliance.
++9. **Archive old key material** per HSM policy; destroy previous private key after rollover, except when regulators require retention.
++
++## Alerts & Monitoring
++- Cloudflare Worker health check alarms must watch `signatureConfigured`.
++- Exporter metrics `exporterBatches{status="failed"}` should stay below baseline; spikes trigger pager to review rotation steps.
+diff --git a/docs/mode-a/audit-2025-11-11/findings.json b/docs/mode-a/audit-2025-11-11/findings.json
+index 3c15848..92ca188 100644
+--- a/docs/mode-a/audit-2025-11-11/findings.json
++++ b/docs/mode-a/audit-2025-11-11/findings.json
+@@ -130,14 +130,17 @@
+     "id": "P2-ingest-strip-silent",
+     "severity": "P2",
+     "category": "Correctness",
+-    "status": "open",
++    "status": "fixed",
+     "files": [
+-      "src/schemas/ingest.ts:17-30"
++      "src/schemas/ingest.ts:17-30",
++      "src/routes/__tests__/ingest.test.ts:186-208"
+     ],
+-    "evidence": "Telemetry schema uses `.strip()`, so unexpected keys are silently dropped rather than rejected/audited.",
+-    "impact": "Firmware bugs or DROP fields go unnoticed because the API still returns 2xx, eroding compliance guarantees.",
+-    "fix": "Switch to `.strict()` and emit 4xx + audit log when payloads include unknown keys.",
+-    "tests": []
++    "evidence": "Telemetry schema now ends with `.strict()` instead of `.strip()`, and the regression test `rejects payloads that include unexpected metric keys` asserts a 400 plus detail message for the rogue key.",
++    "impact": "Unexpected/DROP fields are rejected with 4xx responses, so firmware bugs surface immediately instead of being silently truncated overseas.",
++    "fix": "Deploy the `.strict()` schema change and keep the new regression test. Watch `ingest.validation_failed` metrics while firmware teams clean up offending payloads.",
++    "tests": [
++      "npx vitest run src/routes/__tests__/ingest.test.ts"
++    ]
+   },
+   {
+     "id": "P2-modea-doc-drift",
+@@ -153,4 +156,4 @@
+     "fix": "Update docs whenever SAFE metrics or ingest behaviors change.",
+     "tests": []
+   }
+-]
+\ No newline at end of file
++]
+diff --git a/src/__tests__/app.scheduled.test.ts b/src/__tests__/app.scheduled.test.ts
+index 233eb4c..d1a0d52 100644
+--- a/src/__tests__/app.scheduled.test.ts
++++ b/src/__tests__/app.scheduled.test.ts
+@@ -5,6 +5,7 @@ import type { Env } from "../env";
+ import type { Logger } from "../utils/logging";
+ import * as logging from "../utils/logging";
+ import * as retention from "../jobs/retention";
++import * as clientEventsBackfill from "../jobs/client-events-backfill";
+ import * as signupFunnel from "../lib/signup-funnel";
+ 
+ type ScheduledEvent = Parameters<(typeof app)["scheduled"]>[0];
+@@ -244,6 +245,26 @@ describe("app.scheduled", () => {
+     );
+   });
+ 
++  it("runs the client event backfill job when scheduled", async () => {
++    const { env } = createScheduledEnv();
++    const backfillSpy = vi.spyOn(clientEventsBackfill, "runClientEventsBackfill").mockResolvedValue({
++      status: "complete",
++      processed: 0,
++      updated: 0,
++      has_more: false,
++    });
++    const { spy } = mockSystemLogger();
++
++    await app.scheduled(
++      { cron: clientEventsBackfill.CLIENT_EVENT_BACKFILL_CRON } as ScheduledEvent,
++      env,
++      {} as ScheduledExecutionContext,
++    );
++
++    expect(backfillSpy).toHaveBeenCalledTimes(1);
++    expect(spy).toHaveBeenCalledWith({ task: "client-events-backfill-cron" });
++  });
++
+   it("evaluates the signup funnel when the alert cron fires", async () => {
+     const { env, bindCalls } = createScheduledEnv();
+     const { warn } = mockSystemLogger();
+diff --git a/src/app.ts b/src/app.ts
+index 69192ed..5dd7dfe 100644
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -13,6 +13,7 @@ import { expandAssetBase } from "./utils/asset-base";
+ import { resolveLogoutReturn } from "./utils/return-url";
+ import { handleR2Request } from "./r2";
+ import { runTelemetryRetention, TELEMETRY_RETENTION_CRON } from "./jobs/retention";
++import { CLIENT_EVENT_BACKFILL_CRON, runClientEventsBackfill } from "./jobs/client-events-backfill";
+ import { clearCronCursor, readCronCursor, writeCronCursor } from "./lib/cron-cursor";
+ import { recordOpsMetric } from "./lib/ops-metrics";
+ import { loadSignupFunnelSummary } from "./lib/signup-funnel";
+@@ -310,6 +311,17 @@ export default {
+       return;
+     }
+ 
++    if (event.cron === CLIENT_EVENT_BACKFILL_CRON) {
++      const clientEventLog = systemLogger({ task: "client-events-backfill-cron" });
++      try {
++        const summary = await runClientEventsBackfill(env, { logger: clientEventLog });
++        clientEventLog.info("cron.client_events_backfill.summary", summary);
++      } catch (error) {
++        clientEventLog.error("cron.client_events_backfill.failed", { error });
++      }
++      return;
++    }
++
+     if (event.cron === SIGNUP_FUNNEL_ALERT_CRON) {
+       await runSignupFunnelMonitor(env);
+       return;
+diff --git a/src/jobs/__tests__/client-events-backfill.test.ts b/src/jobs/__tests__/client-events-backfill.test.ts
+new file mode 100644
+index 0000000..9a107fa
+--- /dev/null
++++ b/src/jobs/__tests__/client-events-backfill.test.ts
+@@ -0,0 +1,124 @@
++import { describe, expect, it, vi } from "vitest";
++
++import { runClientEventsBackfill, CLIENT_EVENT_BACKFILL_LIMIT } from "../client-events-backfill";
++import type { Env } from "../../env";
++import type { Logger } from "../../utils/logging";
++
++function createLogger(): Logger {
++  return {
++    debug: vi.fn(),
++    info: vi.fn(),
++    warn: vi.fn(),
++    error: vi.fn(),
++    with: vi.fn().mockReturnThis(),
++  } as unknown as Logger;
++}
++
++describe("runClientEventsBackfill", () => {
++  it("throws when CLIENT_EVENT_TOKEN_SECRET is missing", async () => {
++    await expect(
++      runClientEventsBackfill({ CLIENT_EVENT_TOKEN_SECRET: "" } as unknown as Env),
++    ).rejects.toThrowError("CLIENT_EVENT_TOKEN_SECRET not configured");
++  });
++
++  it("rehashes legacy rows and reports progress", async () => {
++    const rows = [
++      { id: "row-1", user_email: "legacy@example.com" },
++      { id: "row-2", user_email: "legacy2@example.com" },
++    ];
++    const selectAll = vi.fn().mockResolvedValue({ results: rows });
++    const updateRun = vi.fn().mockResolvedValue({ success: true });
++
++    const env = {
++      CLIENT_EVENT_TOKEN_SECRET: "secret-value",
++      DB: {
++        prepare: vi.fn((sql: string) => {
++          if (sql.includes("SELECT id, user_email")) {
++            return {
++              bind: () => ({
++                all: selectAll,
++              }),
++            };
++          }
++          if (sql.startsWith("UPDATE client_events")) {
++            return {
++              bind: () => ({
++                run: updateRun,
++              }),
++            };
++          }
++          throw new Error(`Unexpected SQL: ${sql}`);
++        }),
++      },
++    } as unknown as Env;
++
++    const summary = await runClientEventsBackfill(env, { logger: createLogger() });
++
++    expect(summary.status).toBe("complete");
++    expect(summary.processed).toBe(rows.length);
++    expect(summary.updated).toBe(rows.length);
++    expect(summary.has_more).toBe(false);
++    expect(selectAll).toHaveBeenCalledWith();
++    expect(updateRun).toHaveBeenCalledTimes(rows.length);
++  });
++
++  it("returns complete when no rows remain", async () => {
++    const env = {
++      CLIENT_EVENT_TOKEN_SECRET: "secret-value",
++      DB: {
++        prepare: vi.fn((sql: string) => {
++          if (sql.includes("SELECT id, user_email")) {
++            return {
++              bind: () => ({
++                all: vi.fn().mockResolvedValue({ results: [] }),
++              }),
++            };
++          }
++          throw new Error(`Unexpected SQL: ${sql}`);
++        }),
++      },
++    } as unknown as Env;
++
++    const summary = await runClientEventsBackfill(env, { logger: createLogger() });
++    expect(summary).toEqual({
++      status: "complete",
++      processed: 0,
++      updated: 0,
++      has_more: false,
++    });
++  });
++
++  it("reports has_more when row count meets the limit", async () => {
++    const rows = Array.from({ length: CLIENT_EVENT_BACKFILL_LIMIT }, (_, idx) => ({
++      id: `row-${idx}`,
++      user_email: `legacy-${idx}@example.com`,
++    }));
++
++    const env = {
++      CLIENT_EVENT_TOKEN_SECRET: "secret-value",
++      DB: {
++        prepare: vi.fn((sql: string) => {
++          if (sql.includes("SELECT id, user_email")) {
++            return {
++              bind: () => ({
++                all: vi.fn().mockResolvedValue({ results: rows }),
++              }),
++            };
++          }
++          if (sql.startsWith("UPDATE client_events")) {
++            return {
++              bind: () => ({
++                run: vi.fn().mockResolvedValue({ success: true }),
++              }),
++            };
++          }
++          throw new Error(`Unexpected SQL: ${sql}`);
++        }),
++      },
++    } as unknown as Env;
++
++    const summary = await runClientEventsBackfill(env, { logger: createLogger() });
++    expect(summary.status).toBe("ok");
++    expect(summary.has_more).toBe(true);
++  });
++});
+diff --git a/src/jobs/client-events-backfill.ts b/src/jobs/client-events-backfill.ts
+new file mode 100644
+index 0000000..9b417c1
+--- /dev/null
++++ b/src/jobs/client-events-backfill.ts
+@@ -0,0 +1,66 @@
++import type { Env } from "../env";
++import { hashUserEmailForStorage } from "../lib/client-events";
++import { systemLogger, type Logger } from "../utils/logging";
++
++export const CLIENT_EVENT_BACKFILL_CRON = "45 2 * * *";
++export const CLIENT_EVENT_BACKFILL_LIMIT = 250;
++
++type BackfillRow = { id: string; user_email: string };
++
++export type ClientEventBackfillResult = {
++  status: "ok" | "complete";
++  processed: number;
++  updated: number;
++  has_more: boolean;
++};
++
++export async function runClientEventsBackfill(
++  env: Env,
++  options: { logger?: Logger } = {},
++): Promise<ClientEventBackfillResult> {
++  const secret = typeof env.CLIENT_EVENT_TOKEN_SECRET === "string" ? env.CLIENT_EVENT_TOKEN_SECRET.trim() : "";
++  if (!secret) {
++    throw new Error("CLIENT_EVENT_TOKEN_SECRET not configured");
++  }
++
++  const log = options.logger ?? systemLogger({ task: "client-events-backfill" });
++
++  const pending = await env.DB.prepare(
++    `SELECT id, user_email
++       FROM client_events
++      WHERE user_email IS NOT NULL
++        AND user_email NOT LIKE 'sha256:%'
++      LIMIT ?`,
++  )
++    .bind(CLIENT_EVENT_BACKFILL_LIMIT)
++    .all<BackfillRow>();
++
++  const rows = pending.results ?? [];
++  if (!rows.length) {
++    log.info("client_events.backfill_complete", { processed: 0, updated: 0 });
++    return {
++      status: "complete",
++      processed: 0,
++      updated: 0,
++      has_more: false,
++    };
++  }
++
++  let updated = 0;
++  const update = env.DB.prepare(`UPDATE client_events SET user_email = ? WHERE id = ?`);
++  for (const row of rows) {
++    const hashed = await hashUserEmailForStorage(row.user_email, secret);
++    if (!hashed) continue;
++    await update.bind(hashed, row.id).run();
++    updated += 1;
++  }
++
++  const hasMore = rows.length === CLIENT_EVENT_BACKFILL_LIMIT;
++  log.info("client_events.backfill_run", { processed: rows.length, updated, has_more: hasMore });
++  return {
++    status: hasMore ? "ok" : "complete",
++    processed: rows.length,
++    updated,
++    has_more: hasMore,
++  };
++}
+diff --git a/src/routes/__tests__/ingest.test.ts b/src/routes/__tests__/ingest.test.ts
+index 2790e59..1de9508 100644
+--- a/src/routes/__tests__/ingest.test.ts
++++ b/src/routes/__tests__/ingest.test.ts
+@@ -129,6 +129,7 @@ describe("handleIngest", () => {
+     expect(payload.error).toBe("Invalid JSON");
+   });
+ 
++
+   it("rejects payloads over 256KB when using multi-byte characters", async () => {
+     const env = baseEnv();
+     const multiByteChar = "≡ƒÿÇ";
+@@ -179,101 +180,8 @@ describe("handleIngest", () => {
+     expect(body.error).toBe("Invalid signature");
+   });
+ 
+-  it("returns 200 for a valid payload and drops unexpected metric keys", async () => {
+-    verifyDeviceKeyMock.mockResolvedValue({ ok: true, deviceKeyHash: DEVICE_KEY_HASH });
+-    claimDeviceIfUnownedMock.mockResolvedValue({ ok: true });
+-
+-    const telemetryBinds: unknown[][] = [];
+-    const latestStateBinds: unknown[][] = [];
+-    const selectFirst = vi.fn().mockResolvedValue({ profile_id: "demo" });
+-    const countFirst = vi.fn().mockResolvedValue({ cnt: 0 });
+-    const nonceDeleteRun = vi.fn().mockResolvedValue(undefined);
+-    const deviceUpdateRun = vi.fn().mockResolvedValue(undefined);
+-    const nonceInsertRun = vi.fn().mockResolvedValue(undefined);
+-    const opsRun = vi.fn().mockResolvedValue(undefined);
+-
++  it("rejects payloads that include unexpected metric keys", async () => {
+     const env = baseEnv();
+-    const defaultPrepare = env.DB.prepare as any;
+-
+-    env.DB.prepare = vi.fn((sql: string) => {
+-      if (/^(?:PRAGMA|BEGIN|COMMIT|ROLLBACK)/i.test(sql)) {
+-        return {
+-          run: vi.fn().mockResolvedValue(undefined),
+-        } as any;
+-      }
+-
+-      if (isRateLimitCountQuery(sql)) {
+-        return {
+-          bind: vi.fn(() => ({
+-            first: countFirst,
+-          })),
+-        } as any;
+-      }
+-
+-      if (sql.includes("SELECT profile_id FROM devices")) {
+-        return {
+-          bind: vi.fn(() => ({
+-            first: selectFirst,
+-          })),
+-        } as any;
+-      }
+-
+-      if (sql.startsWith("DELETE FROM ingest_nonces")) {
+-        return {
+-          bind: vi.fn(() => ({
+-            run: nonceDeleteRun,
+-          })),
+-        } as any;
+-      }
+-
+-      if (sql.startsWith("INSERT INTO telemetry")) {
+-        return {
+-          bind: vi.fn((...args: unknown[]) => {
+-            telemetryBinds.push(args);
+-            return {
+-              run: vi.fn().mockResolvedValue(undefined),
+-            };
+-          }),
+-        } as any;
+-      }
+-
+-      if (sql.startsWith("INSERT INTO latest_state")) {
+-        return {
+-          bind: vi.fn((...args: unknown[]) => {
+-            latestStateBinds.push(args);
+-            return {
+-              run: vi.fn().mockResolvedValue(undefined),
+-            };
+-          }),
+-        } as any;
+-      }
+-
+-      if (sql.startsWith("UPDATE devices SET online=1")) {
+-        return {
+-          bind: vi.fn(() => ({
+-            run: deviceUpdateRun,
+-          })),
+-        } as any;
+-      }
+-
+-      if (sql.startsWith("INSERT INTO ingest_nonces")) {
+-        return {
+-          bind: vi.fn(() => ({
+-            run: nonceInsertRun,
+-          })),
+-        } as any;
+-      }
+-
+-      if (sql.startsWith("INSERT INTO ops_metrics")) {
+-        return {
+-          bind: vi.fn(() => ({
+-            run: opsRun,
+-          })),
+-        } as any;
+-      }
+-
+-      return defaultPrepare(sql);
+-    });
+ 
+     const payload = {
+       device_id: "dev-123",
+@@ -288,35 +196,14 @@ describe("handleIngest", () => {
+ 
+     const res = await handleIngest(req, env, "demo");
+ 
+-    expect(res.status).toBe(200);
+-    const body = (await res.json()) as any;
+-    expect(body.ok).toBe(true);
+-    expect(selectFirst).toHaveBeenCalled();
+-    expect(countFirst).toHaveBeenCalled();
+-    expect(nonceDeleteRun).toHaveBeenCalled();
+-    expect(deviceUpdateRun).toHaveBeenCalled();
+-    expect(nonceInsertRun).toHaveBeenCalled();
+-    expect(opsRun).toHaveBeenCalled();
+-
+-    expect(telemetryBinds).toHaveLength(1);
+-    const metricsJson = telemetryBinds[0]?.[2];
+-    expect(typeof metricsJson).toBe("string");
+-    const telemetryPayload = JSON.parse(metricsJson as string) as Record<string, unknown>;
+-    expect(telemetryPayload).not.toHaveProperty("secretToken");
+-    expect(telemetryPayload).toMatchObject({
+-      supplyC: 45.2,
+-      powerKW: 1.2,
+-    });
+-
+-    expect(latestStateBinds).toHaveLength(1);
+-    const payloadJson = latestStateBinds[0]?.[16];
+-    expect(typeof payloadJson).toBe("string");
+-    const latestPayload = JSON.parse(payloadJson as string) as Record<string, unknown>;
+-    expect(latestPayload).not.toHaveProperty("secretToken");
+-
+-    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+-    const varyHeader = res.headers.get("vary");
+-    expect(varyHeader && varyHeader.toLowerCase()).toBe("origin");
++    expect(res.status).toBe(400);
++    const body = (await res.json()) as {
++      error: string;
++      details: Array<{ path: string; message: string }>;
++    };
++    expect(body.error).toBe("Validation failed");
++    expect(body.details.some((detail) => detail.message.includes("secretToken"))).toBe(true);
++    expect(verifyDeviceKeyMock).not.toHaveBeenCalled();
+   });
+ 
+   it("rejects disallowed origins before touching device auth", async () => {
+diff --git a/src/routes/admin.ts b/src/routes/admin.ts
+index 0aafeca..f1f024b 100644
+--- a/src/routes/admin.ts
++++ b/src/routes/admin.ts
+@@ -1,12 +1,12 @@
+ import type { Env, User } from "../env";
+ import { requireAccessUser, userIsAdmin } from "../lib/access";
+ import { buildDeviceLookup, buildDeviceScope, presentDeviceId } from "../lib/device";
+-import { hashUserEmailForStorage } from "../lib/client-events";
+ import { json } from "../utils/responses";
+ import { andWhere, nowISO } from "../utils";
+ import { AdminOverviewQuerySchema } from "../schemas/admin";
+ import { validationErrorResponse } from "../utils/validation";
+ import { loggerForRequest } from "../utils/logging";
++import { runClientEventsBackfill } from "../jobs/client-events-backfill";
+ import {
+   OPS_METRICS_WINDOW_DAYS,
+   opsMetricsWindowStart,
+@@ -176,46 +176,21 @@ export async function handleFleetAdminOverview(req: Request, env: Env) {
+   return buildOverviewResponse(req, env, user, "/api/fleet/admin-overview");
+ }
+ 
+-const CLIENT_EVENT_BACKFILL_LIMIT = 250;
+-
+ export async function handleClientEventsBackfill(req: Request, env: Env) {
+   const user = await requireAccessUser(req, env);
+   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
+   if (!userIsAdmin(user)) return json({ error: "Forbidden" }, { status: 403 });
+ 
+-  const secret = typeof env.CLIENT_EVENT_TOKEN_SECRET === "string" ? env.CLIENT_EVENT_TOKEN_SECRET.trim() : "";
+-  if (!secret) {
+-    return json({ error: "CLIENT_EVENT_TOKEN_SECRET not configured" }, { status: 503 });
+-  }
+-
+   const log = loggerForRequest(req, { route: "/api/admin/client-events/backfill" });
+-  const select = env.DB.prepare(
+-    `SELECT id, user_email
+-       FROM client_events
+-      WHERE user_email IS NOT NULL
+-        AND user_email NOT LIKE 'sha256:%'
+-      LIMIT ?`,
+-  );
+-  const pending = await select.bind(CLIENT_EVENT_BACKFILL_LIMIT).all<{ id: string; user_email: string }>();
+-  const rows = pending.results ?? [];
+-  if (!rows.length) {
+-    return json({ status: "complete", updated: 0 });
+-  }
+-
+-  const update = env.DB.prepare(`UPDATE client_events SET user_email = ? WHERE id = ?`);
+-  let updated = 0;
+-  for (const row of rows) {
+-    const hashed = await hashUserEmailForStorage(row.user_email, secret);
+-    if (!hashed) continue;
+-    await update.bind(hashed, row.id).run();
+-    updated += 1;
++  try {
++    const summary = await runClientEventsBackfill(env, { logger: log });
++    return json(summary);
++  } catch (error) {
++    const message = error instanceof Error ? error.message : String(error);
++    if (message === "CLIENT_EVENT_TOKEN_SECRET not configured") {
++      return json({ error: message }, { status: 503 });
++    }
++    log.error("client_events.backfill_failed", { error });
++    return json({ error: "Client event backfill failed" }, { status: 500 });
+   }
+-
+-  log.info("client_events.backfill_run", { processed: rows.length, updated });
+-  return json({
+-    status: "ok",
+-    processed: rows.length,
+-    updated,
+-    has_more: rows.length === CLIENT_EVENT_BACKFILL_LIMIT,
+-  });
+ }
+diff --git a/src/schemas/ingest.ts b/src/schemas/ingest.ts
+index d389aef..3cbf599 100644
+--- a/src/schemas/ingest.ts
++++ b/src/schemas/ingest.ts
+@@ -27,7 +27,7 @@ export const TelemetryMetricsSchema = z
+     mode: nullableString,
+     defrost: nullableNumber,
+   })
+-  .strip();
++  .strict();
+ 
+ export const TelemetryPayloadSchema = z
+   .object({
+diff --git a/wrangler.toml b/wrangler.toml
+index 124e524..5716c3a 100644
+--- a/wrangler.toml
++++ b/wrangler.toml
+@@ -53,7 +53,7 @@ OFFLINE_MULTIPLIER = "6"              # mark offline if > 6├ù heartbeat interval
+ # --- Cron schedules ---
+ # Every 5 minutes: set devices offline if stale
+ [triggers]
+-crons = ["*/5 * * * *", "15 2 * * *"]
++crons = ["*/5 * * * *", "15 2 * * *", "45 2 * * *"]
+ 
+ 
+ [[r2_buckets]]

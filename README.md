@@ -38,6 +38,7 @@ Shared tooling lives in `shared/configs` (ESLint, Vitest, tsconfig) and the work
 - `docs/mode-a-operational-guidance.md` – full brief covering legal, data inventory, APIs, observability, and SOPs
 - `docs/adr/ADR-001-mode-a-shared-sdks.md` – ADR adopting Mode A + shared SDK strategy
 - `docs/*` – existing runbooks (retention, observability, prompt bible, etc.)
+- `docs/mode-a/audit-2025-11-11` – Mode A audit package (report, guardrail checklist, SBOM, triage log, and supporting data)
 
 Each pull request should confirm:
 1. SAFE list / schemas updated together (`packages/sdk-core`)
