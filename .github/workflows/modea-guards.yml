@@ -1,0 +1,123 @@
+name: Mode A Guards (PII & Forbidden Fields)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths-ignore:
+      - "*.png"
+      - "*.jpg"
+      - "*.jpeg"
+      - "*.gif"
+      - "*.svg"
+      - ".vscode/**"
+      - "**/coverage/**"
+      - "**/.turbo/**"
+      - "**/storybook-static/**"
+      - "**/expo/**"
+      - "**/android/**"
+      - "**/ios/**"
+      - "**/*.apk"
+      - "**/*.aab"
+      - "**/*.ipa"
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "*.png"
+      - "*.jpg"
+      - "*.jpeg"
+      - "*.gif"
+      - "*.svg"
+      - ".vscode/**"
+      - "**/coverage/**"
+      - "**/.turbo/**"
+      - "**/storybook-static/**"
+      - "**/expo/**"
+      - "**/android/**"
+      - "**/ios/**"
+      - "**/*.apk"
+      - "**/*.aab"
+      - "**/*.ipa"
+
+concurrency:
+  group: modea-guards-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Forbidden fields scan
+        run: node .github/scripts/forbidden-fields-lint.js
+
+      - name: PII regex scan
+        run: node .github/scripts/pii-regex-scan.js
+
+      - name: Prepare guard summary
+        if: always()
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const resultsDir = path.join(process.cwd(), 'guard-results');
+          fs.mkdirSync(resultsDir, { recursive: true });
+          const summaryFile = path.join(resultsDir, 'summary.json');
+          let summary = {};
+          if (fs.existsSync(summaryFile)) {
+            summary = JSON.parse(fs.readFileSync(summaryFile, 'utf8'));
+          }
+          const sections = [];
+          for (const key of ['forbidden', 'pii']) {
+            const data = summary[key];
+            if (!data) continue;
+            const counts = data.counts || {};
+            const topOffenders = (data.topOffenders || [])
+              .map((item) => `    - ${item.path} (${item.count})`)
+              .slice(0, 5)
+              .join('\n');
+            sections.push(`### ${key === 'forbidden' ? 'Forbidden fields' : 'PII regex'}\n- Counts: P0 ${counts.P0 ?? 0}, P1 ${counts.P1 ?? 0}, P2 ${counts.P2 ?? 0}, P3 ${counts.P3 ?? 0}${topOffenders ? `\n- Top offenders:\n${topOffenders}` : ''}`);
+          }
+          const body = sections.length
+            ? `**Mode A Guards summary**\n\n${sections.join('\n\n')}\n\nView SARIF under **Security → Code scanning alerts** for full details.`
+            : '**Mode A Guards summary**\n\nNo findings.';
+          fs.writeFileSync(path.join(resultsDir, 'comment.md'), body);
+          NODE
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: guard-results
+          path: guard-results/
+
+      - name: Upload SARIF (forbidden)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: guard-results/forbidden.sarif
+
+      - name: Upload SARIF (pii)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: guard-results/pii.sarif
+
+      - name: Comment summary on PR
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body-path: guard-results/comment.md
