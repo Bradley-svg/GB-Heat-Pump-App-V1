@@ -11,8 +11,6 @@ const telemetryMetricsShape = {
   status_code: z.string().regex(/^[A-Z0-9_]{1,16}$/).optional(),
   fault_code: z.string().regex(/^[A-Z0-9_]{1,16}$/).optional(),
   control_mode: z.enum(["AUTO", "MANUAL", "OFF", "SAFE"]).optional(),
-  firmware_version_major_minor: z.string().regex(/^\d+\.\d+$/).optional(),
-  alerts: z.array(z.string()).max(20).optional(),
   timestamp_minute: z.string().datetime(),
   energyKWh: z.number().min(0).optional(),
   cycleCount: z.number().int().min(0).optional(),

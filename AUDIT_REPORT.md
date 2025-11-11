@@ -26,7 +26,7 @@
 | P1-ip-log-nested | P1 | Fixed | Rate-limit telemetry no longer emits nested `client_ip` fields; only counts and retry hints remain. |
 | P1-overseas-schema-mismatch | P1 | Fixed | CN exporter + API now agree on `didPseudo`; OpenAPI/docs/tests updated accordingly. |
 | P1-export-key-unset | P1 | Mitigated | `EXPORT_VERIFY_PUBKEY` must be supplied via Wrangler secret; `/health` reports config drift and missing keys return 503. |
-| P1-safe-metrics-drift | P1 | Open | SDK advertises `alerts`/`firmware_version` as SAFE but CN gateway drops them; schema drift. |
+| P1-safe-metrics-drift | P1 | Fixed | SDK SAFE list now matches the CN gateway (removed `alerts`/`firmware_version_major_minor`). |
 | P2-ingest-strip-silent | P2 | Open | `.strip()` on Telemetry schema silently discards unexpected keys instead of rejecting. |
 | P2-modea-doc-drift | P2 | Mitigated | Docs now state that raw `/api/ingest` is disabled by default and SAFE metrics match the CN gateway list.
 
@@ -89,13 +89,13 @@
 - **Fix:** Store the production key via Wrangler secrets and monitor `/health` plus logs for `signatureConfigured: true`.
 - **Tests:** Extend `services/overseas-api/src/index.test.ts` with a case asserting `500` when key absent and `202` when provided.
 
-### P1-safe-metrics-drift — SDK vs CN gateway
+### P1-safe-metrics-drift — SDK vs CN gateway (resolved)
 - **Category:** Correctness / Compliance
-- **Where:** `services/cn-gateway/src/modea/drop-safe.ts:1-16`, `packages/sdk-core/src/constants.ts:1-18`
-- **Evidence:** SDK SAFE list includes `firmware_version_major_minor` and `alerts`, but CN gateway’s SAFE set lacks them. Clients believe those fields are exportable; the gateway silently drops them.
-- **Impact:** Downstream analytics receive incomplete data and engineers might reintroduce those fields directly into overseas ingest (see P0) to “fix” missing metrics.
-- **Fix:** Decide whether the additional fields are SAFE. If yes, add them to CN gateway SAFE list and sanitization. If no, remove them from SDK + documentation and add compile-time guards.
-- **Tests:** Unit tests in SDK/CN gateway verifying SAFE arrays remain identical.
+- **Where:** `services/cn-gateway/src/modea/drop-safe.ts:1-16`, `packages/sdk-core/src/constants.ts:1-18`, `packages/sdk-core/src/schemas.ts:14-27`
+- **Evidence:** The SDK SAFE list and schemas no longer advertise `firmware_version_major_minor` or `alerts`, so the exported contract now mirrors the CN gateway enforcement.
+- **Impact:** Clients cannot mistakenly rely on fields that are dropped upstream, reducing the temptation to bypass the CN gateway.
+- **Fix:** Remove the non-SAFE metrics from SDK constants/schemas and keep the lists equal via unit tests/lints.
+- **Tests:** `npx vitest run packages/sdk-core` (SAFE list parity) plus the standard Worker suite.
 
 ### P2-ingest-strip-silent — unexpected metrics quietly dropped
 - **Category:** Correctness / Compliance
@@ -119,15 +119,10 @@
 ## 90-Day Remediation Roadmap
 | Item | Owner | Window | Est. Hours (Opt / Likely / Pess) |
 | --- | --- | --- | --- |
-| Kill raw `/api/ingest` path; require pseudonymized batches (P0) | Worker Platform + CN Gateway | Days 0-14 | 40 / 60 / 90 |
-| Harden Access JWT verify (issuer + tolerance) | Platform Auth | Days 0-14 | 6 / 10 / 16 |
-| Align exporter schema + signature key wiring | Platform API | Days 0-21 | 12 / 18 / 30 |
-| Publish Important-Data checklist + Mandarin notice | Compliance + Legal | Days 0-21 | 8 / 12 / 20 |
-| SAFE metrics reconciliation (gateway vs SDK) | SDK Owners + CN Gateway | Days 15-45 | 16 / 24 / 36 |
-| Strict schema & logging redactions | Worker Platform | Days 30-60 | 12 / 20 / 32 |
-| CI wiring for forbidden-field/PII scanners | Release Engineering | Days 30-60 | 4 / 8 / 12 |
-| Backfill hashed client_event emails | Data Engineering | Days 45-75 | 10 / 16 / 24 |
-| Monitor/export verification health (key presence) | Platform Ops | Days 60-90 | 6 / 10 / 16 |
+| Dual-control SOP for CN mapping table/re-ID | Ops Eng + Compliance | Days 0-30 | 12 / 20 / 30 |
+| Enforce `.strict()` telemetry validation (reject unknown metrics) | Worker Platform | Days 0-45 | 16 / 24 / 36 |
+| Schedule + verify client-event email backfill run | Platform Engineering + Data Eng | Days 15-45 | 8 / 12 / 20 |
+| Automate Ed25519 verification secret rotation logging (Wrangler secret updates tied to CN signer rotation) | Platform API Lead | Days 30-60 | 6 / 10 / 16 |
 
 ## Notes & References
 - Mode A guardrail checklist refreshed in `MODEA_GUARDS_CHECKLIST.md`.

@@ -10,6 +10,6 @@
 - `npx vitest run services/overseas-api/src/index.test.ts`
 
 ## Follow-Ups
-1. Decide whether additional metrics (e.g., `alerts`, `firmware_version_major_minor`) should join the SAFE list or be removed from SDKs entirely.
-2. Assign ownership for rotating the Ed25519 verification key + Wrangler secret whenever CN gateway rotates its signing key.
-3. Provide the corrected Mandarin privacy notice so the operator doc matches the now-enforced architecture.
+1. Formalize and publish the dual-control SOP for mapping table access (still marked as a gap in the Mode A guard checklist).
+2. Enforce `.strict()` telemetry validation (replace `.strip()` to reject unknown metrics) so DROP regressions cannot slip through silently.
+3. Schedule the client-event email backfill (new admin endpoint) as part of the next Worker deploy and verify D1 rows are fully hashed.

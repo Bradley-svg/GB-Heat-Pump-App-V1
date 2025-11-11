@@ -44,7 +44,7 @@
 | `supplyC`, `returnC`, `flowLps`, `powerKW`, `COP`, `pressure*`, `status_code`, `fault_code`, `control_mode`, `timestamp_minute`, `energyKWh`, `cycleCount`, `uptimeMinutes` | No | Yes | Schema validated, timestamp rounded |
 
 DROP list: `name`, `address`, `phone`, `email`, `ip`, `mac`, `serial`, `deviceIdRaw`, `notes`, `gps`, `lat`, `lng`, `photo`, `image`, `freeText`, `rawPayload`, `hostname`, `ssid`, `wifi_ssid`, `bssid`, `router_mac`, `imei`, `imsi`, `meid`, `geohash`, `ssid_password`. Regex detectors catch embedded IP/MAC/IMEI strings anywhere in payloads; violations return HTTP 422 with an audit log entry.  
-SAFE metrics exported exactly match `services/cn-gateway/src/modea/drop-safe.ts`. SDK fields such as `alerts` and `firmware_version_major_minor` remain CN-only until explicitly added to the SAFE list.
+SAFE metrics exported exactly match `services/cn-gateway/src/modea/drop-safe.ts`; the SDK no longer exposes any additional metrics beyond that list.
 
 Edge cases: regex scrubbing for embedded MAC/IP, reject binary blobs, disable free-text diagnostics (HTTP 422).
 

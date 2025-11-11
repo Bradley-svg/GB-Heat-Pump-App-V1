@@ -103,9 +103,9 @@
       "services/overseas-api/wrangler.toml:5-8",
       "services/overseas-api/src/index.ts:28-41"
     ],
-    "evidence": "`EXPORT_VERIFY_PUBKEY` is now supplied via Wrangler secret, `/health` reports `signatureConfigured`, and missing keys trigger a `503 signing key not configured` response (services/overseas-api/src/index.ts:28-83).",
-    "impact": "Exports cannot silently bypass signature verification - operators must upload the Ed25519 public key before enabling batches.",
-    "fix": "Run `wrangler secret put EXPORT_VERIFY_PUBKEY` for each environment and monitor `/health` for `signatureConfigured: true`.",
+    "evidence": "`services/overseas-api/src/index.ts` now trims `EXPORT_VERIFY_PUBKEY`, returns 503 when missing, and `/health` exposes `signatureConfigured` so ops can catch drift.",
+    "impact": "Operators must upload the Ed25519 verification key via Wrangler secrets or exports halt with a 503 (no silent bypass).",
+    "fix": "Manage the public key via `wrangler secret put EXPORT_VERIFY_PUBKEY` per environment and monitor `/health` for `signatureConfigured: true`.",
     "tests": [
       "npx vitest run services/overseas-api/src/index.test.ts"
     ]
@@ -114,15 +114,17 @@
     "id": "P1-safe-metrics-drift",
     "severity": "P1",
     "category": "Correctness",
-    "status": "open",
+    "status": "fixed",
     "files": [
       "services/cn-gateway/src/modea/drop-safe.ts:1-16",
       "packages/sdk-core/src/constants.ts:1-18"
     ],
-    "evidence": "SDK SAFE metrics include `firmware_version_major_minor` and `alerts`, but CN gateway SAFE list does not, so those fields are silently dropped.",
-    "impact": "Developers believe the fields are approved and may attempt to bypass the gateway to recover them, reintroducing PII risk.",
-    "fix": "Decide if the extra fields are SAFE\u2014either add them to the gateway sanitization or remove them from the SDK/docs.",
-    "tests": []
+    "evidence": "`packages/sdk-core/src/constants.ts` and `src/schemas.ts` no longer include `firmware_version_major_minor` or `alerts`, so the SDK matches the CN gateway SAFE list.",
+    "impact": "Clients cannot rely on fields that the CN gateway drops, eliminating pressure to bypass Mode A guardrails.",
+    "fix": "Keep SAFE lists identical by removing the extra metrics from the SDK and guarding with schema/tests.",
+    "tests": [
+      "npx vitest run packages/sdk-core"
+    ]
   },
   {
     "id": "P2-ingest-strip-silent",

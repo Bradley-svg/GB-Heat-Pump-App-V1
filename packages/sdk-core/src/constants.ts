@@ -9,8 +9,6 @@ export const SAFE_METRICS = [
   "status_code",
   "fault_code",
   "control_mode",
-  "firmware_version_major_minor",
-  "alerts",
   "timestamp_minute",
   "energyKWh",
   "cycleCount",
