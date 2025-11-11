@@ -29,9 +29,9 @@ export async function verifyBatchSignature(payload: unknown, signatureHeader: st
   if (!signatureHeader) {
     throw new Response("missing batch signature", { status: 401 });
   }
-  const verifyKey = env.EXPORT_VERIFY_PUBKEY;
+  const verifyKey = env.EXPORT_VERIFY_PUBKEY?.trim();
   if (!verifyKey) {
-    throw new Response("signing key not configured", { status: 500 });
+    throw new Response("signing key not configured", { status: 503 });
   }
   const message = encoder.encode(JSON.stringify(payload));
   const isValid = await verify(base64ToBytes(signatureHeader), message, base64ToBytes(verifyKey));
@@ -40,8 +40,14 @@ export async function verifyBatchSignature(payload: unknown, signatureHeader: st
   }
 }
 
-router.get("/health", () =>
-  new Response(JSON.stringify({ status: "ok" }), { headers: { "Content-Type": "application/json" } }),
+router.get("/health", (_req, env: Env) =>
+  new Response(
+    JSON.stringify({
+      status: "ok",
+      signatureConfigured: Boolean(env.EXPORT_VERIFY_PUBKEY && env.EXPORT_VERIFY_PUBKEY.trim().length),
+    }),
+    { headers: { "Content-Type": "application/json" } },
+  ),
 );
 
 router.post("/api/ingest/:profileId", async (request, env: Env) => {

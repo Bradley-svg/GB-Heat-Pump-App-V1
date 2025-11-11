@@ -51,6 +51,7 @@ function baseEnv(overrides: Partial<Env> = {}): Env {
     INGEST_IP_LIMIT_PER_MIN: "0",
     INGEST_IP_BLOCK_SECONDS: "60",
     INGEST_IP_BUCKETS: createTestKvNamespace(),
+    ALLOW_RAW_INGEST: "true",
     CLIENT_EVENT_TOKEN_SECRET: "test-telemetry-token-secret-rotate-1234567890",
     CLIENT_EVENT_TOKEN_TTL_SECONDS: "900",
     ...overrides,
@@ -101,6 +102,19 @@ afterEach(() => {
 });
 
 describe("handleIngest", () => {
+  it("returns 410 when raw ingest is disabled", async () => {
+    const env = baseEnv();
+    delete (env as any).ALLOW_RAW_INGEST;
+    const req = await buildSignedRequest("demo", {
+      device_id: "dev-disabled",
+      metrics: { supplyC: 22 },
+    });
+
+    const res = await handleIngest(req, env, "demo");
+    expect(res.status).toBe(410);
+    expect(await res.json()).toEqual({ error: "raw_ingest_disabled" });
+  });
+
   it("returns 400 for malformed JSON", async () => {
     const env = baseEnv();
     const req = new Request("https://example.com/api/ingest/test", {

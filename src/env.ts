@@ -37,6 +37,7 @@ export interface Env {
   INGEST_IP_LIMIT_PER_MIN?: string;
   INGEST_IP_BLOCK_SECONDS?: string;
   INGEST_IP_BUCKETS?: KvNamespace;
+  ALLOW_RAW_INGEST?: string;
   AUTH_IP_LIMIT_PER_MIN?: string;
   AUTH_IP_BLOCK_SECONDS?: string;
   AUTH_IP_BUCKETS?: KvNamespace;

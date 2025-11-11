@@ -63,7 +63,7 @@ function sanitizeText(value: string | null | undefined): string | null {
   return trimmed.length ? trimmed : null;
 }
 
-async function hashUserEmailForStorage(email: string | null | undefined, secret: string): Promise<string | null> {
+export async function hashUserEmailForStorage(email: string | null | undefined, secret: string): Promise<string | null> {
   if (typeof email !== "string") return null;
   const normalized = email.trim().toLowerCase();
   if (!normalized || !secret?.trim()) return null;

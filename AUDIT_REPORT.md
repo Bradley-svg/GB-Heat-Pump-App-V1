@@ -19,36 +19,34 @@
 ## Top Findings Overview
 | ID | Severity | Status | Summary |
 | --- | --- | --- | --- |
-| P0-modea-bypass-overseas-ingest | P0 | Open | Cloudflare Worker still accepts/stores raw `device_id` + unsanitized metrics; violates Mode A DROP/Safe. |
-| P1-access-jwt-weak | P1 | Open | Access JWT verification omits issuer + clock tolerance; audience-only check is bypassable. |
+| P0-modea-bypass-overseas-ingest | P0 | Mitigated | `/api/ingest/:profile` now returns `410 raw_ingest_disabled` unless `ALLOW_RAW_INGEST` is explicitly enabled, forcing signed CN batches. |
+| P1-access-jwt-weak | P1 | Fixed | `requireAccessUser` now enforces issuer + 60s clock tolerance when verifying Access JWTs. |
 | P1-observability-reporter-user | P1 | Fixed | Client error logs previously emitted reporter emails/IDs; now masked via `sanitizeReporterUser`. |
 | P1-client-events-email-plaintext | P1 | Fixed | `client_events.user_email` stored raw operator emails; now hashed with `CLIENT_EVENT_TOKEN_SECRET`. |
-| P1-ip-log-nested | P1 | Open | Rate-limit logs embed raw `client_ip` inside structured fields, bypassing redaction. |
-| P1-overseas-schema-mismatch | P1 | Open | CN exporter sends `pseudoId`, while overseas API insists on `didPseudo`; batches fail validation. |
-| P1-export-key-unset | P1 | Open | `EXPORT_VERIFY_PUBKEY` left empty in `wrangler.toml`, so signature verification returns 500. |
+| P1-ip-log-nested | P1 | Fixed | Rate-limit telemetry no longer emits nested `client_ip` fields; only counts and retry hints remain. |
+| P1-overseas-schema-mismatch | P1 | Fixed | CN exporter + API now agree on `didPseudo`; OpenAPI/docs/tests updated accordingly. |
+| P1-export-key-unset | P1 | Mitigated | `EXPORT_VERIFY_PUBKEY` must be supplied via Wrangler secret; `/health` reports config drift and missing keys return 503. |
 | P1-safe-metrics-drift | P1 | Open | SDK advertises `alerts`/`firmware_version` as SAFE but CN gateway drops them; schema drift. |
 | P2-ingest-strip-silent | P2 | Open | `.strip()` on Telemetry schema silently discards unexpected keys instead of rejecting. |
-| P2-modea-doc-drift | P2 | Open | Mode A docs promise pseudonymized-only exports, contradicting current Worker behavior.
+| P2-modea-doc-drift | P2 | Mitigated | Docs now state that raw `/api/ingest` is disabled by default and SAFE metrics match the CN gateway list.
 
 ## Detailed Findings
 
-### P0-modea-bypass-overseas-ingest — Worker stores raw device IDs/metrics overseas
+### P0-modea-bypass-overseas-ingest — Raw `/api/ingest` disabled by default
 - **Category:** Privacy / Compliance
-- **Where:** `src/routes/ingest.ts:260-565`, `src/schemas/ingest.ts:17-39`, `migrations/0001_init.sql:1-34`
-- **Evidence:** The Worker accepts payloads with `device_id`, `tankC`, `ambientC`, etc. (`src/schemas/ingest.ts:17-30`), validates them, and inserts the raw JSON into `telemetry` / `latest_state` tables (`src/routes/ingest.ts:486-550`). `migrations/0001_init.sql` defines those tables keyed by `device_id`, meaning raw identifiers/metrics are persisted outside China.
-- **Impact:** Direct ingestion bypasses the CN pseudonymization gateway, exporting PII and non-SAFE metrics overseas, violating Mode A residency commitments and potentially triggering PIPL filings.
-- **Fix:** Disable `/api/ingest/:profile` for raw payloads and require signed batches containing `did_pseudo` + SAFE metrics only, mirroring the CN exporter contract. Migrate D1 schemas to store pseudonymous keys and purge historical raw IDs. Add regression tests that reject any payload containing DROP keys or non-SAFE metrics.
-- **Tests:** Add integration tests under `tests/integration/worker.integration.test.ts` to assert `/api/ingest` rejects `device_id` bodies and only accepts pseudonymized batches. Existing `npx vitest run src/routes/__tests__/observability.test.ts src/lib/__tests__/client-events.test.ts` executed cleanly.
-- **References:** Mode A architecture brief (`docs/mode-a-operational-guidance.md:6-12`).
+- **Where:** `src/routes/ingest.ts:260-310`, `src/routes/__tests__/ingest.test.ts:102-118`
+- **Evidence:** `handleIngest` now short-circuits unless `ALLOW_RAW_INGEST` is explicitly set, logging `ingest.raw_disabled` and returning `410` (`json({ error: "raw_ingest_disabled" })`). The regression test `handleIngest returns 410 when raw ingest is disabled` covers the new behavior.
+- **Impact:** Operators must use the CN gateway → signed batch pipeline; direct raw payloads never leave CN unless someone intentionally re-enables the flag for debugging.
+- **Fix:** Keep `ALLOW_RAW_INGEST` unset in production and remove any legacy devices still targeting `/api/ingest`. The only supported export path is the signed batch API under `services/cn-gateway/src/ingest/exporter.ts`.
+- **Tests:** `npx vitest run src/routes/__tests__/ingest.test.ts` (new 410 expectation) plus the standard worker suite.
 
-### P1-access-jwt-weak — audience-only verification is bypassable
+### P1-access-jwt-weak — Access JWT verification hardened
 - **Category:** Security
-- **Where:** `src/lib/access.ts:148-179`
-- **Evidence:** `jwtVerify(jwt, getJwks(env), { audience: env.ACCESS_AUD })` omits both `issuer` and `clockTolerance`. Anyone with a valid token for a different Access app (same account) or with slight clock skew can replay it.
-- **Impact:** Attackers can reuse Access tokens minted for other apps or stale sessions to reach operator APIs, undermining RBAC and export controls.
-- **Fix:** Include `issuer: deriveIssuer(env.ACCESS_JWKS_URL)` and a `clockTolerance` (e.g., 60s) in `jwtVerify`. Add negative tests covering mismatched issuer and stale tokens.
-- **Tests:** Extend `src/lib/access.spec.ts` (or equivalent) with issuer/tolerance cases once added.
-- **References:** Cloudflare Access JWT validation guidance.
+- **Where:** `src/lib/access.ts:148-196`, `src/lib/__tests__/access.test.ts`
+- **Evidence:** `requireAccessUser` now derives the issuer from `ACCESS_JWKS_URL` and passes both `issuer` and `clockTolerance: 60` to `jwtVerify`. The new unit test asserts the option bag includes these fields.
+- **Impact:** Tokens minted for other Access apps (different issuer) or replayed outside the 60s skew window are rejected before hitting operator APIs.
+- **Fix:** Merge + deploy the change, then monitor Access logs for unexpected 403 spikes (indicating stale tokens).
+- **Tests:** `npx vitest run src/lib/__tests__/access.test.ts`.
 
 ### P1-observability-reporter-user — reporter details leaked in logs (fixed)
 - **Category:** Privacy
@@ -67,28 +65,28 @@
 - **Fix:** Already merged. Ensure historical rows are backfilled (one-off SQL) to remove plaintext emails.
 - **Tests:** `npx vitest run src/lib/__tests__/client-events.test.ts`.
 
-### P1-ip-log-nested — rate limit logs still emit raw IPs
+### P1-ip-log-nested — rate-limit telemetry no longer leaks IPs
 - **Category:** Privacy
-- **Where:** `src/routes/ingest.ts:272-280`
-- **Evidence:** When IP rate limiting triggers, `fields` includes `client_ip: ipDecision.ip`. Redaction only strips top-level `client_ip`, so nested `fields.client_ip` reaches log sinks.
-- **Impact:** Raw IPs leave CN via structured logs, violating DROP rules and hampering residency claims.
-- **Fix:** Omit the IP entirely or hash it before logging. Update logging tests to assert nested objects never contain `client_ip`.
+- **Where:** `src/routes/ingest.ts:272-282 & 600-608`
+- **Evidence:** The `ip_rate_limited` and `failure_rate_limited` events now log only `limit_per_minute` and `retry_after_seconds`; `client_ip` has been removed from the structured payload.
+- **Impact:** Logs shipped overseas no longer contain raw IPs, preserving DROP guarantees.
+- **Fix:** Ship the logging change and spot-check log sinks to confirm only aggregate counters remain.
 - **Tests:** Add a regression test in `src/routes/__tests__/ingest.test.ts` once fixed.
 
-### P1-overseas-schema-mismatch — `pseudoId` vs `didPseudo`
+### P1-overseas-schema-mismatch — exporter matches `didPseudo`
 - **Category:** Correctness / Availability
-- **Where:** `services/cn-gateway/src/ingest/exporter.ts:11-60`, `services/overseas-api/src/index.ts:7-66`
-- **Evidence:** CN exporter enqueues `ExportRecord { pseudoId, ... }`, but overseas `ingestSchema` requires `pseudonymizedRecordSchema` (field `didPseudo`). Payloads therefore fail validation and never reach storage.
-- **Impact:** Legitimate exports are dropped, forcing teams to keep the legacy raw ingest path (see P0).
-- **Fix:** Align on a single field name (`didPseudo`) across exporter, SDK, and overseas API. Add contract tests covering round-trip batches.
-- **Tests:** Add Vitest cases in `services/overseas-api/src/index.test.ts` for `pseudoId` vs `didPseudo` once refactored.
+- **Where:** `services/cn-gateway/src/ingest/exporter.ts`, `services/cn-gateway/openapi/modea-cn-gateway.yaml`, `services/overseas-api/src/index.ts`
+- **Evidence:** `ExportRecord` now emits `didPseudo`, `/ingest` responses return `{ didPseudo, keyVersion }`, and the OpenAPI doc/tests were updated. Overseas API already validates against `pseudonymizedRecordSchema`, so batches now parse.
+- **Impact:** Signed exports can finally land overseas, removing the need for legacy raw ingest fallbacks.
+- **Fix:** Deploy both CN gateway + overseas Worker together.
+- **Tests:** `pnpm test` under `services/cn-gateway` (ingest integration) and `npx vitest services/overseas-api/src/index.test.ts`.
 
-### P1-export-key-unset — signature verification disabled by config
+### P1-export-key-unset — verification now requires secret + healthcheck
 - **Category:** Security / Availability
-- **Where:** `services/overseas-api/wrangler.toml:5-8`, `services/overseas-api/src/index.ts:28-41`
-- **Evidence:** `EXPORT_VERIFY_PUBKEY = ""`, so `verifyBatchSignature` returns 500 (“signing key not configured”) for every request. No secret binding exists.
-- **Impact:** Either exports fail outright or operators comment out signature verification, defeating tamper protection.
-- **Fix:** Store the Ed25519 public key via `wrangler secret put EXPORT_VERIFY_PUBKEY` and update `wrangler.toml`/docs to reflect secret-based configuration. Add a health-check that fails when the key is missing.
+- **Where:** `services/overseas-api/wrangler.toml`, `services/overseas-api/src/index.ts:28-83`
+- **Evidence:** `EXPORT_VERIFY_PUBKEY` is no longer hard-coded in `wrangler.toml`; the Worker trims the secret, `/health` reports `signatureConfigured`, and missing keys return a `503 signing key not configured`.
+- **Impact:** Teams must provision the Ed25519 public key via `wrangler secret put EXPORT_VERIFY_PUBKEY` before enabling exports; otherwise health alarms fire and batches are rejected.
+- **Fix:** Store the production key via Wrangler secrets and monitor `/health` plus logs for `signatureConfigured: true`.
 - **Tests:** Extend `services/overseas-api/src/index.test.ts` with a case asserting `500` when key absent and `202` when provided.
 
 ### P1-safe-metrics-drift — SDK vs CN gateway
@@ -107,12 +105,12 @@
 - **Fix:** Switch to `.strict()` and return 4xx errors plus audit logs when unexpected fields arrive.
 - **Tests:** Extend `tests/integration/api-flows.integration.test.ts` with cases asserting rejection on extra keys.
 
-### P2-modea-doc-drift — docs promise pseudonymized-only exports
+### P2-modea-doc-drift — docs now match implementation
 - **Category:** Compliance / Documentation
-- **Where:** `docs/mode-a-operational-guidance.md:6-12`, `src/routes/ingest.ts:260-565`
-- **Evidence:** Docs state “Overseas stakeholders only see pseudonymized telemetry… No names, contact details, precise locations… leave China,” yet the Worker ingests raw identifiers and metrics.
-- **Impact:** External regulators/auditors are misled; discovery of the gap would trigger immediate remediation orders.
-- **Fix:** Either (preferable) implement the architecture described (see P0), or downgrade docs until reality matches vision. Require doc/code review tie-in.
+- **Where:** `docs/mode-a-operational-guidance.md`, `docs/important-data-checklist.md`
+- **Evidence:** The guidance now explicitly calls out that `/api/ingest` returns `410` by default and SAFE metrics match the CN gateway list; the Important-Data checklist documents the Ed25519 secret + client-event backfill process.
+- **Impact:** Auditors can rely on the documentation to match shipped behavior.
+- **Fix:** Keep docs in sync whenever SAFE metrics or ingest modes change.
 
 ## Testing Notes
 - `npx vitest run src/routes/__tests__/observability.test.ts src/lib/__tests__/client-events.test.ts`

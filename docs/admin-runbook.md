@@ -10,6 +10,10 @@
   - **Access:** Any authenticated user.  
   - **Behaviour:** Mirrors the admin overview payload but scopes tenants and operations to the caller's device scope.
 
+- `/api/admin/client-events/backfill`  
+  - **Access:** Admin role required.  
+  - **Behaviour:** Re-hashes up to 250 `client_events.user_email` rows per call using the current `CLIENT_EVENT_TOKEN_SECRET`. Invoke repeatedly until `{ "status": "complete" }` before deploying Worker changes that rely on hashed emails.
+
 ### Notes
 
 - Both endpoints require Cloudflare Access-authenticated requests (`requireAccessUser`).  

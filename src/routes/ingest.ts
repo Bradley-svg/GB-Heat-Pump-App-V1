@@ -27,6 +27,7 @@ import {
 const DEVICE_KEY_HEADER = "X-GREENBRO-DEVICE-KEY";
 const SIGNATURE_HEADER = "X-GREENBRO-SIGNATURE";
 const TIMESTAMP_HEADER = "X-GREENBRO-TIMESTAMP";
+const RAW_INGEST_ENABLED_VALUES = new Set(["1", "true", "yes", "on"]);
 const INGEST_ROUTE = "/api/ingest";
 const HEARTBEAT_ROUTE = "/api/heartbeat";
 
@@ -269,12 +270,19 @@ export async function handleIngest(req: Request, env: Env, profileId: string) {
     return json({ error: "Origin not allowed" }, { status: 403 });
   }
 
+  if (!isRawIngestEnabled(env)) {
+    await logAndRecordEarlyExit(req, env, INGEST_ROUTE, 410, t0, log, "ingest.raw_disabled", {
+      fields: { reason: "raw_ingest_disabled" },
+      level: "info",
+    });
+    return withCors(req, env, json({ error: "raw_ingest_disabled" }, { status: 410 }), cors);
+  }
+
   const ipDecision = await checkIpRateLimit(req, env, INGEST_ROUTE);
   if (ipDecision?.limited) {
     await logAndRecordEarlyExit(req, env, INGEST_ROUTE, 429, t0, log, "ingest.ip_rate_limited", {
       fields: {
         reason: "ip_rate_limited",
-        client_ip: ipDecision.ip,
         limit_per_minute: ipDecision.limit,
         retry_after_seconds: ipDecision.retryAfterSeconds,
       },
@@ -611,7 +619,6 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
     await logAndRecordEarlyExit(req, env, HEARTBEAT_ROUTE, 429, t0, log, "heartbeat.ip_rate_limited", {
       fields: {
         reason: "ip_rate_limited",
-        client_ip: ipDecision.ip,
         limit_per_minute: ipDecision.limit,
         retry_after_seconds: ipDecision.retryAfterSeconds,
       },
@@ -827,4 +834,8 @@ export async function handleHeartbeat(req: Request, env: Env, profileId: string)
     });
     return withCors(req, env, json({ error: "DB error" }, { status: 500 }), cors);
   }
+}
+function isRawIngestEnabled(env: Env): boolean {
+  const raw = typeof env.ALLOW_RAW_INGEST === "string" ? env.ALLOW_RAW_INGEST.trim().toLowerCase() : "";
+  return RAW_INGEST_ENABLED_VALUES.has(raw);
 }

@@ -63,12 +63,12 @@ jobs:
       - name: Forbidden fields scan
         id: forbidden
         continue-on-error: true
-        run: node .github/scripts/forbidden-fields-lint.js
+        run: node SCRIPTS/forbidden-fields-lint.js --json
 
       - name: PII regex scan
         id: pii
         continue-on-error: true
-        run: node .github/scripts/pii-regex-scan.js
+        run: node SCRIPTS/pii-regex-scan.js --json
 
       - name: Prepare guard summary
         if: always()

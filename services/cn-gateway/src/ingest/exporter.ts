@@ -9,7 +9,7 @@ import { getPool } from "../db/pool.js";
 import type { TelemetryPayload } from "../validators/common.js";
 
 export interface ExportRecord {
-  pseudoId: string;
+  didPseudo: string;
   seq: number;
   timestamp: string;
   metrics: TelemetryPayload["metrics"];

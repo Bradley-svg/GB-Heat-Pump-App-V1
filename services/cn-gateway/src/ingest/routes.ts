@@ -86,7 +86,7 @@ async function ingestHandler(
 
     const mapping = await persistMapping(sanitized.deviceId, didPseudo, keyVersion);
     opts.exporter.enqueue({
-      pseudoId: mapping.did_pseudo,
+      didPseudo: mapping.did_pseudo,
       seq: sanitized.seq,
       timestamp: sanitized.timestamp,
       metrics: sanitized.metrics,
@@ -95,7 +95,7 @@ async function ingestHandler(
 
     reply.code(202).send({
       status: "queued",
-      pseudoId: mapping.did_pseudo,
+      didPseudo: mapping.did_pseudo,
       keyVersion
     });
   } catch (err) {

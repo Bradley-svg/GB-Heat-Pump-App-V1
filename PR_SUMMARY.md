@@ -1,14 +1,15 @@
 # PR Summary
 
 ## What Changed
-- Masked client error reporting logs via `sanitizeReporterUser`, preventing reporter emails/roles from leaving CN (`src/routes/observability.ts`, tests in `src/routes/__tests__/observability.test.ts`).
-- Pseudonymized `client_events.user_email` by hashing with `CLIENT_EVENT_TOKEN_SECRET`, plus unit tests covering deterministic output (`src/lib/client-events.ts`, `src/lib/__tests__/client-events.test.ts`).
-- Documented audit results across SBOM/Risk/ModeA checklists + refreshed findings artifacts.
+- **Sunsetted raw `/api/ingest`** so overseas Worker now returns `410 raw_ingest_disabled` unless `ALLOW_RAW_INGEST` is explicitly set; CN gateway exporter/REST responses now speak `didPseudo` end-to-end and the overseas Worker requires a secret-backed `EXPORT_VERIFY_PUBKEY` (with `/health` surfacing `signatureConfigured`).
+- **Hardened auth/logging/privacy:** `requireAccessUser` now enforces issuer + 60s clock tolerance, rate-limit logs no longer include nested `client_ip`, and a new admin endpoint (`POST /api/admin/client-events/backfill`) re-hashes legacy `client_events.user_email` rows so the Worker + DB remain aligned.
+- **Guardrails + docs:** Mode A scanners run via the dedicated workflow and `full-ci`, the Important-Data checklist covers Ed25519 + client-event controls, and the Mode A guidance reflects the disabled raw ingest + SAFE metric reality.
 
 ## Tests
-- `npx vitest run src/routes/__tests__/observability.test.ts src/lib/__tests__/client-events.test.ts`
+- `npx vitest run src/routes/__tests__/ingest.test.ts src/lib/__tests__/client-events.test.ts src/routes/__tests__/observability.test.ts src/lib/__tests__/access.test.ts src/routes/__tests__/client-events-admin.test.ts`
+- `npx vitest run services/overseas-api/src/index.test.ts`
 
 ## Follow-Ups
-1. Remove the raw `/api/ingest` code path and require pseudonymized batches end-to-end (see P0).
-2. Harden Cloudflare Access verification (issuer + clock tolerance) and align exporter vs overseas schemas before enabling signature-only ingest.
-3. Backfill hashed values for existing `client_events.user_email` rows and deploy the Worker so the new masking takes effect.
+1. Decide whether additional metrics (e.g., `alerts`, `firmware_version_major_minor`) should join the SAFE list or be removed from SDKs entirely.
+2. Assign ownership for rotating the Ed25519 verification key + Wrangler secret whenever CN gateway rotates its signing key.
+3. Provide the corrected Mandarin privacy notice so the operator doc matches the now-enforced architecture.

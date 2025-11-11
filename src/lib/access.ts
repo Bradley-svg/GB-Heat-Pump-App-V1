@@ -16,6 +16,7 @@ const DISABLED_TOKENS = new Set(["0", "false", "off", "no"]);
 const ENABLED_TOKENS = new Set(["1", "true", "on", "yes"]);
 const ALLOWED_ROLES: ReadonlyArray<User["roles"][number]> = ["admin", "client", "contractor"];
 const DEV_SHIM_ENVIRONMENTS = new Set(["development", "dev", "local"]);
+const ACCESS_JWT_CLOCK_TOLERANCE_SECONDS = 60;
 
 function cacheRequestUser(req: Request, user: User | null) {
   requestUserCache.set(req, user);
@@ -148,14 +149,26 @@ export async function requireAccessUser(
   const jwt = req.headers.get("Cf-Access-Jwt-Assertion");
   const hasAccessJwt = Boolean(jwt);
   if (jwt) {
+    const log = loggerForRequest(req, { scope: "access" });
+    const issuer = deriveIssuerFromJwksUrl(env.ACCESS_JWKS_URL);
+    if (!issuer) {
+      log.error("access.invalid_jwks_url", {
+        jwks_url: env.ACCESS_JWKS_URL ?? null,
+      });
+      cacheRequestUser(req, null);
+      return null;
+    }
     try {
-      const { payload } = await jwtVerify(jwt, getJwks(env), { audience: env.ACCESS_AUD });
+      const { payload } = await jwtVerify(jwt, getJwks(env), {
+        audience: env.ACCESS_AUD,
+        issuer,
+        clockTolerance: ACCESS_JWT_CLOCK_TOLERANCE_SECONDS,
+      });
       const user = deriveUserFromClaims(payload as JWTPayload);
       await syncAccessUserState(env, req, user);
       cacheRequestUser(req, user);
       return user;
     } catch (error) {
-      const log = loggerForRequest(req, { scope: "access" });
       const decoded = safeDecodeJwt(jwt);
       const reason = error instanceof Error ? error.message : String(error);
       const headerEmail = req.headers.get("Cf-Access-Authenticated-User-Email");
@@ -304,4 +317,16 @@ function normalizeRoles(roles: string[]): User["roles"] {
 
 function normalizeClientIds(clientIds: string[]): string[] {
   return clientIds.map((id) => id.trim()).filter((id) => id.length > 0);
+}
+
+function deriveIssuerFromJwksUrl(jwksUrl?: string): string | null {
+  if (typeof jwksUrl !== "string") return null;
+  const trimmed = jwksUrl.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.origin;
+  } catch {
+    return null;
+  }
 }

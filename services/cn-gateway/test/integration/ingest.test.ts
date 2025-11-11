@@ -49,7 +49,7 @@ describe("POST /ingest", () => {
     expect(response.statusCode).toBe(202);
     const body = response.json();
     expect(body.status).toBe("queued");
-    expect(body.pseudoId).toHaveLength(22);
+    expect(body.didPseudo).toHaveLength(22);
     await new Promise((resolve) => setTimeout(resolve, 300));
     await app.close();
     expect(exportRequests.length).toBeGreaterThan(0);

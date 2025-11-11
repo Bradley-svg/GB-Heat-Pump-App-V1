@@ -5,4 +5,4 @@ compatibility_date = "2024-05-20"
 [vars]
 ACCESS_AUD = "modea-dashboard"
 ACCESS_JWKS_URL = "https://bradleyayliffl.cloudflareaccess.com/cdn-cgi/access/certs"
-EXPORT_VERIFY_PUBKEY = ""
+# EXPORT_VERIFY_PUBKEY is provided via `wrangler secret put EXPORT_VERIFY_PUBKEY`

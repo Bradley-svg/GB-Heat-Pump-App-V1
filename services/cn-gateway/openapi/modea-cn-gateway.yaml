@@ -16,12 +16,12 @@ components:
       $ref: ../src/validators/telemetry.schema.json
     IngestResponse:
       type: object
-      required: [status, pseudoId, keyVersion]
+      required: [status, didPseudo, keyVersion]
       properties:
         status:
           type: string
           enum: [queued]
-        pseudoId:
+        didPseudo:
           type: string
           description: Pseudonymous identifier (22-24 characters).
         keyVersion:
@@ -41,9 +41,9 @@ components:
           type: array
           items:
             type: object
-            required: [pseudoId, seq, timestamp, metrics, keyVersion]
+            required: [didPseudo, seq, timestamp, metrics, keyVersion]
             properties:
-              pseudoId:
+              didPseudo:
                 type: string
               seq:
                 type: integer
