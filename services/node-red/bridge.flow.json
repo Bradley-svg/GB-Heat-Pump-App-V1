@@ -1,0 +1,171 @@
+[
+  {
+    "id": "f1c6c0a8a2a6c1d8",
+    "type": "tab",
+    "label": "GreenBro MQTT -> HTTPS bridge",
+    "disabled": false,
+    "info": "Imports telemetry from MQTT and forwards it to the Cloudflare Worker ingest endpoints."
+  },
+  {
+    "id": "mqtt-broker-config",
+    "type": "mqtt-broker",
+    "name": "Factory MQTT",
+    "broker": "mqtt.example.com",
+    "port": "8883",
+    "clientid": "greenbro-bridge",
+    "usetls": false,
+    "compatmode": false,
+    "keepalive": "60",
+    "cleansession": true,
+    "birthTopic": "",
+    "birthQos": "0",
+    "birthRetain": "false",
+    "birthPayload": "",
+    "closeTopic": "",
+    "closeQos": "0",
+    "closeRetain": "false",
+    "closePayload": ""
+  },
+  {
+    "id": "telemetry-mqtt",
+    "type": "mqtt in",
+    "z": "f1c6c0a8a2a6c1d8",
+    "name": "Telemetry feed",
+    "topic": "greenbro/${profileId}/telemetry",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "mqtt-broker-config",
+    "x": 160,
+    "y": 120,
+    "wires": [
+      [
+        "telemetry-map"
+      ]
+    ]
+  },
+  {
+    "id": "telemetry-map",
+    "type": "function",
+    "z": "f1c6c0a8a2a6c1d8",
+    "name": "Build ingest payload",
+    "func": "// Ensure the Node-RED function context exposes the crypto module by adding\n// `functionGlobalContext: { crypto: require('crypto') }` to settings.js.\nconst crypto = global.get('crypto');\nif (!crypto) {\n    node.error(\"crypto module not available; add it to functionGlobalContext\");\n    return null;\n}\nconst config = env.get('GREENBRO_BRIDGE') || {};\nconst profileId = config.profileId || (msg.topic || '').split('/')[1] || 'demo';\nconst workerBase = (config.workerBase || 'https://gb-heat-pump-app-v1.example.workers.dev').replace(/\\/$/, '');\nconst deviceKey = config.deviceKey || env.get('GREENBRO_DEVICE_KEY');\nif (!deviceKey) {\n    node.error('Missing GREENBRO_DEVICE_KEY in environment or bridge config');\n    return null;\n}\nconst body = msg.payload || {};\nconst metrics = body.metrics || {};\nconst faults = Array.isArray(body.faults) ? body.faults : [];\nconst envelope = {\n    device_id: body.device_id || config.deviceId || 'demo-device',\n    ts: body.ts || new Date().toISOString(),\n    metrics,\n    faults,\n    rssi: typeof body.rssi === 'number' ? body.rssi : null\n};\nconst timestamp = envelope.ts;\nconst signaturePayload = `${timestamp}.${JSON.stringify(envelope)}`;\nconst deviceKeyHash = crypto.createHash('sha256').update(deviceKey).digest();\nconst signature = crypto.createHmac('sha256', deviceKeyHash).update(signaturePayload).digest('hex');\nmsg.headers = {\n    'Content-Type': 'application/json',\n    'X-GREENBRO-DEVICE-KEY': deviceKey,\n    'X-GREENBRO-TIMESTAMP': timestamp,\n    'X-GREENBRO-SIGNATURE': signature\n};\nmsg.url = `${workerBase}/api/ingest/${profileId}`;\nmsg.method = 'POST';\nmsg.payload = envelope;\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 440,
+    "y": 120,
+    "wires": [
+      [
+        "telemetry-http"
+      ]
+    ]
+  },
+  {
+    "id": "telemetry-http",
+    "type": "http request",
+    "z": "f1c6c0a8a2a6c1d8",
+    "name": "POST /api/ingest",
+    "method": "use",
+    "ret": "txt",
+    "paytoqs": "ignore",
+    "url": "",
+    "persist": false,
+    "authType": "",
+    "x": 710,
+    "y": 120,
+    "wires": [
+      [
+        "telemetry-log"
+      ]
+    ]
+  },
+  {
+    "id": "telemetry-log",
+    "type": "debug",
+    "z": "f1c6c0a8a2a6c1d8",
+    "name": "Ingest response",
+    "active": true,
+    "console": false,
+    "tostatus": true,
+    "complete": "response",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 980,
+    "y": 120,
+    "wires": []
+  },
+  {
+    "id": "heartbeat-mqtt",
+    "type": "mqtt in",
+    "z": "f1c6c0a8a2a6c1d8",
+    "name": "Heartbeat feed",
+    "topic": "greenbro/${profileId}/heartbeat",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "mqtt-broker-config",
+    "x": 150,
+    "y": 220,
+    "wires": [
+      [
+        "heartbeat-map"
+      ]
+    ]
+  },
+  {
+    "id": "heartbeat-map",
+    "type": "function",
+    "z": "f1c6c0a8a2a6c1d8",
+    "name": "Build heartbeat payload",
+    "func": "const config = env.get('GREENBRO_BRIDGE') || {};\nconst workerBase = (config.workerBase || 'https://gb-heat-pump-app-v1.example.workers.dev').replace(/\\/$/, '');\nconst profileId = config.profileId || (msg.topic || '').split('/')[1] || 'demo';\nconst body = msg.payload || {};\nconst envelope = {\n    device_id: body.device_id || config.deviceId || 'demo-device',\n    ts: body.ts || new Date().toISOString(),\n    rssi: typeof body.rssi === 'number' ? body.rssi : null\n};\nmsg.url = `${workerBase}/api/heartbeat/${profileId}`;\nmsg.method = 'POST';\nmsg.headers = { 'Content-Type': 'application/json' };\nmsg.payload = envelope;\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 450,
+    "y": 220,
+    "wires": [
+      [
+        "heartbeat-http"
+      ]
+    ]
+  },
+  {
+    "id": "heartbeat-http",
+    "type": "http request",
+    "z": "f1c6c0a8a2a6c1d8",
+    "name": "POST /api/heartbeat",
+    "method": "use",
+    "ret": "txt",
+    "paytoqs": "ignore",
+    "url": "",
+    "persist": false,
+    "authType": "",
+    "x": 720,
+    "y": 220,
+    "wires": [
+      [
+        "heartbeat-log"
+      ]
+    ]
+  },
+  {
+    "id": "heartbeat-log",
+    "type": "debug",
+    "z": "f1c6c0a8a2a6c1d8",
+    "name": "Heartbeat response",
+    "active": true,
+    "console": false,
+    "tostatus": true,
+    "complete": "response",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 990,
+    "y": 220,
+    "wires": []
+  }
+]

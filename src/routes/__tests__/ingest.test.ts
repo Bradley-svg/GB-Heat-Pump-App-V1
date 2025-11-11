@@ -555,6 +555,39 @@ describe("handleIngest", () => {
     expect(verifyDeviceKeyMock).not.toHaveBeenCalled();
   });
 
+  it("returns 500 when database operations fail", async () => {
+    verifyDeviceKeyMock.mockResolvedValue({ ok: true, deviceKeyHash: DEVICE_KEY_HASH });
+
+    const env = baseEnv();
+    const defaultPrepare = env.DB.prepare as unknown as vi.Mock;
+    env.DB.prepare = vi.fn((sql: string) => {
+      if (sql.includes("SELECT profile_id FROM devices")) {
+        return {
+          bind: vi.fn(() => ({
+            first: vi.fn().mockResolvedValue({ profile_id: "demo" })
+          }))
+        } as any;
+      }
+
+      const statement = defaultPrepare(sql);
+      if (sql.startsWith("INSERT INTO telemetry")) {
+        statement.run = vi.fn().mockRejectedValueOnce(new Error("insert failed"));
+      }
+      return statement;
+    }) as any;
+
+    const payload = {
+      device_id: "dev-db-error",
+      metrics: { supplyC: 25 },
+    };
+
+    const req = await buildSignedRequest("demo", payload);
+    const res = await handleIngest(req, env, "demo");
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "DB error" });
+  });
+
   it("throttles repeated failures when failure limit is exceeded", async () => {
     const env = baseEnv({ INGEST_FAILURE_LIMIT_PER_MIN: "2" });
     const defaultPrepare = env.DB.prepare as any;

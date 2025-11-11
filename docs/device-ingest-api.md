@@ -119,3 +119,8 @@ To re-send rejected telemetry after correcting a transient fault, assign a new p
 - Expired replay nonces are pruned continuously; no client action is required.
 - Firmware should monitor `server_time` from heartbeat responses to detect clock drift and ensure the signature timestamp remains within tolerance.
 
+## MODBUS Helpers
+
+Factory controllers that originate from MODBUS registers can reuse the mapper under `services/modbus/mapper.ts`. The helper converts signed 16-bit registers into the `TelemetryMetrics` shape (supply/return/tank temperatures, ambient, flow, compressor current, EEV steps, power, mode, defrost) and provides an inverse function for writable registers. Review `services/modbus/mapper.test.ts` for sample snapshots, then feed the resulting JSON directly into the HTTPS ingest payloads above.
+
+
