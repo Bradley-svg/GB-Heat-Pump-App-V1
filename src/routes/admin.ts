@@ -1,12 +1,12 @@
 import type { Env, User } from "../env";
 import { requireAccessUser, userIsAdmin } from "../lib/access";
 import { buildDeviceLookup, buildDeviceScope, presentDeviceId } from "../lib/device";
-import { hashUserEmailForStorage } from "../lib/client-events";
 import { json } from "../utils/responses";
 import { andWhere, nowISO } from "../utils";
 import { AdminOverviewQuerySchema } from "../schemas/admin";
 import { validationErrorResponse } from "../utils/validation";
 import { loggerForRequest } from "../utils/logging";
+import { runClientEventsBackfill } from "../jobs/client-events-backfill";
 import {
   OPS_METRICS_WINDOW_DAYS,
   opsMetricsWindowStart,
@@ -176,46 +176,21 @@ export async function handleFleetAdminOverview(req: Request, env: Env) {
   return buildOverviewResponse(req, env, user, "/api/fleet/admin-overview");
 }
 
-const CLIENT_EVENT_BACKFILL_LIMIT = 250;
-
 export async function handleClientEventsBackfill(req: Request, env: Env) {
   const user = await requireAccessUser(req, env);
   if (!user) return json({ error: "Unauthorized" }, { status: 401 });
   if (!userIsAdmin(user)) return json({ error: "Forbidden" }, { status: 403 });
 
-  const secret = typeof env.CLIENT_EVENT_TOKEN_SECRET === "string" ? env.CLIENT_EVENT_TOKEN_SECRET.trim() : "";
-  if (!secret) {
-    return json({ error: "CLIENT_EVENT_TOKEN_SECRET not configured" }, { status: 503 });
-  }
-
   const log = loggerForRequest(req, { route: "/api/admin/client-events/backfill" });
-  const select = env.DB.prepare(
-    `SELECT id, user_email
-       FROM client_events
-      WHERE user_email IS NOT NULL
-        AND user_email NOT LIKE 'sha256:%'
-      LIMIT ?`,
-  );
-  const pending = await select.bind(CLIENT_EVENT_BACKFILL_LIMIT).all<{ id: string; user_email: string }>();
-  const rows = pending.results ?? [];
-  if (!rows.length) {
-    return json({ status: "complete", updated: 0 });
+  try {
+    const summary = await runClientEventsBackfill(env, { logger: log });
+    return json(summary);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === "CLIENT_EVENT_TOKEN_SECRET not configured") {
+      return json({ error: message }, { status: 503 });
+    }
+    log.error("client_events.backfill_failed", { error });
+    return json({ error: "Client event backfill failed" }, { status: 500 });
   }
-
-  const update = env.DB.prepare(`UPDATE client_events SET user_email = ? WHERE id = ?`);
-  let updated = 0;
-  for (const row of rows) {
-    const hashed = await hashUserEmailForStorage(row.user_email, secret);
-    if (!hashed) continue;
-    await update.bind(hashed, row.id).run();
-    updated += 1;
-  }
-
-  log.info("client_events.backfill_run", { processed: rows.length, updated });
-  return json({
-    status: "ok",
-    processed: rows.length,
-    updated,
-    has_more: rows.length === CLIENT_EVENT_BACKFILL_LIMIT,
-  });
 }

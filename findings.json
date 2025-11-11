@@ -130,14 +130,17 @@
     "id": "P2-ingest-strip-silent",
     "severity": "P2",
     "category": "Correctness",
-    "status": "open",
+    "status": "fixed",
     "files": [
-      "src/schemas/ingest.ts:17-30"
+      "src/schemas/ingest.ts:17-30",
+      "src/routes/__tests__/ingest.test.ts:186-208"
     ],
-    "evidence": "Telemetry schema uses `.strip()`, so unexpected keys are silently dropped rather than rejected/audited.",
-    "impact": "Firmware bugs or DROP fields go unnoticed because the API still returns 2xx, eroding compliance guarantees.",
-    "fix": "Switch to `.strict()` and emit 4xx + audit log when payloads include unknown keys.",
-    "tests": []
+    "evidence": "Telemetry schema now ends with `.strict()` instead of `.strip()`, and the regression test `rejects payloads that include unexpected metric keys` asserts a 400 plus detail message for the rogue key.",
+    "impact": "Unexpected/DROP fields are rejected with 4xx responses, so firmware bugs surface immediately instead of being silently truncated overseas.",
+    "fix": "Deploy the `.strict()` schema change and keep the new regression test. Watch `ingest.validation_failed` metrics while firmware teams clean up offending payloads.",
+    "tests": [
+      "npx vitest run src/routes/__tests__/ingest.test.ts"
+    ]
   },
   {
     "id": "P2-modea-doc-drift",

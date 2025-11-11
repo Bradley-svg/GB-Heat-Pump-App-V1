@@ -1,5 +1,3 @@
-﻿# Open Questions
+# Open Questions
 
-1. Which owners (Ops + Compliance) will sign off the dual-control SOP for the CN mapping table and re-identification workflow?
-2. When can we safely switch the Worker telemetry schema to `.strict()` validation without breaking existing devices?
-3. Who is scheduling the initial run of `POST /api/admin/client-events/backfill` so legacy plaintext emails are purged before the next deploy?
+None at this time — dual-control SOP, `.strict()` ingestion validation, automated client-event backfill, and the Ed25519 rotation cadence/runbook are all documented and implemented. Add new questions here when new decisions are needed.

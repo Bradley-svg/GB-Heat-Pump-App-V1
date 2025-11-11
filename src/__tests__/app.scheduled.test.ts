@@ -5,6 +5,7 @@ import type { Env } from "../env";
 import type { Logger } from "../utils/logging";
 import * as logging from "../utils/logging";
 import * as retention from "../jobs/retention";
+import * as clientEventsBackfill from "../jobs/client-events-backfill";
 import * as signupFunnel from "../lib/signup-funnel";
 
 type ScheduledEvent = Parameters<(typeof app)["scheduled"]>[0];
@@ -242,6 +243,26 @@ describe("app.scheduled", () => {
     expect(env.DB.prepare).not.toHaveBeenCalledWith(
       expect.stringContaining("DELETE FROM ingest_nonces"),
     );
+  });
+
+  it("runs the client event backfill job when scheduled", async () => {
+    const { env } = createScheduledEnv();
+    const backfillSpy = vi.spyOn(clientEventsBackfill, "runClientEventsBackfill").mockResolvedValue({
+      status: "complete",
+      processed: 0,
+      updated: 0,
+      has_more: false,
+    });
+    const { spy } = mockSystemLogger();
+
+    await app.scheduled(
+      { cron: clientEventsBackfill.CLIENT_EVENT_BACKFILL_CRON } as ScheduledEvent,
+      env,
+      {} as ScheduledExecutionContext,
+    );
+
+    expect(backfillSpy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith({ task: "client-events-backfill-cron" });
   });
 
   it("evaluates the signup funnel when the alert cron fires", async () => {

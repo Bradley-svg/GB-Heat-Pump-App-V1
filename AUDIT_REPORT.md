@@ -27,7 +27,7 @@
 | P1-overseas-schema-mismatch | P1 | Fixed | CN exporter + API now agree on `didPseudo`; OpenAPI/docs/tests updated accordingly. |
 | P1-export-key-unset | P1 | Mitigated | `EXPORT_VERIFY_PUBKEY` must be supplied via Wrangler secret; `/health` reports config drift and missing keys return 503. |
 | P1-safe-metrics-drift | P1 | Fixed | SDK SAFE list now matches the CN gateway (removed `alerts`/`firmware_version_major_minor`). |
-| P2-ingest-strip-silent | P2 | Open | `.strip()` on Telemetry schema silently discards unexpected keys instead of rejecting. |
+| P2-ingest-strip-silent | P2 | Fixed | Telemetry schema now uses `.strict()`; unexpected metrics trigger 400s plus audit logs. |
 | P2-modea-doc-drift | P2 | Mitigated | Docs now state that raw `/api/ingest` is disabled by default and SAFE metrics match the CN gateway list.
 
 ## Detailed Findings
@@ -60,9 +60,9 @@
 ### P1-client-events-email-plaintext — `client_events` stored real emails (fixed)
 - **Category:** Privacy
 - **Where:** `src/lib/client-events.ts:15-78`, `src/lib/__tests__/client-events.test.ts:1-32`
-- **Evidence:** `recordClientEvent` now derives `hashedEmail = hashUserEmailForStorage(record.userEmail, env.CLIENT_EVENT_TOKEN_SECRET)` and stores `sha256:<digest>` instead of the raw email. Tests cover deterministic hashing and null cases.
-- **Impact:** Without the fix, every client event row exposed operator emails overseas. Hashing with a secret key keeps events linkable while meeting DROP requirements.
-- **Fix:** Already merged. Ensure historical rows are backfilled (one-off SQL) to remove plaintext emails.
+- **Evidence:** `recordClientEvent` now derives `hashedEmail = hashUserEmailForStorage(record.userEmail, env.CLIENT_EVENT_TOKEN_SECRET)` and stores `sha256:<digest>` instead of the raw email. Nightly cron `CLIENT_EVENT_BACKFILL_CRON` (see `src/jobs/client-events-backfill.ts`) plus the admin endpoint re-hash legacy rows until complete.
+- **Impact:** Without the fix, every client event row exposed operator emails overseas. Hashing with a secret key keeps events linkable while meeting DROP requirements, and the cron ensures D1 drifts are cleared automatically.
+- **Fix:** Already merged/deployed. Leave the cron enabled and keep the admin endpoint for manual, on-demand runs before deploys.
 - **Tests:** `npx vitest run src/lib/__tests__/client-events.test.ts`.
 
 ### P1-ip-log-nested — rate-limit telemetry no longer leaks IPs
@@ -97,13 +97,13 @@
 - **Fix:** Remove the non-SAFE metrics from SDK constants/schemas and keep the lists equal via unit tests/lints.
 - **Tests:** `npx vitest run packages/sdk-core` (SAFE list parity) plus the standard Worker suite.
 
-### P2-ingest-strip-silent — unexpected metrics quietly dropped
+### P2-ingest-strip-silent — unexpected metrics now rejected
 - **Category:** Correctness / Compliance
-- **Where:** `src/schemas/ingest.ts:17-30`
-- **Evidence:** Zod schema ends with `.strip()`, so unrecognized keys are silently removed. Operators receive `200 OK` even when devices send DROP/unsafe fields.
-- **Impact:** Device firmware bugs slip through; compliance team loses visibility because bad payloads are not rejected/audited.
-- **Fix:** Switch to `.strict()` and return 4xx errors plus audit logs when unexpected fields arrive.
-- **Tests:** Extend `tests/integration/api-flows.integration.test.ts` with cases asserting rejection on extra keys.
+- **Where:** `src/schemas/ingest.ts:17-30`, `src/routes/__tests__/ingest.test.ts:186-208`
+- **Evidence:** Telemetry schema now calls `.strict()` (no `.strip()`), so unknown keys raise a validation error. The new regression test `rejects payloads that include unexpected metric keys` asserts a 400 plus detail message referencing the rogue field.
+- **Impact:** Device firmware bugs and DROP violations surface immediately in logs/metrics instead of quietly landing in overseas storage.
+- **Fix:** Deploy the schema change and coordinate with firmware teams; the error payload already enumerates the offending field. Watch ops metrics for `ingest.validation_failed` spikes while firmware rolls out updates.
+- **Tests:** `npx vitest run src/routes/__tests__/ingest.test.ts`.
 
 ### P2-modea-doc-drift — docs now match implementation
 - **Category:** Compliance / Documentation
@@ -112,6 +112,13 @@
 - **Impact:** Auditors can rely on the documentation to match shipped behavior.
 - **Fix:** Keep docs in sync whenever SAFE metrics or ingest modes change.
 
+### Compliance guardrails — dual control & Ed25519 rotation runbook
+- **Category:** Compliance / Security
+- **Where:** `docs/dual-control-sop.md`, `docs/runbooks/ed25519-rotation.md`, `docs/important-data-checklist.md`
+- **Evidence:** A dedicated dual-control SOP now details two-person approval for accessing the CN mapping table; the Important-Data checklist links to it. A new runbook explains the Ed25519 signer/verification rotation cadence, Wrangler secret updates, and health-check evidence capture.
+- **Impact:** Reduces single-operator risk during re-identification and ensures Ed25519 keys are rotated at least annually with auditable proof.
+- **Fix:** Store these runbooks with release artifacts and require tickets to reference the SOP/runbook IDs whenever re-ID or key-rotation work is executed.
+
 ## Testing Notes
 - `npx vitest run src/routes/__tests__/observability.test.ts src/lib/__tests__/client-events.test.ts`
 - Repo-wide scans stored at `.tmp/scan-*.txt` (deleted post-run) using `rg` patterns mandated in the engagement brief.
@@ -119,10 +126,10 @@
 ## 90-Day Remediation Roadmap
 | Item | Owner | Window | Est. Hours (Opt / Likely / Pess) |
 | --- | --- | --- | --- |
-| Dual-control SOP for CN mapping table/re-ID | Ops Eng + Compliance | Days 0-30 | 12 / 20 / 30 |
-| Enforce `.strict()` telemetry validation (reject unknown metrics) | Worker Platform | Days 0-45 | 16 / 24 / 36 |
-| Schedule + verify client-event email backfill run | Platform Engineering + Data Eng | Days 15-45 | 8 / 12 / 20 |
-| Automate Ed25519 verification secret rotation logging (Wrangler secret updates tied to CN signer rotation) | Platform API Lead | Days 30-60 | 6 / 10 / 16 |
+| Instrument `.strict()` validation fallout + notify firmware owners on spikes | Worker Platform + Device PM | Days 0-30 | 8 / 12 / 20 |
+| Add CI coverage for Node-RED flow + MODBUS mapper fixtures | DX + QA | Days 15-45 | 10 / 16 / 24 |
+| Automate Ed25519 rotation evidence capture (store `/health` + ticket IDs) | Platform API Lead | Days 30-60 | 6 / 10 / 16 |
+| Quarterly dual-control audit sampling with checklist export | Compliance Lead | Days 45-75 | 8 / 12 / 18 |
 
 ## Notes & References
 - Mode A guardrail checklist refreshed in `MODEA_GUARDS_CHECKLIST.md`.

@@ -12,7 +12,8 @@
 
 - `/api/admin/client-events/backfill`  
   - **Access:** Admin role required.  
-  - **Behaviour:** Re-hashes up to 250 `client_events.user_email` rows per call using the current `CLIENT_EVENT_TOKEN_SECRET`. Invoke repeatedly until `{ "status": "complete" }` before deploying Worker changes that rely on hashed emails.
+  - **Behaviour:** Re-hashes up to 250 `client_events.user_email` rows per call using the current `CLIENT_EVENT_TOKEN_SECRET`. Normally the scheduled job handles this nightly, but invoke manually (repeat until `{ "status": "complete" }`) before sensitive deployments or after secret rotation.
+  - **Automation:** Cron `CLIENT_EVENT_BACKFILL_CRON` triggers `runClientEventsBackfill` every night at 02:45 UTC; monitor `client_events.backfill_run` logs for progress.
 
 ### Notes
 

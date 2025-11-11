@@ -27,7 +27,7 @@ export const TelemetryMetricsSchema = z
     mode: nullableString,
     defrost: nullableNumber,
   })
-  .strip();
+  .strict();
 
 export const TelemetryPayloadSchema = z
   .object({

@@ -129,6 +129,7 @@ describe("handleIngest", () => {
     expect(payload.error).toBe("Invalid JSON");
   });
 
+
   it("rejects payloads over 256KB when using multi-byte characters", async () => {
     const env = baseEnv();
     const multiByteChar = "😀";
@@ -179,101 +180,8 @@ describe("handleIngest", () => {
     expect(body.error).toBe("Invalid signature");
   });
 
-  it("returns 200 for a valid payload and drops unexpected metric keys", async () => {
-    verifyDeviceKeyMock.mockResolvedValue({ ok: true, deviceKeyHash: DEVICE_KEY_HASH });
-    claimDeviceIfUnownedMock.mockResolvedValue({ ok: true });
-
-    const telemetryBinds: unknown[][] = [];
-    const latestStateBinds: unknown[][] = [];
-    const selectFirst = vi.fn().mockResolvedValue({ profile_id: "demo" });
-    const countFirst = vi.fn().mockResolvedValue({ cnt: 0 });
-    const nonceDeleteRun = vi.fn().mockResolvedValue(undefined);
-    const deviceUpdateRun = vi.fn().mockResolvedValue(undefined);
-    const nonceInsertRun = vi.fn().mockResolvedValue(undefined);
-    const opsRun = vi.fn().mockResolvedValue(undefined);
-
+  it("rejects payloads that include unexpected metric keys", async () => {
     const env = baseEnv();
-    const defaultPrepare = env.DB.prepare as any;
-
-    env.DB.prepare = vi.fn((sql: string) => {
-      if (/^(?:PRAGMA|BEGIN|COMMIT|ROLLBACK)/i.test(sql)) {
-        return {
-          run: vi.fn().mockResolvedValue(undefined),
-        } as any;
-      }
-
-      if (isRateLimitCountQuery(sql)) {
-        return {
-          bind: vi.fn(() => ({
-            first: countFirst,
-          })),
-        } as any;
-      }
-
-      if (sql.includes("SELECT profile_id FROM devices")) {
-        return {
-          bind: vi.fn(() => ({
-            first: selectFirst,
-          })),
-        } as any;
-      }
-
-      if (sql.startsWith("DELETE FROM ingest_nonces")) {
-        return {
-          bind: vi.fn(() => ({
-            run: nonceDeleteRun,
-          })),
-        } as any;
-      }
-
-      if (sql.startsWith("INSERT INTO telemetry")) {
-        return {
-          bind: vi.fn((...args: unknown[]) => {
-            telemetryBinds.push(args);
-            return {
-              run: vi.fn().mockResolvedValue(undefined),
-            };
-          }),
-        } as any;
-      }
-
-      if (sql.startsWith("INSERT INTO latest_state")) {
-        return {
-          bind: vi.fn((...args: unknown[]) => {
-            latestStateBinds.push(args);
-            return {
-              run: vi.fn().mockResolvedValue(undefined),
-            };
-          }),
-        } as any;
-      }
-
-      if (sql.startsWith("UPDATE devices SET online=1")) {
-        return {
-          bind: vi.fn(() => ({
-            run: deviceUpdateRun,
-          })),
-        } as any;
-      }
-
-      if (sql.startsWith("INSERT INTO ingest_nonces")) {
-        return {
-          bind: vi.fn(() => ({
-            run: nonceInsertRun,
-          })),
-        } as any;
-      }
-
-      if (sql.startsWith("INSERT INTO ops_metrics")) {
-        return {
-          bind: vi.fn(() => ({
-            run: opsRun,
-          })),
-        } as any;
-      }
-
-      return defaultPrepare(sql);
-    });
 
     const payload = {
       device_id: "dev-123",
@@ -288,35 +196,14 @@ describe("handleIngest", () => {
 
     const res = await handleIngest(req, env, "demo");
 
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as any;
-    expect(body.ok).toBe(true);
-    expect(selectFirst).toHaveBeenCalled();
-    expect(countFirst).toHaveBeenCalled();
-    expect(nonceDeleteRun).toHaveBeenCalled();
-    expect(deviceUpdateRun).toHaveBeenCalled();
-    expect(nonceInsertRun).toHaveBeenCalled();
-    expect(opsRun).toHaveBeenCalled();
-
-    expect(telemetryBinds).toHaveLength(1);
-    const metricsJson = telemetryBinds[0]?.[2];
-    expect(typeof metricsJson).toBe("string");
-    const telemetryPayload = JSON.parse(metricsJson as string) as Record<string, unknown>;
-    expect(telemetryPayload).not.toHaveProperty("secretToken");
-    expect(telemetryPayload).toMatchObject({
-      supplyC: 45.2,
-      powerKW: 1.2,
-    });
-
-    expect(latestStateBinds).toHaveLength(1);
-    const payloadJson = latestStateBinds[0]?.[16];
-    expect(typeof payloadJson).toBe("string");
-    const latestPayload = JSON.parse(payloadJson as string) as Record<string, unknown>;
-    expect(latestPayload).not.toHaveProperty("secretToken");
-
-    expect(res.headers.get("access-control-allow-origin")).toBe("*");
-    const varyHeader = res.headers.get("vary");
-    expect(varyHeader && varyHeader.toLowerCase()).toBe("origin");
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as {
+      error: string;
+      details: Array<{ path: string; message: string }>;
+    };
+    expect(body.error).toBe("Validation failed");
+    expect(body.details.some((detail) => detail.message.includes("secretToken"))).toBe(true);
+    expect(verifyDeviceKeyMock).not.toHaveBeenCalled();
   });
 
   it("rejects disallowed origins before touching device auth", async () => {

@@ -13,6 +13,7 @@ import { expandAssetBase } from "./utils/asset-base";
 import { resolveLogoutReturn } from "./utils/return-url";
 import { handleR2Request } from "./r2";
 import { runTelemetryRetention, TELEMETRY_RETENTION_CRON } from "./jobs/retention";
+import { CLIENT_EVENT_BACKFILL_CRON, runClientEventsBackfill } from "./jobs/client-events-backfill";
 import { clearCronCursor, readCronCursor, writeCronCursor } from "./lib/cron-cursor";
 import { recordOpsMetric } from "./lib/ops-metrics";
 import { loadSignupFunnelSummary } from "./lib/signup-funnel";
@@ -306,6 +307,17 @@ export default {
         await runTelemetryRetention(env, { logger: retentionLog });
       } catch (error) {
         retentionLog.error("cron.retention.failed", { error });
+      }
+      return;
+    }
+
+    if (event.cron === CLIENT_EVENT_BACKFILL_CRON) {
+      const clientEventLog = systemLogger({ task: "client-events-backfill-cron" });
+      try {
+        const summary = await runClientEventsBackfill(env, { logger: clientEventLog });
+        clientEventLog.info("cron.client_events_backfill.summary", summary);
+      } catch (error) {
+        clientEventLog.error("cron.client_events_backfill.failed", { error });
       }
       return;
     }
