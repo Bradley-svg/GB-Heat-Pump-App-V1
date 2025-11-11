@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 
 
@@ -347,11 +347,11 @@ describe("handleClientErrorReport", () => {
 
       user: {
 
-        email: ADMIN_USER.email,
+        email: "a***n@example.com",
 
         roles: ADMIN_USER.roles,
 
-        client_ids: ADMIN_USER.clientIds,
+        client_ids_count: ADMIN_USER.clientIds.length,
 
       },
 
@@ -792,28 +792,50 @@ describe("handleClientEventReport", () => {
 
     expect(res.status).toBe(202);
 
-    expect(logger.warn).toHaveBeenCalledWith(
-
-      "auth.pending_logout.flush_failed",
-
-      expect.objectContaining({
-
-        metric: "greenbro.mobile.pending_logout.flush_failed",
-
-        metric_key: "mobile.pending_logout.flush_failed",
-
-        count: 1,
-
-        source: "mobile",
-
-        user_email: "a***n@example.com",
-
-        reason: "network down",
-
-      }),
-
-    );
-
+    expect(logger.warn).toHaveBeenCalledWith(
+
+
+
+      "auth.pending_logout.flush_failed",
+
+
+
+      expect.objectContaining({
+
+
+
+        metric: "greenbro.mobile.pending_logout.flush_failed",
+
+
+
+        metric_key: "mobile.pending_logout.flush_failed",
+
+
+
+        count: 1,
+
+
+
+        source: "mobile",
+
+
+
+        user_email: "a***n@example.com",
+
+
+
+        reason: "network down",
+
+
+
+      }),
+
+
+
+    );
+
+
+
     expect(recordClientEventMock).toHaveBeenCalledWith(
 
       expect.any(Object),

@@ -2,6 +2,7 @@ import { Router } from "itty-router";
 import { pseudonymizedRecordSchema } from "@greenbro/sdk-core";
 import { z } from "zod";
 import { verify } from "@noble/ed25519";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 const ingestSchema = z.object({
   batchId: z.string(),
@@ -15,9 +16,13 @@ const heartbeatSchema = z.object({
 
 const router = Router();
 const encoder = new TextEncoder();
+const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+const DEFAULT_CLOCK_TOLERANCE = 5;
 
 export interface Env {
   EXPORT_VERIFY_PUBKEY?: string;
+  ACCESS_AUD?: string;
+  ACCESS_JWKS_URL?: string;
 }
 
 export async function verifyBatchSignature(payload: unknown, signatureHeader: string, env: Env) {
@@ -35,9 +40,16 @@ export async function verifyBatchSignature(payload: unknown, signatureHeader: st
   }
 }
 
-router.get("/health", () => new Response(JSON.stringify({ status: "ok" }), { headers: { "Content-Type": "application/json" } }));
+router.get("/health", () =>
+  new Response(JSON.stringify({ status: "ok" }), { headers: { "Content-Type": "application/json" } }),
+);
 
 router.post("/api/ingest/:profileId", async (request, env: Env) => {
+  try {
+    await requireAccessJwt(request, env);
+  } catch (error) {
+    return toResponse(error);
+  }
   const token = request.headers.get("Authorization");
   if (!token) {
     return new Response("missing token", { status: 401 });
@@ -54,7 +66,12 @@ router.post("/api/ingest/:profileId", async (request, env: Env) => {
   );
 });
 
-router.post("/api/heartbeat/:profileId", async (request) => {
+router.post("/api/heartbeat/:profileId", async (request, env: Env) => {
+  try {
+    await requireAccessJwt(request, env);
+  } catch (error) {
+    return toResponse(error);
+  }
   const body = await request.json();
   const payload = heartbeatSchema.parse(body);
   return new Response(JSON.stringify({ status: "ok", keyVersion: payload.keyVersion }), {
@@ -67,6 +84,48 @@ router.all("*", () => new Response("not found", { status: 404 }));
 export default {
   fetch: (request: Request, env: Env, ctx: ExecutionContext) => router.handle(request, env, ctx),
 };
+
+async function requireAccessJwt(request: Request, env: Env) {
+  const token =
+    request.headers.get("CF-Access-Jwt-Assertion") ?? request.headers.get("cf-access-jwt-assertion");
+  if (!token) {
+    throw new Response("missing access assertion", { status: 401 });
+  }
+  const audience = env.ACCESS_AUD?.trim();
+  const jwksUrl = env.ACCESS_JWKS_URL?.trim();
+  if (!audience || !jwksUrl) {
+    throw new Response("access configuration incomplete", { status: 500 });
+  }
+  try {
+    await jwtVerify(token, getJwks(jwksUrl), {
+      audience,
+      issuer: deriveIssuer(jwksUrl),
+      clockTolerance: DEFAULT_CLOCK_TOLERANCE,
+    });
+  } catch (error) {
+    if (error instanceof Response) throw error;
+    throw new Response("invalid access token", { status: 403 });
+  }
+}
+
+function getJwks(url: string) {
+  if (!jwksCache.has(url)) {
+    jwksCache.set(url, createRemoteJWKSet(new URL(url)));
+  }
+  return jwksCache.get(url)!;
+}
+
+function deriveIssuer(jwksUrl: string): string {
+  const parsed = new URL(jwksUrl);
+  return parsed.origin;
+}
+
+function toResponse(error: unknown): Response {
+  if (error instanceof Response) {
+    return error;
+  }
+  return new Response("unauthorized", { status: 401 });
+}
 
 function base64ToBytes(value: string): Uint8Array {
   if (typeof globalThis.atob === "function") {

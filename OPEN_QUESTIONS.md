@@ -1,0 +1,4 @@
+1. **Privacy notice translation:** Who owns the authoritative Mandarin copy so we can replace the mojibake in `docs/privacy-notice/operator-mode-a.md`? Is there a legal-approved source file?
+2. **Important-Data checklist:** Which team will author/sign the Mode A Important-Data handling checklist (mapping custody, KMS rotation approvals)? Is there an existing template outside the repo?
+3. **CI integration for new scripts:** Where should `node SCRIPTS/forbidden-fields-lint.js` and `node SCRIPTS/pii-regex-scan.js` be wired (current lint workflow vs. dedicated job)? Any directories we should explicitly allowlist/denylist before enabling?
+4. **pnpm availability:** The current environment lacks `pnpm`, preventing lockfile regeneration for the overseas worker. Should we check in lock updates from another machine or add Corepack bootstrap steps to contributors' guide?

@@ -1,0 +1,7 @@
+| Risk | Likelihood | Impact | Mitigation | Early Warning | Owner |
+| --- | --- | --- | --- | --- | --- |
+| Overseas API auth regression (Access guard disabled) | Low (guard now enforced + tested) | Catastrophic — spoofed telemetry | Keep `requireAccessJwt` covered by unit tests and wire new scripts into CI; alert on 401 spikes | Git diff touching `services/overseas-api/src/index.ts` without matching test updates; Datadog ingest 401 anomalies | Platform API |
+| Privacy notice unreadable in Mandarin | Medium | Regulatory blocker / reputational hit | Replace `docs/privacy-notice/operator-mode-a.md` Mandarin section with vetted UTF-8 copy and add encoding lint | Doc review checklist, CI spellcheck on CJK text | Legal/Comms |
+| Missing Important-Data checklist | Medium | Audit fail / delayed approvals | Draft rotation/custody checklist, version-control it, and link in deployment runbook | Audit readiness review, compliance tracker | Compliance Lead |
+| Lockfiles out of sync for overseas worker | Medium (tooling gap) | Build failures or drifted dependencies | Run `corepack pnpm install --filter @greenbro/overseas-api --lockfile-only` once pnpm is available; add CI guard | CI job warning about lock drift | Platform Tooling |
+| Forbidden field/PII detection not run in CI | Medium | Silent introduction of DROP fields into telemetry | Wire `node SCRIPTS/forbidden-fields-lint.js` and `node SCRIPTS/pii-regex-scan.js` into lint/test workflows | CI job absence; new telemetry schema PRs lacking script output | Release Engineering |

@@ -22,7 +22,7 @@ const LEVEL_PRIORITY: Record<LogLevel, number> = {
 };
 
 const DEFAULT_REDACTION: RedactionOptions = {
-  clientIp: false,
+  clientIp: true,
   userAgent: false,
   cfRay: false,
 };

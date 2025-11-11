@@ -1,0 +1,106 @@
+[
+  {
+    "id": "P0-overseas-auth-bypass",
+    "severity": "P0",
+    "category": "Security",
+    "status": "fixed",
+    "files": [
+      "services/overseas-api/src/index.ts:49-109",
+      "services/overseas-api/src/index.test.ts:1-104"
+    ],
+    "evidence": "Ingest and heartbeat handlers only required an Authorization header and never validated CF-Access JWTs; any caller could enqueue telemetry. The new requireAccessJwt helper enforces JWKS verification.",
+    "impact": "Attackers could spoof telemetry batches/heartbeats, poisoning dashboards and bypassing Mode A residency controls.",
+    "fix": "Introduce requireAccessJwt backed by jose remote JWKS, wire it into both routes, add ACCESS_JWKS_URL var, and extend tests.",
+    "tests": [
+      "node SCRIPTS/forbidden-fields-lint.js",
+      "node SCRIPTS/pii-regex-scan.js"
+    ]
+  },
+  {
+    "id": "P1-logging-client-ip",
+    "severity": "P1",
+    "category": "Privacy",
+    "status": "fixed",
+    "files": [
+      "src/utils/logging.ts:24-28"
+    ],
+    "evidence": "DEFAULT_REDACTION set clientIp=false by default, so every log retained cf-connecting-ip.",
+    "impact": "Raw IPs persisted overseas, violating Mode A DROP commitments and privacy expectations.",
+    "fix": "Default client_ip redaction to true while keeping env toggles for exceptional cases.",
+    "tests": [
+      "node SCRIPTS/forbidden-fields-lint.js",
+      "node SCRIPTS/pii-regex-scan.js"
+    ]
+  },
+  {
+    "id": "P1-obs-email-logs",
+    "severity": "P1",
+    "category": "Privacy",
+    "status": "fixed",
+    "files": [
+      "src/routes/observability.ts:58-67",
+      "src/routes/__tests__/observability.test.ts:332-348"
+    ],
+    "evidence": "handleClientErrorReport logged user.email and clientIds verbatim into overseas logs.",
+    "impact": "Operator identities and tenant mappings leaked to overseas log stores.",
+    "fix": "Mask emails via maskEmail and log only client_ids_count instead of raw arrays; update assertions.",
+    "tests": [
+      "node SCRIPTS/forbidden-fields-lint.js",
+      "node SCRIPTS/pii-regex-scan.js"
+    ]
+  },
+  {
+    "id": "P1-missing-pii-scans",
+    "severity": "P1",
+    "category": "Compliance",
+    "status": "fixed",
+    "files": [
+      "SCRIPTS/forbidden-fields-lint.js:1-125",
+      "SCRIPTS/pii-regex-scan.js:1-78"
+    ],
+    "evidence": "No automation previously guarded against introducing forbidden DROP fields or embedded identifiers into telemetry pathways.",
+    "impact": "Regressions could silently expand telemetry payloads to include PII, breaking Mode A guarantees.",
+    "fix": "Add two zero-dependency scanners (forbidden-fields and PII regex) scoped to telemetry-critical trees.",
+    "tests": [
+      "node SCRIPTS/forbidden-fields-lint.js",
+      "node SCRIPTS/pii-regex-scan.js"
+    ]
+  },
+  {
+    "id": "P1-bilingual-notice-corrupted",
+    "severity": "P1",
+    "category": "Compliance",
+    "status": "open",
+    "files": [
+      "docs/privacy-notice/operator-mode-a.md:5-11"
+    ],
+    "evidence": "Chinese section renders as mojibake (garbled characters), so the bilingual notice is unreadable.",
+    "impact": "Cannot satisfy bilingual disclosure obligations; operators in CN cannot read the notice.",
+    "fix": "Replace section with vetted UTF-8 Mandarin copy and add encoding lint.",
+    "tests": []
+  },
+  {
+    "id": "P1-important-data-gap",
+    "severity": "P1",
+    "category": "Compliance",
+    "status": "open",
+    "files": [],
+    "evidence": "Repository lacks any Important-Data handling checklist (search for \"Important-Data\" returns no hits).",
+    "impact": "No documented owner or dual-control process for mapping tables, pseudonymization keys, or Access secrets.",
+    "fix": "Author and version-control an Important-Data checklist covering custody, rotation, and approvals.",
+    "tests": []
+  },
+  {
+    "id": "P2-overseas-lock-sync",
+    "severity": "P2",
+    "category": "Maintainability",
+    "status": "open",
+    "files": [
+      "services/overseas-api/package.json"
+    ],
+    "evidence": "Added `jose` dependency but could not regenerate pnpm-lock.yaml because pnpm is unavailable in this environment.",
+    "impact": "Lockfiles are out-of-sync; CI installs may warn or pick inconsistent versions.",
+    "fix": "Run `corepack pnpm install --filter @greenbro/overseas-api --lockfile-only` when tooling is available.",
+    "tests": []
+  }
+]

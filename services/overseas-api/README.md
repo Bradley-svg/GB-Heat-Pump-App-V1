@@ -11,4 +11,8 @@ Key routes:
 - `POST /api/heartbeat/:profileId` — monitors key version drift
 - `GET /health` — for load balancers
 
+Environment:
+- `ACCESS_AUD` / `ACCESS_JWKS_URL` — Cloudflare Access audience + JWKS used for every request.
+- `EXPORT_VERIFY_PUBKEY` — Ed25519 public key for verifying CN batch signatures.
+
 See Prompt Bible Mode A sections 3–5 for the full contract.

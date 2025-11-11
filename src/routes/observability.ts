@@ -56,9 +56,9 @@ export async function handleClientErrorReport(req: Request, env: Env) {
   const sanitized = sanitizeClientErrorReport(body);
 
   const userContext = {
-    email: user.email,
+    email: maskEmail(user.email),
     roles: user.roles,
-    client_ids: user.clientIds,
+    client_ids_count: user.clientIds?.length ?? 0,
   };
 
   const logPayload: Record<string, unknown> = {
