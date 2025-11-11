@@ -64,7 +64,8 @@
     "**/*.min.*",
     "**/*.map",
     ".modea.guard.json",
-    "wrangler.toml"
+    "wrangler.toml",
+    "package-lock.json"
   ],
   "allowlist": [
     {
