@@ -117,6 +117,11 @@ jobs:
       - name: Run lint
         run: npm run lint
 
+      - name: Run Mode A field scans
+        run: |
+          node SCRIPTS/forbidden-fields-lint.js
+          node SCRIPTS/pii-regex-scan.js
+
       - name: Run test suite
         run: npm run test:ci
 
