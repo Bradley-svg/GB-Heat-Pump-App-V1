@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cngateway
+      POSTGRES_USER: cn_gateway
+      POSTGRES_PASSWORD: localpass
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "changeme"]
+    ports:
+      - "6380:6379"
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: services/cn-gateway/docker/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env.example
+    environment:
+      DATABASE_URL: postgres://cn_gateway:localpass@postgres:5432/cngateway
+      REDIS_URL: redis://:changeme@redis:6379
+      EXPORT_SIGNING_KEY_PATH: /run/keys/export_ed25519.key
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./certs:/run/keys:ro
+    expose:
+      - "8080"
+
+  nginx:
+    image: nginx:1.25
+    depends_on:
+      - gateway
+    restart: unless-stopped
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/ssl:ro
+    ports:
+      - "8443:8443"
+
+volumes:
+  pgdata:

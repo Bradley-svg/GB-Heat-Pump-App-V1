@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://greenbro.cn/schemas/telemetry.json",
+  "title": "Mode A CN Gateway Telemetry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["deviceId", "seq", "timestamp", "metrics"],
+  "properties": {
+    "deviceId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "supplyC": { "type": "number" },
+        "returnC": { "type": "number" },
+        "flowLps": { "type": "number" },
+        "powerKW": { "type": "number" },
+        "COP": { "type": "number" },
+        "pressureHigh": { "type": "number" },
+        "pressureLow": { "type": "number" },
+        "status_code": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^[A-Z0-9_:-]+$"
+        },
+        "fault_code": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^[A-Z0-9_:-]*$"
+        },
+        "control_mode": {
+          "type": "string",
+          "enum": ["AUTO", "MANUAL", "OFF", "SAFE"]
+        },
+        "energyKWh": { "type": "number" },
+        "cycleCount": { "type": "integer", "minimum": 0 },
+        "uptimeMinutes": { "type": "integer", "minimum": 0 },
+        "timestamp_minute": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:00Z$"
+        }
+      }
+    }
+  }
+}

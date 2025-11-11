@@ -1,9 +1,25 @@
 {
-  "extends": "../../shared/configs/tsconfig.package.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "dist",
+    "target": "ES2022",
+    "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "module": "NodeNext"
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": false,
+    "resolveJsonModule": true,
+    "sourceMap": true,
+    "types": [
+      "node",
+      "vitest"
+    ]
   },
-  "include": ["src"]
+  "include": [
+    "src",
+    "migrations",
+    "test"
+  ]
 }
