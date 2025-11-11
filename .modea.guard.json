@@ -53,14 +53,34 @@
   "includeGlobs": ["**/*"],
   "excludeGlobs": [
     "**/node_modules/**",
+    "**/.pnpm/**",
     "**/dist/**",
     "**/.next/**",
     "**/build/**",
-    "**/.pnpm/**",
+    "**/.wrangler/**",
+    "**/coverage/**",
+    "**/.cache/**",
+    "**/guard-results/**",
     "**/*.min.*",
     "**/*.map"
   ],
-  "allowlist": [],
+  "allowlist": [
+    {
+      "path": ".dev.vars*",
+      "pattern": "ip",
+      "reason": "MODEA-GUARDS-000 sample env limit keys"
+    },
+    {
+      "path": ".dev.vars*",
+      "pattern": "email",
+      "reason": "MODEA-GUARDS-000 sample env uses email placeholder"
+    },
+    {
+      "path": ".dev.vars*",
+      "pattern": "phone",
+      "reason": "MODEA-GUARDS-000 sample env phone placeholder"
+    }
+  ],
   "severityMap": {
     "ip": "P0",
     "mac": "P0",

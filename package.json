@@ -6,6 +6,7 @@
     "dev": "wrangler dev --remote",
     "deploy": "wrangler deploy",
     "postinstall": "node ./scripts/install-frontend.mjs",
+    "prepare": "husky install",
     "frontend:install": "node ./scripts/install-frontend.mjs",
     "install-frontend:test": "node ./scripts/test-install-frontend.mjs",
     "frontend:dev": "npm --prefix frontend run dev",
@@ -41,21 +42,29 @@
     "security": "npm run test:security",
     "test:ci": "cross-env ROLLUP_SKIP_NODE_RESOLUTION=1 node ./node_modules/vitest/vitest.mjs run src tests/integration tests/smoke tests/security --coverage --passWithNoTests",
     "check:prod-shim": "node ./scripts/ensure-prod-shim-disabled.mjs --env production",
-    "ops:db:sanity": "node ./scripts/db-sanity-check.mjs"
+    "ops:db:sanity": "node ./scripts/db-sanity-check.mjs",
+    "guard:forbidden": "node .github/scripts/forbidden-fields-lint.js",
+    "guard:pii": "node .github/scripts/pii-regex-scan.js",
+    "guard:all": "npm-run-all -s guard:forbidden guard:pii"
   },
   "devDependencies": {
-    "@eslint/js": "^9.36.0",
     "@eslint/eslintrc": "^3.1.0",
+    "@eslint/js": "^9.36.0",
     "@miniflare/d1": "^2.14.4",
-    "eslint-plugin-react": "^7.35.0",
-    "eslint-plugin-react-hooks": "^6.1.1",
     "@types/react-native": "^0.72.8",
     "@vitest/coverage-v8": "^4.0.7",
     "better-sqlite3": "^12.4.1",
     "cross-env": "^7.0.3",
     "eslint": "^9.38.0",
-    "jsdom": "^27.1.0",
+    "eslint-plugin-react": "^7.35.0",
+    "eslint-plugin-react-hooks": "^6.1.1",
+    "fast-glob": "^3.3.3",
     "globals": "^15.11.0",
+    "husky": "^9.1.7",
+    "jsdom": "^27.1.0",
+    "lint-staged": "^16.2.6",
+    "minimatch": "^10.1.1",
+    "npm-run-all": "^4.1.5",
     "rollup": "4.52.5",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.2",
@@ -93,5 +102,14 @@
   },
   "overrides": {
     "undici": "^5.29.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,json,md,yml,yaml}": [
+      "node .github/scripts/forbidden-fields-lint.js --staged",
+      "node .github/scripts/pii-regex-scan.js --staged"
+    ]
   }
 }

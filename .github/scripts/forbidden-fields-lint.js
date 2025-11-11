@@ -3,7 +3,9 @@
 const fs = require('fs');
 const path = require('path');
 const fg = require('fast-glob');
-const minimatch = require('minimatch');
+const minimatchLib = require('minimatch');
+const minimatch =
+  typeof minimatchLib === 'function' ? minimatchLib : minimatchLib.minimatch;
 const { execSync } = require('child_process');
 const { buildSarif } = require('./sarif-helpers');
 

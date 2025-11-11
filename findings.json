@@ -1,106 +1,146 @@
 [
   {
-    "id": "P0-overseas-auth-bypass",
+    "id": "P0-modea-bypass-overseas-ingest",
     "severity": "P0",
+    "category": "Privacy",
+    "status": "open",
+    "files": [
+      "src/routes/ingest.ts:260-565",
+      "src/schemas/ingest.ts:17-39",
+      "migrations/0001_init.sql:1-34"
+    ],
+    "evidence": "Worker ingest schema still accepts raw `device_id` plus non-SAFE metrics and writes them directly into D1 tables, so raw identifiers leave CN.",
+    "impact": "Violates Mode A DROP/Safe guarantees and could trigger PIPL filings if overseas data stores are inspected.",
+    "fix": "Retire the raw `/api/ingest` path, require pseudonymized batch payloads (`did_pseudo` + SAFE metrics), and purge historical raw IDs.",
+    "tests": [
+      "Add integration tests that reject payloads containing device_id or unsafe keys"
+    ]
+  },
+  {
+    "id": "P1-access-jwt-weak",
+    "severity": "P1",
     "category": "Security",
-    "status": "fixed",
+    "status": "open",
     "files": [
-      "services/overseas-api/src/index.ts:49-109",
-      "services/overseas-api/src/index.test.ts:1-104"
+      "src/lib/access.ts:148-179"
     ],
-    "evidence": "Ingest and heartbeat handlers only required an Authorization header and never validated CF-Access JWTs; any caller could enqueue telemetry. The new requireAccessJwt helper enforces JWKS verification.",
-    "impact": "Attackers could spoof telemetry batches/heartbeats, poisoning dashboards and bypassing Mode A residency controls.",
-    "fix": "Introduce requireAccessJwt backed by jose remote JWKS, wire it into both routes, add ACCESS_JWKS_URL var, and extend tests.",
-    "tests": [
-      "node SCRIPTS/forbidden-fields-lint.js",
-      "node SCRIPTS/pii-regex-scan.js"
-    ]
+    "evidence": "`jwtVerify` only enforces `audience`; it omits issuer and clock tolerance so tokens minted for other apps or with small skew are accepted.",
+    "impact": "Attackers can replay Access tokens outside their intended scope and reach operator APIs.",
+    "fix": "Add `issuer` derived from `ACCESS_JWKS_URL` and a `clockTolerance`, plus unit tests that fail on mismatched issuer/skew.",
+    "tests": []
   },
   {
-    "id": "P1-logging-client-ip",
+    "id": "P1-observability-reporter-user",
     "severity": "P1",
     "category": "Privacy",
     "status": "fixed",
     "files": [
-      "src/utils/logging.ts:24-28"
+      "src/routes/observability.ts:211-252",
+      "src/routes/__tests__/observability.test.ts:320-360"
     ],
-    "evidence": "DEFAULT_REDACTION set clientIp=false by default, so every log retained cf-connecting-ip.",
-    "impact": "Raw IPs persisted overseas, violating Mode A DROP commitments and privacy expectations.",
-    "fix": "Default client_ip redaction to true while keeping env toggles for exceptional cases.",
+    "evidence": "Client error logs used to include `reporter_user: body.user`. The new `sanitizeReporterUser` masks emails and only emits counts.",
+    "impact": "Without masking, operator identities were written to overseas logs.",
+    "fix": "Mask reporter emails via `maskEmail`, emit role/client counts, and update tests to assert the masked form.",
     "tests": [
-      "node SCRIPTS/forbidden-fields-lint.js",
-      "node SCRIPTS/pii-regex-scan.js"
+      "npx vitest run src/routes/__tests__/observability.test.ts"
     ]
   },
   {
-    "id": "P1-obs-email-logs",
+    "id": "P1-client-events-email-plaintext",
     "severity": "P1",
     "category": "Privacy",
     "status": "fixed",
     "files": [
-      "src/routes/observability.ts:58-67",
-      "src/routes/__tests__/observability.test.ts:332-348"
+      "src/lib/client-events.ts:15-78",
+      "src/lib/__tests__/client-events.test.ts:1-32"
     ],
-    "evidence": "handleClientErrorReport logged user.email and clientIds verbatim into overseas logs.",
-    "impact": "Operator identities and tenant mappings leaked to overseas log stores.",
-    "fix": "Mask emails via maskEmail and log only client_ids_count instead of raw arrays; update assertions.",
+    "evidence": "`recordClientEvent` now hashes `userEmail` with `CLIENT_EVENT_TOKEN_SECRET` before storing; previously it inserted the plaintext email.",
+    "impact": "Raw operator emails in D1 violate Mode A DROP guidance.",
+    "fix": "Using `sha256(secret:email)` keeps events linkable without exposing email text. Unit tests cover deterministic hashing.",
     "tests": [
-      "node SCRIPTS/forbidden-fields-lint.js",
-      "node SCRIPTS/pii-regex-scan.js"
+      "npx vitest run src/lib/__tests__/client-events.test.ts"
     ]
   },
   {
-    "id": "P1-missing-pii-scans",
+    "id": "P1-ip-log-nested",
     "severity": "P1",
-    "category": "Compliance",
-    "status": "fixed",
-    "files": [
-      "SCRIPTS/forbidden-fields-lint.js:1-125",
-      "SCRIPTS/pii-regex-scan.js:1-78"
-    ],
-    "evidence": "No automation previously guarded against introducing forbidden DROP fields or embedded identifiers into telemetry pathways.",
-    "impact": "Regressions could silently expand telemetry payloads to include PII, breaking Mode A guarantees.",
-    "fix": "Add two zero-dependency scanners (forbidden-fields and PII regex) scoped to telemetry-critical trees.",
-    "tests": [
-      "node SCRIPTS/forbidden-fields-lint.js",
-      "node SCRIPTS/pii-regex-scan.js"
-    ]
-  },
-  {
-    "id": "P1-bilingual-notice-corrupted",
-    "severity": "P1",
-    "category": "Compliance",
+    "category": "Privacy",
     "status": "open",
     "files": [
-      "docs/privacy-notice/operator-mode-a.md:5-11"
+      "src/routes/ingest.ts:272-280"
     ],
-    "evidence": "Chinese section renders as mojibake (garbled characters), so the bilingual notice is unreadable.",
-    "impact": "Cannot satisfy bilingual disclosure obligations; operators in CN cannot read the notice.",
-    "fix": "Replace section with vetted UTF-8 Mandarin copy and add encoding lint.",
+    "evidence": "Rate-limit log entries include `fields.client_ip`, which bypasses the top-level redaction mask.",
+    "impact": "Raw client IPs still reach overseas log sinks.",
+    "fix": "Drop the IP from structured logs or hash it before logging; add regression tests to keep nested fields clean.",
     "tests": []
   },
   {
-    "id": "P1-important-data-gap",
+    "id": "P1-overseas-schema-mismatch",
     "severity": "P1",
-    "category": "Compliance",
+    "category": "Correctness",
     "status": "open",
-    "files": [],
-    "evidence": "Repository lacks any Important-Data handling checklist (search for \"Important-Data\" returns no hits).",
-    "impact": "No documented owner or dual-control process for mapping tables, pseudonymization keys, or Access secrets.",
-    "fix": "Author and version-control an Important-Data checklist covering custody, rotation, and approvals.",
+    "files": [
+      "services/cn-gateway/src/ingest/exporter.ts:11-60",
+      "services/overseas-api/src/index.ts:7-66"
+    ],
+    "evidence": "Exporter emits `pseudoId`, but overseas API validates against `pseudonymizedRecordSchema` expecting `didPseudo`, so every batch fails parsing.",
+    "impact": "Exports cannot succeed, forcing teams to keep the unsafe raw ingest path online.",
+    "fix": "Standardize on one field name (prefer `didPseudo`) in exporter, SDK, and overseas API, plus contract tests.",
     "tests": []
   },
   {
-    "id": "P2-overseas-lock-sync",
+    "id": "P1-export-key-unset",
+    "severity": "P1",
+    "category": "Security",
+    "status": "open",
+    "files": [
+      "services/overseas-api/wrangler.toml:5-8",
+      "services/overseas-api/src/index.ts:28-41"
+    ],
+    "evidence": "`EXPORT_VERIFY_PUBKEY` is empty, so `verifyBatchSignature` throws 500 (\"signing key not configured\") for every call.",
+    "impact": "Either exports fail entirely or teams comment out signature verification, defeating tamper protection.",
+    "fix": "Store the Ed25519 public key via `wrangler secret`, document the requirement, and add a health-check alarm when it is missing.",
+    "tests": []
+  },
+  {
+    "id": "P1-safe-metrics-drift",
+    "severity": "P1",
+    "category": "Correctness",
+    "status": "open",
+    "files": [
+      "services/cn-gateway/src/modea/drop-safe.ts:1-16",
+      "packages/sdk-core/src/constants.ts:1-18"
+    ],
+    "evidence": "SDK SAFE metrics include `firmware_version_major_minor` and `alerts`, but CN gateway SAFE list does not, so those fields are silently dropped.",
+    "impact": "Developers believe the fields are approved and may attempt to bypass the gateway to recover them, reintroducing PII risk.",
+    "fix": "Decide if the extra fields are SAFE\u2014either add them to the gateway sanitization or remove them from the SDK/docs.",
+    "tests": []
+  },
+  {
+    "id": "P2-ingest-strip-silent",
     "severity": "P2",
-    "category": "Maintainability",
+    "category": "Correctness",
     "status": "open",
     "files": [
-      "services/overseas-api/package.json"
+      "src/schemas/ingest.ts:17-30"
     ],
-    "evidence": "Added `jose` dependency but could not regenerate pnpm-lock.yaml because pnpm is unavailable in this environment.",
-    "impact": "Lockfiles are out-of-sync; CI installs may warn or pick inconsistent versions.",
-    "fix": "Run `corepack pnpm install --filter @greenbro/overseas-api --lockfile-only` when tooling is available.",
+    "evidence": "Telemetry schema uses `.strip()`, so unexpected keys are silently dropped rather than rejected/audited.",
+    "impact": "Firmware bugs or DROP fields go unnoticed because the API still returns 2xx, eroding compliance guarantees.",
+    "fix": "Switch to `.strict()` and emit 4xx + audit log when payloads include unknown keys.",
+    "tests": []
+  },
+  {
+    "id": "P2-modea-doc-drift",
+    "severity": "P2",
+    "category": "Compliance",
+    "status": "open",
+    "files": [
+      "docs/mode-a-operational-guidance.md:6-12",
+      "src/routes/ingest.ts:260-565"
+    ],
+    "evidence": "Docs claim \"Overseas stakeholders only see pseudonymized telemetry\" yet the Worker ingests/stores raw identifiers and metrics.",
+    "impact": "Regulators/customers are misled; once discovered the discrepancy can pause deployments.",
+    "fix": "Update docs after architecture matches reality, or downgrade claims until the P0 fix ships.",
     "tests": []
   }
 ]

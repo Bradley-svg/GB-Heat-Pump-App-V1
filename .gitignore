@@ -13,3 +13,4 @@ coverage/
 dist/
 .vite/
 .dev.vars
+guard-results/

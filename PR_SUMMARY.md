@@ -1,15 +1,14 @@
 # PR Summary
 
 ## What Changed
-- **Locked down overseas batch ingest** by adding `requireAccessJwt`, wiring `ACCESS_JWKS_URL`, and extending the Vitest harness so every call enforces Cloudflare Access before signature checks (`services/overseas-api/src/**/*`).
-- **Hardened worker logging**: default `client_ip` redaction is now enabled, and observability error logs mask operator emails plus only emit client ID counts (`src/utils/logging.ts`, `src/routes/observability.ts` + tests).
-- **Introduced CI guardrails** with `SCRIPTS/forbidden-fields-lint.js` and `SCRIPTS/pii-regex-scan.js`, giving us a lightweight DROP/PII enforcement step scoped to telemetry-critical directories.
+- Masked client error reporting logs via `sanitizeReporterUser`, preventing reporter emails/roles from leaving CN (`src/routes/observability.ts`, tests in `src/routes/__tests__/observability.test.ts`).
+- Pseudonymized `client_events.user_email` by hashing with `CLIENT_EVENT_TOKEN_SECRET`, plus unit tests covering deterministic output (`src/lib/client-events.ts`, `src/lib/__tests__/client-events.test.ts`).
+- Documented audit results across SBOM/Risk/ModeA checklists + refreshed findings artifacts.
 
-## Tests (manual)
-- `node SCRIPTS/forbidden-fields-lint.js`
-- `node SCRIPTS/pii-regex-scan.js`
+## Tests
+- `npx vitest run src/routes/__tests__/observability.test.ts src/lib/__tests__/client-events.test.ts`
 
 ## Follow-Ups
-1. Run `corepack pnpm install --filter @greenbro/overseas-api --lockfile-only` (or equivalent) so `pnpm-lock.yaml` reflects the new `jose` dependency.
-2. Replace the corrupted Mandarin privacy notice text and add a lint to prevent encoding regressions.
-3. Author & commit the Missing Important-Data handling checklist noted in the audit.
+1. Remove the raw `/api/ingest` code path and require pseudonymized batches end-to-end (see P0).
+2. Harden Cloudflare Access verification (issuer + clock tolerance) and align exporter vs overseas schemas before enabling signature-only ingest.
+3. Backfill hashed values for existing `client_events.user_email` rows and deploy the Worker so the new masking takes effect.

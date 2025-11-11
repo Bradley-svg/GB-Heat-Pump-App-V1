@@ -61,9 +61,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Forbidden fields scan
+        id: forbidden
+        continue-on-error: true
         run: node .github/scripts/forbidden-fields-lint.js
 
       - name: PII regex scan
+        id: pii
+        continue-on-error: true
         run: node .github/scripts/pii-regex-scan.js
 
       - name: Prepare guard summary
@@ -121,3 +125,26 @@ jobs:
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body-path: guard-results/comment.md
+
+      - name: Fail on hard findings
+        if: always()
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const summaryPath = path.join(process.cwd(), 'guard-results', 'summary.json');
+          if (!fs.existsSync(summaryPath)) {
+            process.exit(1);
+          }
+          const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+          const hasHard = ['forbidden', 'pii'].some((key) => {
+            const data = summary[key];
+            if (!data) return false;
+            const counts = data.counts || {};
+            return (counts.P0 ?? 0) > 0 || (counts.P1 ?? 0) > 0;
+          });
+          if (hasHard) {
+            console.error('Mode A guards detected P0/P1 findings.');
+            process.exit(1);
+          }
+          NODE

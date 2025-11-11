@@ -1,5 +1,5 @@
 import type { Env } from "../env";
-import { nowISO } from "../utils";
+import { nowISO, sha256Hex } from "../utils";
 
 const MAX_PROPERTIES_BYTES = 4096;
 const encoder = new TextEncoder();
@@ -16,6 +16,7 @@ export async function recordClientEvent(env: Env, record: ClientEventRecord): Pr
   const createdAt = nowISO();
   const id = crypto.randomUUID();
   const propertiesJson = serializeProperties(record.properties);
+  const hashedEmail = await hashUserEmailForStorage(record.userEmail, env.CLIENT_EVENT_TOKEN_SECRET);
 
   await env.DB.prepare(
     `INSERT INTO client_events (id, created_at, event, source, user_email, dimension, properties)
@@ -26,7 +27,7 @@ export async function recordClientEvent(env: Env, record: ClientEventRecord): Pr
       createdAt,
       record.event,
       sanitizeText(record.source),
-      sanitizeText(record.userEmail),
+      hashedEmail,
       sanitizeText(record.dimension),
       propertiesJson,
     )
@@ -62,7 +63,17 @@ function sanitizeText(value: string | null | undefined): string | null {
   return trimmed.length ? trimmed : null;
 }
 
+async function hashUserEmailForStorage(email: string | null | undefined, secret: string): Promise<string | null> {
+  if (typeof email !== "string") return null;
+  const normalized = email.trim().toLowerCase();
+  if (!normalized || !secret?.trim()) return null;
+  const material = `${secret}:${normalized}`;
+  const digest = await sha256Hex(material);
+  return `sha256:${digest}`;
+}
+
 export const __testables = {
   serializeProperties,
   MAX_PROPERTIES_BYTES,
+  hashUserEmailForStorage,
 };

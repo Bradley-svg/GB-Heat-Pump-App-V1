@@ -3,7 +3,9 @@
 const fs = require('fs');
 const path = require('path');
 const fg = require('fast-glob');
-const minimatch = require('minimatch');
+const minimatchLib = require('minimatch');
+const minimatch =
+  typeof minimatchLib === 'function' ? minimatchLib : minimatchLib.minimatch;
 const { execSync } = require('child_process');
 const { buildSarif } = require('./sarif-helpers');
 
@@ -215,6 +217,25 @@ function updateSummaryCache(key, data) {
   fs.writeFileSync(SUMMARY_CACHE, JSON.stringify(summary, null, 2));
 }
 
+function loadBaseline(section) {
+  try {
+    const baselinePath = path.join(
+      ROOT,
+      config.baselineFile || 'guard-results/baseline.json'
+    );
+    if (!fs.existsSync(baselinePath)) {
+      return [];
+    }
+    const parsed = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+    return parsed?.[section] || [];
+  } catch {
+    return [];
+  }
+}
+
 function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
 }
@@ -245,8 +266,7 @@ function computeIgnoredLines(filePath, text) {
 
 function hasGuardAllowFrontMatter(text) {
   if (!text.startsWith('---')) return false;
-  const end = text.indexOf('\n---', 3);
-  if (end === -1) return false;
-  const frontMatter = text.slice(0, end + 4);
-  return /guard:\s*[\r\n]+\s*allow:\s*true/i.test(frontMatter);
+  const match = text.match(/^---[\s\S]*?^---/m);
+  if (!match) return false;
+  return /guard:\s*[\r\n]+\s*allow:\s*true/i.test(match[0]);
 }

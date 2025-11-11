@@ -227,10 +227,29 @@ function sanitizeClientErrorReport(body: ClientErrorReport) {
     release: body.release ?? null,
     tags: body.tags ?? null,
     extras: sanitizeExtras(body.extras, truncatedFields),
-    reporter_user: body.user ?? null,
+    reporter_user: sanitizeReporterUser(body.user),
   };
 
   return { report, truncatedFields };
+}
+
+function sanitizeReporterUser(
+  user: ClientErrorReport["user"],
+): { email: string | null; roles_count: number; client_ids_count: number } | null {
+  if (!user) return null;
+  const maskedEmail = typeof user.email === "string" && user.email.trim().length ? maskEmail(user.email) : null;
+  const rolesCount = Array.isArray(user.roles) ? user.roles.filter((role) => typeof role === "string" && role.trim().length).length : 0;
+  const clientIdsCount = Array.isArray(user.clientIds)
+    ? user.clientIds.filter((id) => typeof id === "string" && id.trim().length).length
+    : 0;
+  if (!maskedEmail && rolesCount === 0 && clientIdsCount === 0) {
+    return null;
+  }
+  return {
+    email: maskedEmail,
+    roles_count: rolesCount,
+    client_ids_count: clientIdsCount,
+  };
 }
 
 function truncateString(

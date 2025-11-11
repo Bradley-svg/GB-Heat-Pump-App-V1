@@ -375,7 +375,15 @@ describe("handleClientErrorReport", () => {
 
       extras: payload.extras,
 
-      reporter_user: payload.user,
+      reporter_user: {
+
+        email: "r***r@example.com",
+
+        roles_count: payload.user?.roles?.length ?? 0,
+
+        client_ids_count: payload.user?.clientIds?.length ?? 0,
+
+      },
 
     });
 
