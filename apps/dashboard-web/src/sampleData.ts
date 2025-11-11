@@ -1,27 +1,63 @@
-import type { Device } from "@greenbro/sdk-core";
+import type { DashboardSnapshot } from "@greenbro/sdk-web";
 
-export const sampleDevices: Device[] = [
-  {
-    didPseudo: "a1B2c3D4e5F6g7H8i9J0",
-    keyVersion: "v2",
-    latest: {
-      timestamp_minute: "2024-05-20T10:30:00.000Z",
+export const sampleSnapshot: DashboardSnapshot = {
+  generated_at: "2025-11-11T10:00:00.000Z",
+  scope: "tenant",
+  window_start_ms: Date.now() - 60 * 60 * 1000,
+  kpis: {
+    devices_total: 12,
+    devices_online: 11,
+    offline_count: 1,
+    online_pct: 91.6,
+    avg_cop: 3.9,
+    low_deltaT_count: 0,
+    open_alerts: 1,
+    max_heartbeat_age_sec: 45,
+  },
+  alerts: [
+    {
+      device_id: "***42",
+      lookup: "enc.sample-42",
+      site: "Sample Estate A",
+      ts: "2025-11-11T09:55:00.000Z",
+      updated_at: "2025-11-11T09:56:00.000Z",
+      faults: ["LOW_PRESSURE"],
+      fault_count: 1,
+    },
+  ],
+  top_devices: [
+    {
+      device_id: "***42",
+      lookup: "enc.sample-42",
+      site: "Sample Estate A",
+      online: true,
+      last_seen_at: "2025-11-11T09:59:00.000Z",
+      updated_at: "2025-11-11T09:59:05.000Z",
       supplyC: 48.2,
       returnC: 41.7,
-      flowLps: 15.4,
-      powerKW: 12.1,
-      COP: 4.1,
+      cop: 4.1,
+      deltaT: 6.5,
+      thermalKW: 12.2,
+      alert_count: 0,
     },
-  },
-];
-
-export const sampleAlerts = [
-  {
-    id: "alert-1",
-    didPseudo: "a1B2c3D4e5F6g7H8i9J0",
-    alert_type: "PRESSURE_LOW",
-    severity: "MEDIUM",
-    message: "Low return temperature detected",
-    raised_at: "2024-05-20T10:31:00.000Z",
-  },
-];
+    {
+      device_id: "***77",
+      lookup: "enc.sample-77",
+      site: "Sample Estate B",
+      online: true,
+      last_seen_at: "2025-11-11T09:58:00.000Z",
+      updated_at: "2025-11-11T09:58:02.000Z",
+      supplyC: 46.1,
+      returnC: 38.9,
+      cop: 3.7,
+      deltaT: 7.2,
+      thermalKW: 11.8,
+      alert_count: 1,
+    },
+  ],
+  trend: [
+    { label: "09:40", cop: 3.8, thermalKW: 12.0, deltaT: 6.2 },
+    { label: "09:50", cop: 4.0, thermalKW: 12.2, deltaT: 6.4 },
+    { label: "10:00", cop: 4.1, thermalKW: 12.4, deltaT: 6.5 },
+  ],
+};

@@ -6,11 +6,11 @@ React/SPA-friendly client that calls the overseas Mode A API using the shared sc
 import { ModeAWebClient } from "@greenbro/sdk-web";
 
 const client = new ModeAWebClient({
-  apiBase: import.meta.env.VITE_APP_API_BASE,
-  accessToken: () => window?.MODEA_ACCESS_TOKEN,
+  apiBase: import.meta.env.VITE_APP_API_BASE ?? "/api",
 });
 
-const devices = await client.getDevices();
+const snapshot = await client.getDashboardSnapshot();
+console.log(snapshot.kpis.devices_online);
 ```
 
 Run `pnpm --filter @greenbro/sdk-web test` to execute the Vitest suite.

@@ -1,17 +1,47 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ModeARNClient } from "./client";
 
+const snapshotResponse = {
+  generated_at: "2025-11-11T10:00:00.000Z",
+  scope: "tenant",
+  window_start_ms: Date.now() - 30_000,
+  kpis: {
+    devices_total: 4,
+    devices_online: 3,
+    offline_count: 1,
+    online_pct: 75,
+    avg_cop: 3.7,
+    low_deltaT_count: 0,
+    open_alerts: 1,
+    max_heartbeat_age_sec: 60,
+  },
+  alerts: [],
+  top_devices: [],
+  trend: [],
+};
+
 describe("ModeARNClient", () => {
-  it("fetches and validates devices", async () => {
-    const fetchMock = async () =>
-      new Response(
-        JSON.stringify([
-          { didPseudo: "abc", keyVersion: "v1", latest: { supplyC: 40, returnC: 39, timestamp_minute: new Date().toISOString() } },
-        ]),
-        { status: 200 },
-      );
-    const client = new ModeARNClient({ apiBase: "https://example.com", fetchImpl: fetchMock as any });
-    const devices = await client.getDevices();
-    expect(devices).toHaveLength(1);
+  it("persists snapshot to storage", async () => {
+    const storage: any = {
+      setItem: vi.fn(),
+    };
+    const fetchMock = async () => new Response(JSON.stringify(snapshotResponse), { status: 200 });
+    const client = new ModeARNClient({
+      apiBase: "https://example.com/api",
+      storage,
+      fetchImpl: fetchMock as any,
+    });
+    const snapshot = await client.getDashboardSnapshot();
+    expect(snapshot.kpis.devices_total).toBe(4);
+    expect(storage.setItem).toHaveBeenCalledWith("modea:snapshot", expect.any(String));
+  });
+
+  it("throws on HTTP failure", async () => {
+    const fetchMock = async () => new Response("nope", { status: 403 });
+    const client = new ModeARNClient({
+      apiBase: "https://example.com/api",
+      fetchImpl: fetchMock as any,
+    });
+    await expect(client.getDashboardSnapshot()).rejects.toThrow(/403/);
   });
 });

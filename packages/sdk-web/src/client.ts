@@ -1,4 +1,4 @@
-import { deviceSchema, telemetryMetricsSchema } from "@greenbro/sdk-core";
+import { telemetryMetricsSchema } from "@greenbro/sdk-core";
 import { z } from "zod";
 
 export interface ModeAWebClientConfig {
@@ -6,20 +6,65 @@ export interface ModeAWebClientConfig {
   accessToken?: () => Promise<string> | string;
 }
 
-const alertsSchema = z
-  .array(
-    z
-      .object({
-        id: z.string(),
-        didPseudo: z.string(),
-        alert_type: z.string(),
-        severity: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("LOW"),
-        message: z.string(),
-        raised_at: z.string().datetime(),
-      })
-      .strict(),
-  )
-  .default([]);
+
+const dashboardAlertSchema = z
+  .object({
+    device_id: z.string(),
+    lookup: z.string(),
+    site: z.string().nullable(),
+    ts: z.string(),
+    updated_at: z.string().nullable(),
+    faults: z.array(z.string()),
+    fault_count: z.number(),
+  })
+  .strict();
+
+const dashboardDeviceSchema = z
+  .object({
+    device_id: z.string(),
+    lookup: z.string(),
+    site: z.string().nullable(),
+    online: z.boolean(),
+    last_seen_at: z.string().nullable(),
+    updated_at: z.string().nullable(),
+    supplyC: z.number().nullable(),
+    returnC: z.number().nullable(),
+    cop: z.number().nullable(),
+    deltaT: z.number().nullable(),
+    thermalKW: z.number().nullable(),
+    alert_count: z.number(),
+  })
+  .strict();
+
+const dashboardSnapshotSchema = z
+  .object({
+    generated_at: z.string(),
+    scope: z.enum(["empty", "tenant", "fleet"]),
+    window_start_ms: z.number(),
+    kpis: z.object({
+      devices_total: z.number(),
+      devices_online: z.number(),
+      offline_count: z.number(),
+      online_pct: z.number(),
+      avg_cop: z.number().nullable(),
+      low_deltaT_count: z.number(),
+      open_alerts: z.number(),
+      max_heartbeat_age_sec: z.number().nullable(),
+    }),
+    alerts: z.array(dashboardAlertSchema),
+    top_devices: z.array(dashboardDeviceSchema),
+    trend: z.array(
+      z.object({
+        label: z.string(),
+        cop: z.number().nullable(),
+        thermalKW: z.number().nullable(),
+        deltaT: z.number().nullable(),
+      }),
+    ),
+  })
+  .strict();
+
+export type DashboardSnapshot = z.infer<typeof dashboardSnapshotSchema>;
 
 type FetchImpl = typeof fetch;
 
@@ -30,19 +75,15 @@ export class ModeAWebClient {
     }
   }
 
-  async getDevices() {
-    const payload = await this.request("/devices");
-    return z.array(deviceSchema).parse(payload);
-  }
-
-  async getLatest(didPseudo: string) {
-    const payload = await this.request(`/devices/${encodeURIComponent(didPseudo)}/latest`);
+  async getLatest(deviceToken: string) {
+    const payload = await this.request(`/devices/${encodeURIComponent(deviceToken)}/latest`);
     return telemetryMetricsSchema.parse(payload);
   }
 
-  async getAlerts() {
-    const payload = await this.request("/alerts");
-    return alertsSchema.parse(payload);
+  async getDashboardSnapshot(params?: DashboardSnapshotParams): Promise<DashboardSnapshot> {
+    const qs = buildDashboardQuery(params);
+    const payload = await this.request(`/client/compact${qs}`);
+    return dashboardSnapshotSchema.parse(payload);
   }
 
   private async request(path: string, init: RequestInit = {}) {
@@ -72,4 +113,18 @@ export class ModeAWebClient {
     const token = await this.config.accessToken();
     return token || undefined;
   }
+}
+
+export interface DashboardSnapshotParams {
+  hours?: number;
+  lowDeltaT?: number;
+}
+
+function buildDashboardQuery(params?: DashboardSnapshotParams) {
+  if (!params) return "";
+  const query = new URLSearchParams();
+  if (params.hours) query.set("hours", String(params.hours));
+  if (params.lowDeltaT) query.set("lowDeltaT", String(params.lowDeltaT));
+  const str = query.toString();
+  return str ? `?${str}` : "";
 }
