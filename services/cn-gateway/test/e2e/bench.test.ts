@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, beforeEach } from "vitest";
 import { buildServer } from "../../src/server.js";
@@ -10,6 +11,16 @@ const captured = (globalThis as unknown as { __EXPORT_REQUESTS__?: Array<{ body:
 beforeEach(() => {
   captured.length = 0;
 });
+
+function signBody(payload: object) {
+  return crypto
+    .createHmac("sha256", "test-secret")
+    .update(JSON.stringify(payload))
+    .digest("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/u, "");
+}
 
 describe("end-to-end exporter", () => {
   it("signs and ships batches", async () => {
@@ -26,10 +37,15 @@ describe("end-to-end exporter", () => {
     };
 
     for (let i = 0; i < 3; i += 1) {
+      const payload = { ...sample, seq: i };
       await app.inject({
         method: "POST",
         url: "/ingest",
-        payload: { ...sample, seq: i }
+        headers: {
+          "content-type": "application/json",
+          "x-device-signature": signBody(payload)
+        },
+        payload
       });
     }
 

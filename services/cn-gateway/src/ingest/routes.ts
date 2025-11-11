@@ -27,8 +27,8 @@ export class DeviceSignatureError extends Error {
 }
 
 async function verifyDeviceSignature(body: unknown, signatureHeader?: string) {
-  if (!signatureHeader) {
-    return;
+  if (!signatureHeader || !signatureHeader.trim()) {
+    throw new DeviceSignatureError("device_signature_missing");
   }
   const adapter = getKmsAdapter();
   const digest = await adapter.signHmacSHA256(Buffer.from(JSON.stringify(body ?? {})));

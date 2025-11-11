@@ -32,6 +32,14 @@ function signBody(payload: object) {
     .replace(/=+$/u, "");
 }
 
+function buildSignedHeaders(payload: object, extra: Record<string, string> = {}) {
+  return {
+    "content-type": "application/json",
+    ...extra,
+    "x-device-signature": signBody(payload)
+  };
+}
+
 describe("POST /ingest", () => {
   it("queues sanitized payloads", async () => {
     const app = await buildServer();
@@ -39,11 +47,7 @@ describe("POST /ingest", () => {
     const response = await app.inject({
       method: "POST",
       url: "/ingest",
-      headers: {
-        "content-type": "application/json",
-        "idempotency-key": "req-1",
-        "x-device-signature": signBody(payload)
-      },
+      headers: buildSignedHeaders(payload, { "idempotency-key": "req-1" }),
       payload
     });
     expect(response.statusCode).toBe(202);
@@ -62,17 +66,33 @@ describe("POST /ingest", () => {
     const response = await app.inject({
       method: "POST",
       url: "/ingest",
+      headers: buildSignedHeaders(payload),
       payload
     });
     expect(response.statusCode).toBe(422);
     await app.close();
   });
 
+  it("rejects missing device signature", async () => {
+    const app = await buildServer();
+    const payload = basePayload();
+    const response = await app.inject({
+      method: "POST",
+      url: "/ingest",
+      payload
+    });
+    expect(response.statusCode).toBe(401);
+    const body = response.json() as { error?: string; message?: string; statusCode?: number };
+    expect(body.message).toBe("device_signature_missing");
+    expect(body.statusCode).toBe(401);
+    await app.close();
+  });
+
   it("enforces sequence replay protection", async () => {
     const app = await buildServer();
     const payload = basePayload();
-    await app.inject({ method: "POST", url: "/ingest", payload });
-    const second = await app.inject({ method: "POST", url: "/ingest", payload });
+    await app.inject({ method: "POST", url: "/ingest", payload, headers: buildSignedHeaders(payload) });
+    const second = await app.inject({ method: "POST", url: "/ingest", payload, headers: buildSignedHeaders(payload) });
     expect(second.statusCode).toBe(409);
     await app.close();
   });
@@ -81,7 +101,7 @@ describe("POST /ingest", () => {
     const app = await buildServer();
     const payload = basePayload();
     payload.timestamp = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-    const response = await app.inject({ method: "POST", url: "/ingest", payload });
+    const response = await app.inject({ method: "POST", url: "/ingest", payload, headers: buildSignedHeaders(payload) });
     expect(response.statusCode).toBe(422);
     await app.close();
   });
@@ -93,14 +113,14 @@ describe("POST /ingest", () => {
       method: "POST",
       url: "/ingest",
       payload,
-      headers: { "idempotency-key": "same" }
+      headers: buildSignedHeaders(payload, { "idempotency-key": "same" })
     });
     expect(first.statusCode).toBe(202);
     const second = await app.inject({
       method: "POST",
       url: "/ingest",
       payload,
-      headers: { "idempotency-key": "same" }
+      headers: buildSignedHeaders(payload, { "idempotency-key": "same" })
     });
     expect(second.statusCode).toBe(202);
     expect(second.headers["x-idempotent-replay"]).toBeDefined();
@@ -110,9 +130,16 @@ describe("POST /ingest", () => {
   it("rate limits chatty devices", async () => {
     const app = await buildServer();
     const payload = basePayload();
-    await app.inject({ method: "POST", url: "/ingest", payload });
-    await app.inject({ method: "POST", url: "/ingest", payload: { ...payload, seq: 2 } });
-    const third = await app.inject({ method: "POST", url: "/ingest", payload: { ...payload, seq: 3 } });
+    await app.inject({ method: "POST", url: "/ingest", payload, headers: buildSignedHeaders(payload) });
+    const secondPayload = { ...payload, seq: 2 };
+    await app.inject({ method: "POST", url: "/ingest", payload: secondPayload, headers: buildSignedHeaders(secondPayload) });
+    const thirdPayload = { ...payload, seq: 3 };
+    const third = await app.inject({
+      method: "POST",
+      url: "/ingest",
+      payload: thirdPayload,
+      headers: buildSignedHeaders(thirdPayload)
+    });
     expect(third.statusCode).toBe(429);
     await app.close();
   });
