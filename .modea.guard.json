@@ -43,14 +43,20 @@
     "freeText",
     "rawPayload"
   ],
-  "whitelistSafeIdentifiers": ["did_pseudo", "keyVersion", "timestamp_minute"],
+  "whitelistSafeIdentifiers": [
+    "did_pseudo",
+    "keyVersion",
+    "timestamp_minute"
+  ],
   "piiRegex": {
     "ipv4": "\\b(?:(?:25[0-5]|2[0-4]\\d|[01]?\\d?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|[01]?\\d?\\d)\\b",
     "mac": "\\b([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\\b",
     "imei": "\\b\\d{14,16}\\b",
     "gps": "\\b-?\\d{1,2}\\.\\d{4,}\\b"
   },
-  "includeGlobs": ["**/*"],
+  "includeGlobs": [
+    "**/*"
+  ],
   "excludeGlobs": [
     "**/node_modules/**",
     "**/.pnpm/**",
@@ -255,6 +261,11 @@
       "path": "scripts/publish-r2-assets.mjs",
       "pattern": "ip",
       "reason": "script references asset hostnames containing 'ip'"
+    },
+    {
+      "path": "services/cn-gateway/src/validators/telemetry.schema.json",
+      "pattern": "deviceid",
+      "reason": "Telemetry JSON schema references the canonical device identifier field"
     }
   ],
   "severityMap": {
