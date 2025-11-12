@@ -722,6 +722,29 @@ describe("handleClientEventReport", () => {
 
   });
 
+  it("returns 503 when client events cannot be persisted", async () => {
+    requireAccessUserMock.mockResolvedValueOnce(ADMIN_USER);
+    const logger = createLoggerStub();
+    loggerForRequestMock.mockReturnValueOnce(logger as unknown as loggingModule.Logger);
+    recordClientEventMock.mockRejectedValueOnce(new Error("d1 unavailable"));
+
+    const env = createEnv();
+    const payload = { event: "signup_flow.result" };
+    const req = new Request("https://app.example/api/observability/client-events", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const res = await handleClientEventReport(req, env);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "client_event_storage_failed" });
+    expect(logger.error).toHaveBeenCalledWith("client.event.persist_failed", {
+      event: payload.event,
+      error: expect.any(Error),
+    });
+  });
+
 
 
   it("validates payloads", async () => {

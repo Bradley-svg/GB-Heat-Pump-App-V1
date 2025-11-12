@@ -29,7 +29,16 @@ function createDbMock() {
     };
     return chain;
   });
-  return { DB: { prepare } as unknown as Env["DB"], statements };
+  const exec = vi.fn().mockResolvedValue(undefined);
+  const batch = vi.fn().mockImplementation(async (stmts: Array<{ run: () => void }>) => {
+    for (const stmt of stmts) {
+      if (typeof stmt.run === "function") {
+        stmt.run();
+      }
+    }
+    return [];
+  });
+  return { DB: { prepare, exec, batch } as unknown as Env["DB"], statements };
 }
 
 function baseEnv(overrides: Partial<Env> = {}): Env & { __statements: StatementRecord[] } {

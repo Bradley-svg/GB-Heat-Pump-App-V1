@@ -4,7 +4,6 @@ import { authenticateTelemetryRequest } from "../lib/auth/telemetry-token";
 import { ClientErrorReportSchema, ClientEventReportSchema } from "../schemas/observability";
 import type { ClientErrorReport, ClientEventReport } from "../schemas/observability";
 import { loggerForRequest } from "../utils/logging";
-import type { Logger } from "../utils/logging";
 import { json } from "../utils/responses";
 import { validationErrorResponse, validateWithSchema } from "../utils/validation";
 import { checkIpRateLimit } from "../lib/ip-rate-limit";
@@ -126,13 +125,21 @@ export async function handleClientEventReport(req: Request, env: Env) {
   const log = loggerForRequest(req, { route: EVENTS_ROUTE_PATH });
 
   const dimension = deriveEventDimension(body.event, body.properties);
-  await persistClientEvent(env, {
-    event: body.event,
-    source: body.source ?? undefined,
-    userEmail: user.email,
-    dimension,
-    properties: body.properties ?? null,
-  }, log);
+  try {
+    await persistClientEvent(env, {
+      event: body.event,
+      source: body.source ?? undefined,
+      userEmail: user.email,
+      dimension,
+      properties: body.properties ?? null,
+    });
+  } catch (error) {
+    log.error("client.event.persist_failed", {
+      event: body.event,
+      error,
+    });
+    return json({ error: "client_event_storage_failed" }, { status: 503 });
+  }
 
   if (body.event === "auth.pending_logout.flush_failed") {
     log.warn("auth.pending_logout.flush_failed", {
@@ -170,15 +177,19 @@ async function persistClientEvent(
     dimension?: string | null;
     properties: Record<string, unknown> | null;
   },
-  log: Logger,
 ) {
   try {
     await recordClientEvent(env, record);
   } catch (error) {
-    log.warn("client.event.persist_failed", {
-      event: record.event,
-      error,
-    });
+    throw new ClientEventPersistenceError(error);
+  }
+}
+
+class ClientEventPersistenceError extends Error {
+  constructor(cause: unknown) {
+    super("client_event_storage_failed");
+    this.name = "ClientEventPersistenceError";
+    (this as Error & { cause?: unknown }).cause = cause;
   }
 }
 

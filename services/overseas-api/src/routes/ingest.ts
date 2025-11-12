@@ -5,7 +5,7 @@ import { loggerForRequest } from "../utils/logging";
 import { recordOpsMetric } from "../lib/ops-metrics";
 import { markRequestMetricsRecorded, requestMetricsRecorded } from "../lib/request-metrics";
 import { deriveTelemetryMetrics } from "../telemetry";
-import { ExportBatchSchema, type ExportRecord } from "../schemas/export";
+import { ExportBatchSchema, type ExportBatch, type ExportRecord } from "../schemas/export";
 import { verifyBatchSignature } from "../utils/ed25519";
 import { nowISO } from "../utils";
 
@@ -13,6 +13,7 @@ const SIGNATURE_HEADER = "x-batch-signature";
 const MAX_PAYLOAD_BYTES = 256_000;
 const INGEST_ROUTE = "/api/ingest";
 const HEARTBEAT_ROUTE = "/api/heartbeat";
+const STATEMENT_BATCH_SIZE = 25;
 
 const textEncoder = new TextEncoder();
 
@@ -33,7 +34,9 @@ function faultsJson(metrics: ExportRecord["metrics"]) {
   );
 }
 
-async function persistRecord(env: Env, profileId: string, record: ExportRecord): Promise<void> {
+type BoundStatement = ReturnType<ReturnType<Env["DB"]["prepare"]>["bind"]>;
+
+function buildRecordStatements(env: Env, profileId: string, record: ExportRecord): BoundStatement[] {
   const tsMs = Date.parse(record.timestamp);
   if (!Number.isFinite(tsMs)) {
     throw new Error("invalid_record_timestamp");
@@ -57,7 +60,7 @@ async function persistRecord(env: Env, profileId: string, record: ExportRecord):
   const updatedAtIso = nowISO();
   const lastSeenIso = new Date(tsMs).toISOString();
 
-  await env.DB
+  const telemetryInsert = env.DB
     .prepare(
       `INSERT INTO telemetry (device_id, ts, metrics_json, deltaT, thermalKW, cop, cop_quality, status_json, faults_json)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
@@ -73,10 +76,9 @@ async function persistRecord(env: Env, profileId: string, record: ExportRecord):
       derived.cop_quality,
       status,
       faults
-    )
-    .run();
+    );
 
-  await env.DB
+  const latestStateUpsert = env.DB
     .prepare(
       `INSERT INTO latest_state
          (device_id, ts, supplyC, returnC, flowLps, powerKW, deltaT, thermalKW, cop, cop_quality, mode,
@@ -113,10 +115,9 @@ async function persistRecord(env: Env, profileId: string, record: ExportRecord):
       metricsJson,
       faults,
       updatedAtIso
-    )
-    .run();
+    );
 
-  await env.DB
+  const devicesUpsert = env.DB
     .prepare(
       `INSERT INTO devices (device_id, profile_id, online, last_seen_at)
        VALUES (?1, ?2, 1, ?3)
@@ -125,12 +126,73 @@ async function persistRecord(env: Env, profileId: string, record: ExportRecord):
          online = 1,
          last_seen_at = excluded.last_seen_at`
     )
-    .bind(record.didPseudo, profileId, lastSeenIso)
-    .run();
+    .bind(record.didPseudo, profileId, lastSeenIso);
+
+  return [telemetryInsert, latestStateUpsert, devicesUpsert];
+}
+
+async function persistBatch(
+  env: Env,
+  profileId: string,
+  batchRowId: string,
+  parsed: ExportBatch,
+) {
+  const statementBuffer: BoundStatement[] = [];
+
+  const flush = async () => {
+    if (!statementBuffer.length) {
+      return;
+    }
+    const chunk = statementBuffer.splice(0, statementBuffer.length);
+    await env.DB.batch(chunk);
+  };
+
+  const enqueue = async (statement: BoundStatement) => {
+    statementBuffer.push(statement);
+    if (statementBuffer.length >= STATEMENT_BATCH_SIZE) {
+      await flush();
+    }
+  };
+
+  await env.DB.exec("BEGIN TRANSACTION");
+  try {
+    await enqueue(
+      env.DB
+        .prepare(
+          `INSERT INTO ingest_batches (id, batch_id, profile_id, record_count, payload_json, received_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
+        )
+        .bind(
+          batchRowId,
+          parsed.batchId,
+          profileId,
+          parsed.records.length,
+          JSON.stringify({ profileId, batchId: parsed.batchId, count: parsed.records.length }),
+          nowISO(),
+        ),
+    );
+
+    for (const record of parsed.records) {
+      const statements = buildRecordStatements(env, profileId, record);
+      for (const statement of statements) {
+        await enqueue(statement);
+      }
+    }
+
+    await flush();
+    await env.DB.exec("COMMIT");
+  } catch (error) {
+    try {
+      await env.DB.exec("ROLLBACK");
+    } catch {
+      // ignore rollback failures
+    }
+    throw error;
+  }
 }
 
 export async function handleIngest(request: Request, env: Env, profileId: string): Promise<Response> {
-  const cors = evaluateCors(request, env.INGEST_ALLOWED_ORIGINS);
+  const cors = evaluateCors(request, env);
   const log = loggerForRequest(request, { route: INGEST_ROUTE, profile_id: profileId });
 
   if (request.method !== "POST") {
@@ -200,24 +262,7 @@ export async function handleIngest(request: Request, env: Env, profileId: string
 
   try {
     const batchRowId = crypto.randomUUID();
-    await env.DB
-      .prepare(
-        `INSERT INTO ingest_batches (id, batch_id, profile_id, record_count, payload_json, received_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
-      )
-      .bind(
-        batchRowId,
-        parsed.batchId,
-        profileId,
-        parsed.records.length,
-        JSON.stringify({ profileId, batchId: parsed.batchId, count: parsed.records.length }),
-        nowISO()
-      )
-      .run();
-
-    for (const record of parsed.records) {
-      await persistRecord(env, profileId, record);
-    }
+    await persistBatch(env, profileId, batchRowId, parsed);
 
     markRequestMetricsRecorded(request);
     log.info("ingest.batch_accepted", { batch_id: parsed.batchId, records: parsed.records.length });
@@ -239,7 +284,7 @@ export async function handleIngest(request: Request, env: Env, profileId: string
 }
 
 export async function handleHeartbeat(request: Request, env: Env): Promise<Response> {
-  const cors = evaluateCors(request, env.INGEST_ALLOWED_ORIGINS);
+  const cors = evaluateCors(request, env);
   return withCors(
     request,
     env,
