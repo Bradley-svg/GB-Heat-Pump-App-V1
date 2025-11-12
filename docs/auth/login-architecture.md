@@ -23,7 +23,7 @@
 - `src/routes/auth.ts`: Worker handlers for signup, login, logout, recover, and reset endpoints.
 - `src/routes/me.ts`: Updated to accept either a signed session cookie or a Cloudflare Access JWT.
 - `src/router.ts`: Wires the new `/api/auth/*` endpoints.
-- `frontend/src/auth/*`: React screens for login/signup/recover/reset embedded in a dedicated auth router.
+- `apps/dashboard-web/src/auth/*`: React screens for login/signup/recover/reset embedded in a dedicated auth router.
 
 ## Interfaces to Other Systems
 - **Email delivery**: Reset links are logged with `systemLogger`. A future SMTP/SendGrid adapter can plug in at this seam.

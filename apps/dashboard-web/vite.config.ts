@@ -1,9 +1,52 @@
 import { defineConfig } from "vite";
+import type { UserConfigExport } from "vite";
 import react from "@vitejs/plugin-react";
 
-export default defineConfig({
+const isCi = Boolean(process.env.CI ?? process.env.GITHUB_ACTIONS);
+const enableCoverage = isCi || process.env.VITEST_COVERAGE === "true";
+
+// https://vite.dev/config/
+const config = {
   plugins: [react()],
-  server: {
-    port: 5173,
+  base: "/app/",
+  build: {
+    outDir: "dist",
+    emptyOutDir: true,
+    manifest: true,
+    rollupOptions: {
+      output: {
+        entryFileNames: "assets/[name]-[hash].js",
+        chunkFileNames: "assets/[name]-[hash].js",
+        assetFileNames: "assets/[name]-[hash][extname]",
+      },
+    },
   },
-});
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: "./src/test/setup.ts",
+    clearMocks: true,
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "lcov"],
+      reportsDirectory: "coverage",
+      enabled: enableCoverage,
+    },
+    reporters: isCi
+      ? [
+          "default",
+          [
+            "junit",
+            {
+              outputFile: "coverage/vitest-junit.xml",
+              suiteName: "frontend-tests",
+            },
+          ],
+        ]
+      : ["default"],
+  },
+};
+
+export default defineConfig(config as unknown as UserConfigExport);
+
+

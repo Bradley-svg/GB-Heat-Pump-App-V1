@@ -4,13 +4,13 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const scriptPath = resolve("scripts", "install-frontend.mjs");
-const npmrcPath = resolve("frontend", ".npmrc");
+const npmrcPath = resolve("apps", "dashboard-web", ".npmrc");
 const sentinel = "; existing npmrc should be preserved\nregistry=https://custom.invalid/\n";
 
 try {
   writeFileSync(npmrcPath, sentinel, "utf8");
 } catch (error) {
-  console.error("[install-frontend-test] Unable to seed frontend/.npmrc:", error);
+  console.error("[install-frontend-test] Unable to seed apps/dashboard-web/.npmrc:", error);
   process.exit(1);
 }
 

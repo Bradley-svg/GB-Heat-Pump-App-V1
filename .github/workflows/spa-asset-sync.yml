@@ -21,26 +21,23 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            frontend/package-lock.json
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
 
       - name: Install dependencies
-        run: npm ci
-
-      - name: Install frontend dependencies
-        run: npm ci
-        working-directory: frontend
+        run: pnpm install --no-frozen-lockfile
 
       - name: Verify shim guard
-        run: npm run check:prod-shim
+        run: pnpm check:prod-shim
 
       - name: Build latest frontend bundle
-        run: npm run frontend:build
+        run: pnpm --filter @greenbro/dashboard-web run build
 
       - name: Publish SPA assets to R2
-        run: npm run publish:r2 -- --env production
+        run: pnpm publish:r2 -- --env production
 
       - name: Upload manifest artifact
         uses: actions/upload-artifact@v4
@@ -48,5 +45,5 @@ jobs:
           name: nightly-spa-static-manifest
           path: |
             dist/app-static-manifest.json
-            dist/client/manifest.json
+            apps/dashboard-web/dist/manifest.json
           retention-days: 7

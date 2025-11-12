@@ -84,7 +84,7 @@
 ### P1-export-key-unset — verification now requires secret + healthcheck
 - **Category:** Security / Availability
 - **Where:** `services/overseas-api/wrangler.toml`, `services/overseas-api/src/index.ts:28-83`
-- **Evidence:** `EXPORT_VERIFY_PUBKEY` is no longer hard-coded in `wrangler.toml`; the Worker trims the secret, `/health` reports `signatureConfigured`, and missing keys return a `503 signing key not configured`.
+- **Evidence:** `EXPORT_VERIFY_PUBKEY` is no longer hard-coded in `services/overseas-api/wrangler.toml`; the Worker trims the secret, `/health` reports `signatureConfigured`, and missing keys return a `503 signing key not configured`.
 - **Impact:** Teams must provision the Ed25519 public key via `wrangler secret put EXPORT_VERIFY_PUBKEY` before enabling exports; otherwise health alarms fire and batches are rejected.
 - **Fix:** Store the production key via Wrangler secrets and monitor `/health` plus logs for `signatureConfigured: true`.
 - **Tests:** Extend `services/overseas-api/src/index.test.ts` with a case asserting `500` when key absent and `202` when provided.

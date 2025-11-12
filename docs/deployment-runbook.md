@@ -14,7 +14,7 @@ The platform now deploys a single Worker (`gb-heat-pump-app-v1`). Key bindings a
 
 > When `INGEST_IP_LIMIT_PER_MIN` is greater than zero, bind `INGEST_IP_BUCKETS` (KV) in the target environment. The Worker now fails validation instead of silently falling back to per-isolate token buckets. Use the namespace created via `wrangler kv namespace create greenbro-ingest-ip` (preview + production IDs) for all deployments.
 
-> `AUTH_IP_BUCKETS` (single binding in `wrangler.toml`) should point at the `greenbro-auth-ip` namespace you provisioned via `wrangler kv namespace create ...`. The IDs live in the password manager; update them in one place (global binding) rather than duplicating under `[env.production]`.
+> `AUTH_IP_BUCKETS` (single binding in `services/overseas-api/wrangler.toml`) should point at the `greenbro-auth-ip` namespace you provisioned via `wrangler kv namespace create ...`. The IDs live in the password manager; update them in one place (global binding) rather than duplicating under `[env.production]`.
 
 > `CLIENT_EVENT_IP_BUCKETS` is now a first-class binding used to throttle `/api/observability/client-events`. Provision preview + production namespaces via `wrangler kv namespace create greenbro-client-event-ip` (add `--env production` for prod) and keep the IDs recorded in the secret-management entry. The worker refuses to deploy if `CLIENT_EVENT_LIMIT_PER_MIN > 0` without this binding, preventing client-event spikes from taking down login endpoints.
 
@@ -34,7 +34,7 @@ Mobile clients now call `POST /api/auth/telemetry-token` to refresh their short-
 | --- | --- |
 | `PASSWORD_RESET_WEBHOOK_URL` | HTTPS endpoint (SendGrid, SES, Twilio, etc.) that delivers password-reset notifications. Configure via `wrangler secret put PASSWORD_RESET_WEBHOOK_URL` per environment. |
 | `PASSWORD_RESET_WEBHOOK_SECRET` | Shared secret used for `Authorization: Bearer …` and `X-Reset-Signature` headers. Must be ≥16 chars. Rotate quarterly via the checklist below. |
-| `AUTH_IP_BUCKETS` (KV) | Now provisioned for **both** production and preview. Use `wrangler kv namespace create greenbro-auth-ip --env production` (and `--env preview`) and copy the IDs into `wrangler.toml`. The Worker refuses to boot if `AUTH_IP_LIMIT_PER_MIN > 0` without this binding, preventing silent degradation. |
+| `AUTH_IP_BUCKETS` (KV) | Now provisioned for **both** production and preview. Use `wrangler kv namespace create greenbro-auth-ip --env production` (and `--env preview`) and copy the IDs into `services/overseas-api/wrangler.toml`. The Worker refuses to boot if `AUTH_IP_LIMIT_PER_MIN > 0` without this binding, preventing silent degradation. |
 
 **Secret rotation checklist**
 
@@ -78,13 +78,13 @@ Caching is scope-aware (admin vs tenant) and automatically invalidated on deploy
 ## 1. Pre-Deployment Checklist
 
 - Confirm the branch is green in **Frontend CI** and **Worker CI**.
-- Review pending migrations: `npm run migrate:list`.
+- Review pending migrations: `pnpm run migrate:list`.
 - Ensure required secrets are set on the Worker (`wrangler secret put ...`).
 - Replace any placeholder secrets (e.g. `CURSOR_SECRET`, `ACCESS_AUD`, `ASSET_SIGNING_SECRET`, `INGEST_ALLOWED_ORIGINS`, `INGEST_RATE_LIMIT_PER_MIN`, `INGEST_SIGNATURE_TOLERANCE_SECS`, `INGEST_IP_LIMIT_PER_MIN`, `INGEST_IP_BLOCK_SECONDS`) with strong values stored in the password manager before the first production deploy.
 - Verify Cloudflare credentials (`npx wrangler whoami`) and select the right account.
-- Verify retention archive readiness: confirm R2 buckets (`npx wrangler r2 bucket list | rg telemetry-archive`), check the `RETENTION_ARCHIVE` binding in `wrangler.toml`, and run `npx vitest run src/jobs/__tests__/retention.test.ts --reporter verbose` to ensure backups log before deletions.
+- Verify retention archive readiness: confirm R2 buckets (`npx wrangler r2 bucket list | rg telemetry-archive`), check the `RETENTION_ARCHIVE` binding in `services/overseas-api/wrangler.toml`, and run `npx vitest run src/jobs/__tests__/retention.test.ts --reporter verbose` to ensure backups log before deletions.
 - Confirm telemetry rollout mode: production deployments must keep `TELEMETRY_REFACTOR_MODE=compare` until the parity review sign-off is captured (see _Telemetry parity review_).
-- Bootstrap SPA assets: `npm run ops:r2:bootstrap -- --env production` (or run `npm run frontend:build && npm run publish:r2 -- --env production`). The helper writes `dist/app-static-manifest.json`; attach it to the release ticket.
+- Bootstrap SPA assets: `pnpm run ops:r2:bootstrap -- --env production` (or run `pnpm --filter @greenbro/dashboard-web run build && pnpm publish:r2 -- --env production`). The helper writes `dist/app-static-manifest.json`; attach it to the release ticket.
 - Confirm the SPA bucket is populated: `npx wrangler r2 object list APP_STATIC/app --limit 5 --env production`. Investigate if the list is empty before shipping.
 
 ---
@@ -93,13 +93,13 @@ Caching is scope-aware (admin vs tenant) and automatically invalidated on deploy
 
 | Target | Command | Notes |
 |--------|---------|-------|
-| Local developer SQLite | `npm run migrate:apply:local` | Keeps Miniflare/SQLite copy in sync. |
-| Cloudflare Worker (`gb-heat-pump-app-v1`) | `npm run migrate:apply` | Run immediately before deploying. |
+| Local developer SQLite | `pnpm run migrate:apply:local` | Keeps Miniflare/SQLite copy in sync. |
+| Cloudflare Worker (`gb-heat-pump-app-v1`) | `pnpm run migrate:apply` | Run immediately before deploying. |
 
 > **Release guard:** When `migrations/0010_ops_metrics_device_route_index.sql` is pending, do not disable the "Apply D1 migrations" option in the `Worker Deploy` GitHub Action. The ingest and heartbeat rate-limit now rely on the covering index `ix_ops_metrics_device_route_ts`, so run migrations before shifting traffic.
 
 **Verification**
-- Check migration status: `npm run migrate:list`.
+- Check migration status: `pnpm run migrate:list`.
 - For destructive changes, snapshot important tables beforehand via `wrangler d1 execute ... --file backup.sql`.
 
 **Rollback**
@@ -110,22 +110,22 @@ Caching is scope-aware (admin vs tenant) and automatically invalidated on deploy
 
 ## 3. Deploy the Worker
 
-1. Build and upload SPA assets: `npm run frontend:build && npm run publish:r2 -- --env production`. This updates the `APP_STATIC` bucket and refreshes `dist/app-static-manifest.json` for the release artifact.
-2. Dry-run the Worker deploy: `npm run build` (writes preview bundle to `dist/`).
-3. Deploy: `npm run deploy`
+1. Build and upload SPA assets: `pnpm --filter @greenbro/dashboard-web run build && pnpm publish:r2 -- --env production`. This updates the `APP_STATIC` bucket and refreshes `dist/app-static-manifest.json` for the release artifact.
+2. Dry-run the Worker deploy: `pnpm build` (writes preview bundle to `dist/`).
+3. Deploy: `pnpm run deploy`
 
-> **GitHub Actions**: Trigger the `Worker Deploy` workflow (`.github/workflows/worker-deploy.yml`) for repeatable rollouts. The job now builds the frontend, publishes R2 assets (`npm run publish:r2 -- --env production`), and uploads `dist/app-static-manifest.json` as an artifact alongside the Worker bundle. It still targets `gb-heat-pump-app-v1` automatically and runs migrations plus cron synchronization when the inputs are enabled. Store `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as repository secrets before the first run. Worker CI also requires `CLOUDFLARE_API_TOKEN_D1` (token scoped to `Workers Scripts:Edit`, `Workers KV Storage:Edit`, and `D1:Edit`) so remote migrations can run every PR. A nightly `SPA Asset Sync` workflow (`.github/workflows/spa-asset-sync.yml`) keeps `APP_STATIC` aligned with the latest build; monitor its runs for upload failures.
+> **GitHub Actions**: Trigger the `Worker Deploy` workflow (`.github/workflows/worker-deploy.yml`) for repeatable rollouts. The job now builds the frontend, publishes R2 assets (`pnpm publish:r2 -- --env production`), and uploads `dist/app-static-manifest.json` as an artifact alongside the Worker bundle. It still targets `gb-heat-pump-app-v1` automatically and runs migrations plus cron synchronization when the inputs are enabled. Store `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as repository secrets before the first run. Worker CI also requires `CLOUDFLARE_API_TOKEN_D1` (token scoped to `Workers Scripts:Edit`, `Workers KV Storage:Edit`, and `D1:Edit`) so remote migrations can run every PR. A nightly `SPA Asset Sync` workflow (`.github/workflows/spa-asset-sync.yml`) keeps `APP_STATIC` aligned with the latest build; monitor its runs for upload failures.
 
 ### Access shim guard
 
-Before deploying (locally or through CI), run `npm run check:prod-shim`. The job now executes automatically in every PR, CI, and deploy workflow. If it fails:
+Before deploying (locally or through CI), run `pnpm check:prod-shim`. The job now executes automatically in every PR, CI, and deploy workflow. If it fails:
 
 1. Remove `ALLOW_DEV_ACCESS_SHIM` and `DEV_ALLOW_USER` from the target Worker:  
    - default env: `npx wrangler secret delete ALLOW_DEV_ACCESS_SHIM` and `npx wrangler secret delete DEV_ALLOW_USER`  
    - explicit env: `npx wrangler secret delete ALLOW_DEV_ACCESS_SHIM --env production`
 2. Unset any pipeline variables or repository/environment secrets named `ALLOW_DEV_ACCESS_SHIM` or `DEV_ALLOW_USER` in GitHub Actions (or the triggering platform).
-3. Confirm `wrangler.toml` only declares the shim entries under `[env.local.vars]` and remove them from other sections if present.
-4. Re-run `npm run check:prod-shim` to verify the guard passes before retrying the deploy.
+3. Confirm `services/overseas-api/wrangler.toml` only declares the shim entries under `[env.local.vars]` and remove them from other sections if present.
+4. Re-run `pnpm check:prod-shim` to verify the guard passes before retrying the deploy.
 
 **Verification**
 - Inspect the deployment list: `npx wrangler deployments list` and note the new `deployment_id`.
@@ -142,26 +142,26 @@ Before deploying (locally or through CI), run `npm run check:prod-shim`. The job
 
 ## 4. Cron Trigger Synchronization
 
-Cron schedules in `wrangler.toml` (under `[triggers]`) deploy automatically with the Worker. If you update the cron configuration without shipping code, use the dedicated scripts:
+Cron schedules in `services/overseas-api/wrangler.toml` (under `[triggers]`) deploy automatically with the Worker. If you update the cron configuration without shipping code, use the dedicated scripts:
 
 | Target | Command |
 |--------|---------|
-| Cloudflare Worker (`gb-heat-pump-app-v1`) | `npm run cron:deploy` |
+| Cloudflare Worker (`gb-heat-pump-app-v1`) | `pnpm run cron:deploy` |
 
 **Verification**
 - After a deploy, confirm the cron is registered: `npx wrangler deployments status` (look for the `crons` block).
 - Watch for the scheduled Worker logs: `npx wrangler tail --filter "offline_cron"` and confirm `cron.offline_check.completed` appears within the expected window (see `docs/observability.md` section 2) with `"truncated": false` to indicate the batch completed.
 
 **Rollback**
-- Redeploy with the previous `wrangler.toml` (with the prior cron list) using `npm run deploy`.
-- If only triggers changed, re-run `npm run cron:deploy` from the previous commit.
+- Redeploy with the previous `services/overseas-api/wrangler.toml` (with the prior cron list) using `pnpm run deploy`.
+- If only triggers changed, re-run `pnpm run cron:deploy` from the previous commit.
 
 ---
 
 ## 5. Post-Deployment Validation
 
-- **Smoke tests**: `npm run test:smoke`.
-- **Security scans**: `npm run test:security`.
+- **Smoke tests**: `pnpm --filter @greenbro/overseas-api run test:smoke`.
+- **Security scans**: `pnpm --filter @greenbro/overseas-api run test:security`.
 - **API spot checks**: Use the HTTP client recipes in `docs/telemetry-api-design.md`.
 - **Telemetry parity review**: Export `telemetry.refactor.shadow_mismatch` counters from Datadog within one business day, document the comparison in the release ticket, and only flip `TELEMETRY_REFACTOR_MODE` to `refactor` once the review is signed off.
 - **Metrics**: Validate Grafana/Analytics dashboards show traffic for the new version ID.

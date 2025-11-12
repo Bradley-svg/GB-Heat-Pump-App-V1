@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Run the standard D1 sanity queries we use after seeding data.
- * Defaults to the remote database configured in wrangler.toml, but you can pass
+ * Defaults to the remote database configured in services/overseas-api/wrangler.toml, but you can pass
  * --local to target a local Miniflare instance instead.
  *
  * Usage:

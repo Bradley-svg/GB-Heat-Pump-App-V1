@@ -8,9 +8,9 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
-const clientDist = path.join(repoRoot, "dist", "client");
+const clientDist = path.join(repoRoot, "apps", "dashboard-web", "dist");
 const assetDir = path.join(clientDist, "assets");
-const wranglerConfig = path.join(repoRoot, "wrangler.toml");
+const wranglerConfig = path.join(repoRoot, "services", "overseas-api", "wrangler.toml");
 const manifestOutputPath = path.join(repoRoot, "dist", "app-static-manifest.json");
 
 const LONG_CACHE = "public,max-age=31536000,immutable";
@@ -230,8 +230,8 @@ function resolveBucketName({ env, configPath = wranglerConfig, envVars = process
 
 function main() {
   if (!existsSync(clientDist)) {
-    console.error("[publish-r2-assets] Error: missing frontend build output at %s", clientDist);
-    console.error("Run `npm run frontend:build` before publishing assets.");
+    console.error("[publish-r2-assets] Error: missing dashboard build output at %s", clientDist);
+    console.error("Run `pnpm --filter @greenbro/dashboard-web build` before publishing assets.");
     process.exit(1);
   }
 

@@ -1,30 +1,49 @@
 {
   "name": "@greenbro/dashboard-web",
-  "version": "0.1.0",
   "private": true,
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "lint": "eslint src --config ../../shared/configs/eslint.react.mjs",
-    "test": "vitest run"
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:a11y": "vitest run src/__tests__/accessibility",
+    "prebuild": "pnpm lint && pnpm test && pnpm test:a11y",
+    "build": "tsc -b && vite build",
+    "postbuild": "node ./scripts/export-static-bundle.mjs",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "@greenbro/sdk-web": "workspace:*",
-    "@greenbro/ui-react": "workspace:*",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "^6.4.2",
-    "@testing-library/react": "^14.2.1",
-    "@types/react": "^18.3.5",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.4",
-    "jsdom": "^24.0.0",
-    "typescript": "^5.9.3",
-    "vite": "^5.2.8",
-    "vitest": "^4.0.7"
+    "@eslint/js": "^9.36.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^24.6.0",
+    "@types/react": "^19.1.16",
+    "@types/react-dom": "^19.1.9",
+    "@vitest/coverage-v8": "^4.0.7",
+    "axe-core": "^4.10.0",
+    "eslint-plugin-jest-dom": "^5.4.0",
+    "eslint-plugin-react": "^7.37.5",
+    "@vitejs/plugin-react": "^5.0.4",
+    "eslint": "^9.38.0",
+    "eslint-plugin-testing-library": "^6.5.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.4.0",
+    "eslint-plugin-vitest": "^0.5.4",
+    "jsdom": "^25.0.1",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.2",
+    "vite": "^7.1.7",
+    "vitest": "^4.0.7",
+    "vitest-axe": "^0.1.0"
   }
 }

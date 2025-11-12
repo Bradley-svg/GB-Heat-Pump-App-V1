@@ -22,6 +22,9 @@ const printJson = args.has('--json');
 
 ensureDir(RESULTS_DIR);
 const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+const configRelativePath = path.relative(ROOT, CONFIG_PATH).replace(/\\/g, '/');
+const scriptRelativePath = path.relative(ROOT, __filename).replace(/\\/g, '/');
+const excludedFiles = new Set([configRelativePath, scriptRelativePath]);
 const baseline = loadBaseline('forbidden');
 const allowlist = config.allowlist || [];
 const safeIdentifiers = new Set(
@@ -132,6 +135,7 @@ function fileMatches(filePath) {
   const ignored =
     config.excludeGlobs &&
     config.excludeGlobs.some((pattern) => minimatch(filePath, pattern, { dot: true }));
+  if (excludedFiles.has(filePath)) return false;
   if (ignored) return false;
   return true;
 }

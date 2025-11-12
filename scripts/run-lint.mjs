@@ -3,8 +3,8 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
-const FRONTEND_NODE_MODULES = resolve("frontend", "node_modules");
-const LINT_COMMAND = ["--prefix", "frontend", "run", "lint"];
+const FRONTEND_NODE_MODULES = resolve("apps", "dashboard-web", "node_modules");
+const LINT_COMMAND = ["--prefix", "apps/dashboard-web", "run", "lint"];
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {

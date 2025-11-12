@@ -1,9 +1,13 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
     "jsx": "react-jsx",
-    "moduleResolution": "NodeNext",
-    "types": ["react", "react-native"]
+    "types": ["jest", "@types/react", "@types/react-native"],
+    "baseUrl": "."
   },
-  "include": ["App.tsx", "app", "src"]
+  "include": ["App.tsx", "src", "tests"]
 }

@@ -11,7 +11,7 @@ The Worker trusts Cloudflare Access JWTs via `requireAccessUser` (`src/lib/acces
 ### 1.1 Create or update the Access application
 1. In the Cloudflare dashboard, go to **Zero Trust > Access > Applications**.
 2. Create an **Application > Self-hosted** entry (or update the existing one):
-  - **Application domain**: `gb-heat-pump-app-v1.bradleyayliffl.workers.dev` (match the Worker route in `wrangler.toml`).
+  - **Application domain**: `gb-heat-pump-app-v1.bradleyayliffl.workers.dev` (match the Worker route in `services/overseas-api/wrangler.toml`).
    - **Session duration**: `>=24h` (Worker rotates sessions via Access).
    - **Allowed IdPs**: include Okta, Google, or other IdPs used by the ops teams.
 3. Save the application, then capture:
@@ -24,12 +24,12 @@ If you need non-interactive automation (for example CI seeding R2), mint a **Ser
 
 ### 1.3 Local development tips
 - `wrangler dev --remote` runs the Worker on Cloudflare, so Access policies apply naturally.
-- For purely local development use the dedicated configuration: `wrangler dev --local --env local`. The `env.local` block in `wrangler.toml` now sets `APP_BASE_URL=http://127.0.0.1:8787/app`, points API calls at the local worker, and enables the Access shim. `validateEnv` will refuse to start if `ALLOW_DEV_ACCESS_SHIM` is truthy while `APP_BASE_URL` is not a localhost origin.
+- For purely local development use the dedicated configuration: `wrangler dev --local --env local`. The `env.local` block in `services/overseas-api/wrangler.toml` now sets `APP_BASE_URL=http://127.0.0.1:8787/app`, points API calls at the local worker, and enables the Access shim. `validateEnv` will refuse to start if `ALLOW_DEV_ACCESS_SHIM` is truthy while `APP_BASE_URL` is not a localhost origin.
   - Bash: `export DEV_ALLOW_USER='{"email":"admin@example.com","roles":["admin"],"clientIds":["profile-west"]}' && wrangler dev --local --env local`
   - PowerShell: `$env:DEV_ALLOW_USER='{"email":"admin@example.com","roles":["admin"]}' ; wrangler dev --local --env local`
   (The shim auto-enables via `env.local`; override `APP_BASE_URL`/`APP_API_BASE` manually if you need a different loopback host.)
   The shim only activates when `Cf-Access-Jwt-Assertion` is missing; any supplied JWT is still fully verified.
-- Production deploys include a GitHub Actions guard (`npm run check:prod-shim`) that halts the workflow if `ALLOW_DEV_ACCESS_SHIM` is still bound in the target environment. Remove or rotate the secret before re-running the deployment.
+- Production deploys include a GitHub Actions guard (`pnpm check:prod-shim`) that halts the workflow if `ALLOW_DEV_ACCESS_SHIM` is still bound in the target environment. Remove or rotate the secret before re-running the deployment.
 - If you prefer to exercise the real flow, inject a JWT into `Cf-Access-Jwt-Assertion` manually (generate via `cloudflared access login`), or temporarily stub `requireAccessUser` in tests.
 - Ensure secrets exist for the Worker: `wrangler secret put ACCESS_AUD`.
 
@@ -62,14 +62,14 @@ wrangler secret put ASSET_SIGNING_SECRET             # optional unless issuing s
 
 To push them all in one go, export the values in your shell and run `node scripts/bind-cloudflare-secrets.mjs --env <name>`; the helper pipes each value into `wrangler secret put` and validates numeric fields before handing them to Wrangler.
 
-> **New (Prompt Bible #15 – Scalability Plan):** provision a KV namespace for the global ingest IP throttle. Create production and preview namespaces, then map them to `INGEST_IP_BUCKETS` in `wrangler.toml`:
+> **New (Prompt Bible #15 – Scalability Plan):** provision a KV namespace for the global ingest IP throttle. Create production and preview namespaces, then map them to `INGEST_IP_BUCKETS` in `services/overseas-api/wrangler.toml`:
 >
 > ```bash
 > wrangler kv:namespace create greenbro-ingest-ip
 > wrangler kv:namespace create greenbro-ingest-ip --preview
 > ```
 >
-> Copy the returned `id`/`preview_id` values into the `[[kv_namespaces]]` block (see `wrangler.toml:84`), replacing the placeholders. Confirm `wrangler deploy --dry-run` succeeds afterwards. Without the binding the Worker falls back to per-isolate memory buckets and the mitigation loses cross-colo coverage.
+> Copy the returned `id`/`preview_id` values into the `[[kv_namespaces]]` block (see `services/overseas-api/wrangler.toml:84`), replacing the placeholders. Confirm `wrangler deploy --dry-run` succeeds afterwards. Without the binding the Worker falls back to per-isolate memory buckets and the mitigation loses cross-colo coverage.
 
 Once the KV binding is live, add a Datadog/Grafana alert on the `ingest.ip_kv_bucket_failed` log metric so operations can detect namespace outages rapidly.
 
@@ -97,7 +97,7 @@ Browser -> Access login -> Cf-Access-Jwt-Assertion header
 
 ## 2. D1 Database Management
 
-The Worker binds D1 as `env.DB` (see `wrangler.toml`). SQL files live under `migrations/` with ascending numeric prefixes.
+The Worker binds D1 as `env.DB` (see `services/overseas-api/wrangler.toml`). SQL files live under `migrations/` with ascending numeric prefixes.
 
 ### 2.1 Creating migrations
 1. Copy the prior migration as a template (`migrations/0003_operational_entities.sql` is a good example).
@@ -107,8 +107,8 @@ The Worker binds D1 as `env.DB` (see `wrangler.toml`). SQL files live under `mig
 ### 2.2 Applying migrations
 Use Wrangler scripts (see `package.json`):
 ```bash
-npm run migrate:list      # show applied vs pending migrations
-npm run migrate:apply     # applies pending migrations to the remote alias
+pnpm run migrate:list      # show applied vs pending migrations
+pnpm run migrate:apply     # applies pending migrations to the remote alias
 ```
 The scripts reference the Cloudflare database name `GREENBRO_DB`. If your account uses a different name, adjust the scripts and verify with `wrangler d1 list`.
 
@@ -116,11 +116,11 @@ For local SQLite shadow databases (Miniflare):
 ```bash
 wrangler d1 migrations apply GREENBRO_DB --local
 ```
-where `GREENBRO_DB` matches the binding in `wrangler.toml`.
+where `GREENBRO_DB` matches the binding in `services/overseas-api/wrangler.toml`.
 
 ### 2.3 Migration workflow diagram
 ```
-Write SQL -> npm run migrate:list (CI or local sanity)
+Write SQL -> pnpm run migrate:list (CI or local sanity)
        -> Pull request review -> wrangler d1 migrations apply <env>
        -> Run smoke tests and seed data
 ```
@@ -140,7 +140,7 @@ Seed fixtures live in `seeds/dev/seed.sql` and assume the schema from `migration
 
 ### 3.1 Run the seed locally
 ```bash
-npm run seed:dev         # executes against the local D1 or Miniflare alias
+pnpm run seed:dev         # executes against the local D1 or Miniflare alias
 ```
 - Ensure the local Miniflare database is initialized (`wrangler d1 migrations apply ... --local`) before seeding.
 - Update `seed.sql` when migrations add required columns. Keep destructive operations (DELETE or INSERT) idempotent to allow repeated runs.
@@ -157,7 +157,7 @@ npm run seed:dev         # executes against the local D1 or Miniflare alias
 
 ## 4. R2 Buckets
 
-Two buckets are declared in `wrangler.toml`:
+Two buckets are declared in `services/overseas-api/wrangler.toml`:
 
 | Binding      | Bucket name           | Use case                             |
 |--------------|-----------------------|--------------------------------------|
@@ -172,7 +172,7 @@ wrangler r2 bucket create greenbro-app-static
 If you need per-environment buckets, specify `preview_bucket_name` or create `<bucket>-dev`.
 
 ### 4.2 Bind buckets
-The bindings in `wrangler.toml` apply globally. For environment overrides:
+The bindings in `services/overseas-api/wrangler.toml` apply globally. For environment overrides:
 ```toml
 [env.staging]
 [[env.staging.r2_buckets]]
@@ -205,7 +205,7 @@ Client PUT or GET -> Worker /r2 route
 
 ## 5. Environment Configuration
 
-Central configuration lives in `wrangler.toml`. Secrets are injected per environment with `wrangler secret put`.
+Central configuration lives in `services/overseas-api/wrangler.toml`. Secrets are injected per environment with `wrangler secret put`.
 
 ### 5.1 Baseline variables (`[vars]`)
 | Key                        | Source or notes |
@@ -247,12 +247,12 @@ wrangler secret put INGEST_SIGNATURE_TOLERANCE_SECS
 ### 5.3 Running locally
 1. Install dependencies: `npm install`.
 2. Apply migrations locally: `wrangler d1 migrations apply GREENBRO_DB --local`.
-3. Load dev seed: `npm run seed:dev`.
-4. Start the Worker: `npm run dev` (remote) or `wrangler dev --local` after exporting secrets via `wrangler secret put --env local`.
-5. Start the frontend: `npm run frontend:dev`.
+3. Load dev seed: `pnpm run seed:dev`.
+4. Start the Worker: `pnpm dev:worker` (remote) or `wrangler dev --local` after exporting secrets via `wrangler secret put --env local`.
+5. Start the frontend: `pnpm --filter @greenbro/dashboard-web dev`.
 
 ### 5.4 CI and CD considerations
-- `npm run build` performs a dry-run deploy to `dist/` for inspection.
+- `pnpm build` performs a dry-run deploy to `dist/` for inspection.
 - Ensure GitHub Actions (if enabled) have Access service tokens stored as repository secrets when invoking R2 endpoints.
 - Cron triggers (`*/5 * * * *`) run automatically after deploy (no extra setup).
 
@@ -266,8 +266,8 @@ wrangler secret put INGEST_SIGNATURE_TOLERANCE_SECS
 ## 6. Quick Reference
 
 - Update Access secrets: `wrangler secret put ACCESS_AUD`.
-- Apply D1 migrations: `npm run migrate:apply`.
-- Seed local data: `npm run seed:dev`.
+- Apply D1 migrations: `pnpm run migrate:apply`.
+- Seed local data: `pnpm run seed:dev`.
 - Upload to R2: `curl -X PUT -H "Cf-Access-Jwt-Assertion: <token>" --data-binary @file.png https://<worker>/r2/brand/file.png`.
 
 Keep this guide close when rotating credentials or onboarding teammates to avoid incidental 401s and schema drift.

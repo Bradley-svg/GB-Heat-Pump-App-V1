@@ -7,7 +7,7 @@ npm ERR! code E403
 npm ERR! 403 403 Forbidden - GET https://registry.npmjs.org/eslint
 ```
 
-Use the `scripts/install-frontend.mjs` helper (invoked automatically via `npm run frontend:install` and the root `postinstall`) to configure npm for private mirrors or authenticated proxies. The script accepts the following environment variables:
+Use the `scripts/install-frontend.mjs` helper (run manually when required) to configure npm for private mirrors or authenticated proxies. The script accepts the following environment variables:
 
 | Variable | Description |
 | --- | --- |
@@ -20,6 +20,6 @@ Use the `scripts/install-frontend.mjs` helper (invoked automatically via `npm ru
 | `NPM_REGISTRY_STRICT_SSL` | Set to `false` to disable strict SSL verification. |
 | `NPM_REGISTRY_PERSIST_NPMRC` | Keep the generated `.npmrc` after the run for debugging instead of removing it. |
 
-The script writes `frontend/.npmrc` during the run and removes any proxy configuration when `NPM_REGISTRY_DISABLE_PROXY=true`. This prevents cached credentials or proxy settings from leaking into source control while ensuring `frontend/node_modules` contains the ESLint plugins and Vitest binaries required by `npm run frontend:lint` and `npm run frontend:test`.
+The script writes `apps/dashboard-web/.npmrc` during the run and removes any proxy configuration when `NPM_REGISTRY_DISABLE_PROXY=true`. This prevents cached credentials or proxy settings from leaking into source control while ensuring `apps/dashboard-web/node_modules` contains the ESLint plugins and Vitest binaries required by `pnpm --filter @greenbro/dashboard-web run lint` and `pnpm --filter @greenbro/dashboard-web run test`.
 
-When installation fails with 403 after providing credentials, confirm that the proxy allows outbound traffic to your mirror. In air-gapped CI environments ensure the mirror has the React, ESLint, Testing Library, and Vitest packages referenced in `frontend/package.json`.
+When installation fails with 403 after providing credentials, confirm that the proxy allows outbound traffic to your mirror. In air-gapped CI environments ensure the mirror has the React, ESLint, Testing Library, and Vitest packages referenced in `apps/dashboard-web/package.json`.

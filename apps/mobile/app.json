@@ -1,11 +1,58 @@
 {
   "expo": {
-    "name": "GreenBro ModeA",
-    "slug": "greenbro-modea",
-    "scheme": "modea",
-    "platforms": ["ios", "android"],
-    "version": "0.1.0",
+    "name": "GreenBro Mobile",
+    "slug": "greenbro-mobile",
+    "version": "1.0.0",
     "orientation": "portrait",
-    "sdkVersion": "51.0.0"
+    "userInterfaceStyle": "automatic",
+    "scheme": "greenbro",
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.greenbro.mobile",
+      "buildNumber": "1.0.0",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "greenbro"
+        ]
+      }
+    },
+    "android": {
+      "package": "com.greenbro.mobile",
+      "versionCode": 1,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "greenbro"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
+      "queries": [
+        {
+          "scheme": "greenbro"
+        }
+      ]
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "extra": {
+      "apiBase": "https://app.greenbro.com"
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
   }
 }

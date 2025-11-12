@@ -7,7 +7,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 const THIS_FILE = fileURLToPath(import.meta.url);
 const ROOT_DIR = dirname(THIS_FILE);
 const PROJECT_ROOT = resolve(ROOT_DIR, "..");
-const FRONTEND_DIR = resolve(PROJECT_ROOT, "frontend");
+const FRONTEND_DIR = resolve(PROJECT_ROOT, "apps", "dashboard-web");
 const NPMRC_PATH = resolve(FRONTEND_DIR, ".npmrc");
 
 const env = { ...process.env };

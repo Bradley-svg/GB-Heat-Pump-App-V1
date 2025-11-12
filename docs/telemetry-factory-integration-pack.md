@@ -13,7 +13,7 @@ This kit gives the factory everything it needs to run the first live telemetry t
   - `INGEST_ALLOWED_ORIGINS` (comma-separated; no wildcard in prod)
   - `INGEST_RATE_LIMIT_PER_MIN` (recommend `120`)
   - `INGEST_SIGNATURE_TOLERANCE_SECS` (recommend `300`)
-- **R2 assets & Access** - Not required for ingest itself but must remain configured for the SPA and Access authentication (`wrangler.toml`, `docs/secret-management.md`).
+- **R2 assets & Access** - Not required for ingest itself but must remain configured for the SPA and Access authentication (`services/overseas-api/wrangler.toml`, `docs/secret-management.md`).
 
 > Ready: If the above bindings exist and D1 migrations are applied, the app is ready to ingest factory telemetry. The only remaining action is to provision the bench device record and share the credentials below.
 
@@ -82,7 +82,7 @@ or run the statement inline with `--command`.
    Re-run `wrangler secret list` to confirm bindings.
 4. **Deploy (if needed)**
    ```bash
-   npm run deploy
+   pnpm run deploy
    wrangler triggers deploy
    ```
 5. **Access spot-check** - confirm `/app` still prompts via Cloudflare Access and `wrangler tail` shows no `env` validation errors.
@@ -179,7 +179,7 @@ Content-Type: application/json
 ## 7. Next Steps After Successful Test
 - Archive controller logs and signatures for traceability.
 - Promote the factory profile to production naming (`profile-factory` -> `profile-preprod`) as needed, or mint additional credentials per bench line.
-- Schedule ingestion smoke tests (`npm run test:smoke`, `npm run test:security`) to baseline future firmware updates.
+- Schedule ingestion smoke tests (`pnpm --filter @greenbro/overseas-api run test:smoke`, `pnpm --filter @greenbro/overseas-api run test:security`) to baseline future firmware updates.
 - Update the factory checklist to reference this pack so each run follows the same sequence.
 
 

@@ -3,16 +3,18 @@ name: Frontend CI
 on:
   push:
     paths:
-      - "frontend/**"
+      - "apps/dashboard-web/**"
       - ".github/workflows/frontend-ci.yml"
       - "package.json"
-      - "package-lock.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
   pull_request:
     paths:
-      - "frontend/**"
+      - "apps/dashboard-web/**"
       - ".github/workflows/frontend-ci.yml"
       - "package.json"
-      - "package-lock.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
 
 jobs:
   frontend:
@@ -26,35 +28,30 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            frontend/package-lock.json
 
-      - name: Install root dependencies
-        run: npm ci
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
 
       - name: Verify shim flags are disabled
-        run: npm run check:prod-shim
-
-      - name: Install frontend dependencies
-        run: npm ci
-        working-directory: frontend
+        run: pnpm check:prod-shim
 
       - name: Lint frontend
-        run: npm run lint
-        working-directory: frontend
+        run: pnpm --filter @greenbro/dashboard-web run lint
 
       - name: Run frontend unit tests
-        run: npm run test:coverage
-        working-directory: frontend
+        run: pnpm --filter @greenbro/dashboard-web run test:coverage
 
       - name: Publish Vitest results
         if: always()
         uses: dorny/test-reporter@v1
         with:
-          name: frontend-vitest
-          path: frontend/coverage/vitest-junit.xml
+          name: dashboard-web-vitest
+          path: apps/dashboard-web/coverage/vitest-junit.xml
           reporter: java-junit
           fail-on-empty: false
 
@@ -62,14 +59,12 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-vitest-coverage
-          path: frontend/coverage
+          name: dashboard-web-vitest-coverage
+          path: apps/dashboard-web/coverage
           if-no-files-found: warn
 
       - name: Run accessibility tests
-        run: npm run test:a11y
-        working-directory: frontend
+        run: pnpm --filter @greenbro/dashboard-web run test:a11y
 
       - name: Build frontend
-        run: npm run build
-        working-directory: frontend
+        run: pnpm --filter @greenbro/dashboard-web run build

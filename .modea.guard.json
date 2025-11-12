@@ -55,6 +55,8 @@
     "**/node_modules/**",
     "**/.pnpm/**",
     "**/dist/**",
+    "**/apps/**/dist/**",
+    "**/services/**/dist/**",
     "**/.next/**",
     "**/build/**",
     "**/.wrangler/**",
@@ -63,7 +65,18 @@
     "**/guard-results/**",
     "**/*.min.*",
     "**/*.map",
+    "pnpm-lock.yaml",
     ".modea.guard.json",
+    "docs/mode-a/**",
+    ".github/scripts/forbidden-fields-lint.js",
+    "scripts/forbidden-fields-lint.js",
+    "scripts/ensure-prod-shim-disabled.mjs",
+    "scripts/publish-r2-assets.mjs",
+    ".github/workflows/**",
+    "docs/**/*.md",
+    "scripts/db-sanity-check.mjs",
+    "scripts/pii-regex-scan.js",
+    "services/cn-gateway/test/**",
     "wrangler.toml",
     "package-lock.json"
   ],
@@ -82,6 +95,11 @@
       "path": ".dev.vars*",
       "pattern": "phone",
       "reason": "MODEA-GUARDS-000 sample env phone placeholder"
+    },
+    {
+      "path": ".dev.vars*",
+      "pattern": "ipv4",
+      "reason": "dev vars point at localhost endpoints"
     },
     {
       "path": "services/overseas-api/package.json",
@@ -104,9 +122,39 @@
       "reason": "Wrangler bindings require \"name\" keys for worker and D1 database references"
     },
     {
+      "path": "services/overseas-api/wrangler.toml",
+      "pattern": "ip",
+      "reason": "Wrangler env vars include rate-limit fields that mention IP addresses"
+    },
+    {
+      "path": "services/overseas-api/wrangler.toml",
+      "pattern": "email",
+      "reason": "Wrangler dev settings include placeholder email values"
+    },
+    {
+      "path": "services/overseas-api/wrangler.toml",
+      "pattern": "ipv4",
+      "reason": "local dev config points at 127.0.0.1"
+    },
+    {
       "path": "package.json",
       "pattern": "name",
       "reason": "workspace metadata requires the package \"name\" field"
+    },
+    {
+      "path": "apps/**/package.json",
+      "pattern": "name",
+      "reason": "app packages must declare their npm metadata"
+    },
+    {
+      "path": "services/**/package.json",
+      "pattern": "name",
+      "reason": "service packages must declare their npm metadata"
+    },
+    {
+      "path": "packages/**/package.json",
+      "pattern": "name",
+      "reason": "library packages must declare their npm metadata"
     },
     {
       "path": "packages/sdk-core/package.json",
@@ -122,6 +170,91 @@
       "path": "package.json",
       "pattern": "ipv4",
       "reason": "dev server binds to 0.0.0.0 for LAN testing"
+    },
+    {
+      "path": ".github/workflows/**",
+      "pattern": "ip",
+      "reason": "workflow env vars legitimately reference IP limits"
+    },
+    {
+      "path": ".github/workflows/**",
+      "pattern": "email",
+      "reason": "workflow env vars legitimately reference email placeholders"
+    },
+    {
+      "path": ".github/workflows/full-ci.yml",
+      "pattern": "email",
+      "reason": "workflow references secret names"
+    },
+    {
+      "path": ".github/workflows/full-ci.yml",
+      "pattern": "ip",
+      "reason": "workflow variables include IP limit settings"
+    },
+    {
+      "path": ".github/workflows/mobile-detox.yml",
+      "pattern": "email",
+      "reason": "workflow references detox credentials"
+    },
+    {
+      "path": ".github/workflows/mobile-detox.yml",
+      "pattern": "ip",
+      "reason": "workflow variables reference IP limits"
+    },
+    {
+      "path": ".github/workflows/worker-ci.yml",
+      "pattern": "ip",
+      "reason": "worker CI references IP limit env vars"
+    },
+    {
+      "path": ".github/workflows/worker-ci.yml",
+      "pattern": "email",
+      "reason": "worker CI references credential env vars"
+    },
+    {
+      "path": "docs/password-reset-webhook.md",
+      "pattern": "email",
+      "reason": "documentation lists placeholder email examples"
+    },
+    {
+      "path": "docs/password-reset-webhook.md",
+      "pattern": "phone",
+      "reason": "documentation includes phone placeholders"
+    },
+    {
+      "path": "apps/mobile/README.md",
+      "pattern": "email",
+      "reason": "README references placeholder secrets"
+    },
+    {
+      "path": "docs/deployment-runbook.md",
+      "pattern": "ip",
+      "reason": "runbook discusses IP throttling controls"
+    },
+    {
+      "path": "scripts/ensure-prod-shim-disabled.mjs",
+      "pattern": "email",
+      "reason": "script references CLI env names containing email"
+    },
+    {
+      "path": "scripts/ensure-prod-shim-disabled.mjs",
+      "pattern": "ip",
+      "reason": "script references env vars describing IP limits"
+    },
+    {
+      "path": "docs/platform-setup-guide.md",
+      "pattern": "ip",
+      "reason": "setup guide documents IP-based limits"
+    },
+    {
+      "path": "docs/telemetry-factory-integration-pack.md",
+      "pattern": "ip",
+      "reason": "integration pack covers IP-related deployment steps"
+    },
+    {
+      "path": "scripts/publish-r2-assets.mjs",
+      "pattern": "ip",
+      "reason": "script references asset hostnames containing 'ip'"
     }
   ],
   "severityMap": {
@@ -167,5 +300,5 @@
     "freetext": "P2",
     "rawpayload": "P2"
   },
-  "baselineFile": "guard-results/baseline.json"
+  "baselineFile": "docs/guardrails/baseline.json"
 }

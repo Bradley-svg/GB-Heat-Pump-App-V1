@@ -1,43 +1,44 @@
-﻿# Frontend Dashboard
+# Dashboard Web
 
 ## Overview
 
-- React 19 + Vite + TypeScript now lives in `frontend/`.
-- Build output is written to `dist/client/` (shared top-level `dist/`).
-- `src/frontend/static-bundle.ts` contains an embedded fallback copy of the published build for local dev and tests.
+- React 19 + Vite + TypeScript now lives in `apps/dashboard-web/`.
+- Build output is written to `apps/dashboard-web/dist/` (per-workspace build artifacts).
+- `services/overseas-api/src/frontend/static-bundle.ts` contains an embedded fallback copy of the published build for local dev and tests.
 - The Worker prefers reading assets from the `APP_STATIC` R2 bucket (keys under `app/`), falling back to the embedded bundle when missing.
 
 ## Local development
 
-- `npm run frontend:dev` – start Vite dev server (port 5173).
-- `npm run frontend:watch` – same dev server, but bound to all interfaces for tunnelling.
-- `npm run frontend:lint` – run ESLint across the UI code.
-- `npm run frontend:preview` – serve the production build locally.
+- `pnpm --filter @greenbro/dashboard-web dev` - start Vite dev server (port 5173).
+- `pnpm --filter @greenbro/dashboard-web run preview` - serve the production build locally.
+- `pnpm --filter @greenbro/dashboard-web run lint` - run ESLint across the UI code.
 
 The dashboard expects API routes to be reachable on the same origin. When running `wrangler dev`, open both the Worker preview URL (serving `/app`) and the Vite dev server for live editing.
 
 ## Installing dependencies
 
-Run `npm install` at the repository root and `npm run frontend:install` to hydrate the SPA dependencies. The installer script understands corporate proxy quirks and rewrites `frontend/.npmrc` on the fly. See [`docs/npm-registry.md`](./npm-registry.md) for the complete list of supported environment variables (mirror URL, auth token, proxy bypass, and CA bundle options).
+Run `pnpm install` at the repository root. pnpm workspaces hydrate `apps/dashboard-web` automatically; no extra install step inside the app is required.
+
+Corporate mirrors can still use `scripts/install-frontend.mjs` to generate a temporary `.npmrc` targeting the desired registry (see `docs/npm-registry.md`).
 
 ## Build + deploy workflow
 
-1. `npm run frontend:build`
-   - Runs TypeScript build + `vite build`, emitting the entry bundle and any code-split chunks under `dist/client/assets/`.
-   - Executes `frontend/scripts/export-static-bundle.mjs`, refreshing `src/frontend/static-bundle.ts`.
+1. `pnpm --filter @greenbro/dashboard-web run build`
+   - Runs TypeScript build + `vite build`, emitting the entry bundle and any code-split chunks under `apps/dashboard-web/dist/assets/`.
+   - Executes `apps/dashboard-web/scripts/export-static-bundle.mjs`, refreshing `services/overseas-api/src/frontend/static-bundle.ts`.
 2. Upload the new assets to R2 (`APP_STATIC` bucket).
 
    Recommended:
 
    ```bash
-   npm run publish:r2            # uploads index.html and every file in dist/client/assets/
+   pnpm publish:r2            # uploads index.html and every file in apps/dashboard-web/dist/assets/
    ```
 
    Manual example:
 
    ```bash
-   wrangler r2 object put APP_STATIC/app/index.html --file dist/client/index.html --content-type text/html --cache-control "no-store"
-   for asset in dist/client/assets/*; do
+   wrangler r2 object put APP_STATIC/app/index.html --file apps/dashboard-web/dist/index.html --content-type text/html --cache-control "no-store"
+   for asset in apps/dashboard-web/dist/assets/*; do
      name="$(basename "$asset")"
      case "${name##*.}" in
        js) type="application/javascript" ;;
@@ -58,27 +59,26 @@ Run `npm install` at the repository root and `npm run frontend:install` to hydra
 
    The publish script uploads every build artifact under `app/assets/`, matching the Worker routes and the CDN layout expected by `APP_ASSET_BASE` overrides. Each run also emits `dist/app-static-manifest.json` with the uploaded keys and checksums for release records.
 
-   To bootstrap a fresh environment (create the bucket and upload in one step), run `npm run ops:r2:bootstrap -- --env production`.
+   To bootstrap a fresh environment (create the bucket and upload in one step), run `pnpm ops:r2:bootstrap -- --env production`.
 
-3. `npm run build` (top-level) will re-run the frontend build and produce the Worker bundle in `dist/` ready for deployment.
+3. `pnpm build` (top-level) will re-run the frontend build and produce the Worker bundle ready for deployment.
 
 ### Notes
 
 - The Worker injects `window.__APP_CONFIG__` with `returnDefault`, `apiBase`, and `assetBase` so the SPA stays in sync with worker settings.
-- Override SPA endpoints by setting `APP_API_BASE` and/or `APP_ASSET_BASE` in `wrangler.toml` (or per-environment vars). `APP_API_BASE` accepts HTTPS URLs or relative paths (query strings and fragments are preserved); non-HTTP(S) schemes are rejected and the Worker falls back to the default while logging a warning. `APP_ASSET_BASE` accepts HTTPS origins, protocol-relative URLs, or relative paths and is normalized with a trailing slash (defaulting to `/app/assets/`). Invalid schemes (for example `javascript:` or `data:`) are ignored in favour of the default, and an operator warning is emitted. Point `APP_ASSET_BASE` at the `/app/assets/` prefix on your CDN (for example, `https://cdn.example.com/app/assets/`).
+- Override SPA endpoints by setting `APP_API_BASE` and/or `APP_ASSET_BASE` in `services/overseas-api/wrangler.toml` (or per-environment vars). `APP_API_BASE` accepts HTTPS URLs or relative paths (query strings and fragments are preserved); non-HTTP(S) schemes are rejected and the Worker falls back to the default while logging a warning. `APP_ASSET_BASE` accepts HTTPS origins, protocol-relative URLs, or relative paths and is normalized with a trailing slash (defaulting to `/app/assets/`). Invalid schemes (for example `javascript:` or `data:`) are ignored in favour of the default, and an operator warning is emitted. Point `APP_ASSET_BASE` at the `/app/assets/` prefix on your CDN (for example, `https://cdn.example.com/app/assets/`).
 - If `APP_STATIC` is not bound (or a key is missing), the Worker serves the embedded bundle, ensuring `wrangler dev` works without R2 access.
-- `src/frontend/static-bundle.ts` is regenerated automatically during `frontend:build` - no manual edits required.
-- Update favicons/metadata within `frontend/index.html` (will be reflected automatically in both R2 assets and embedded bundle).
+- `services/overseas-api/src/frontend/static-bundle.ts` is regenerated automatically during the build - no manual edits required.
+- Update favicons/metadata within `apps/dashboard-web/index.html` (reflected automatically in both R2 assets and embedded bundle).
 
 ## Scripts quick reference
 
 | Command | Description |
 | --- | --- |
-| `npm run frontend:dev` | Start Vite dev server |
-| `npm run frontend:build` | Produce production build and refresh embedded bundle |
-| `npm run frontend:watch` | Dev server listening on `0.0.0.0` |
-| `npm run frontend:preview` | Serve built assets |
-| `npm run frontend:lint` | Run ESLint |
-| `npm run build` | Build frontend + worker bundle (no deploy) |
-| `npm run deploy` | Deploy worker via Wrangler |
-
+| `pnpm --filter @greenbro/dashboard-web dev` | Start Vite dev server |
+| `pnpm --filter @greenbro/dashboard-web run build` | Produce production build and refresh embedded bundle |
+| `pnpm --filter @greenbro/dashboard-web run preview` | Serve built assets |
+| `pnpm --filter @greenbro/dashboard-web run lint` | Run ESLint |
+| `pnpm publish:r2` | Upload SPA assets to R2 |
+| `pnpm build` | Build frontend + worker bundle (no deploy) |
+| `pnpm --filter @greenbro/overseas-api deploy` | Deploy worker via Wrangler |

@@ -1,78 +1,87 @@
-import { useEffect, useState } from "react";
-import { SafeAreaView, ScrollView, Text, View } from "react-native";
-import { ModeARNClient, type DashboardSnapshot } from "@greenbro/sdk-rn";
-import { ThemeProvider, GBButton, GBCard, GBStatusPill } from "@greenbro/ui-rn";
-import { sampleSnapshot } from "./src/sampleData";
-
-const client = new ModeARNClient({
-  apiBase: process.env.EXPO_PUBLIC_APP_API_BASE ?? "https://api-overseas.example.com",
-});
+import React, { useState } from "react";
+import { NavigationContainer, DarkTheme, DefaultTheme } from "@react-navigation/native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
+import { ActivityIndicator, View } from "react-native";
+import AppNavigator from "./src/navigation/AppNavigator";
+import { linking } from "./src/navigation/linking";
+import { GBThemeProvider, useColorScheme, useTheme } from "./src/theme/GBThemeProvider";
+import { GBToast } from "./src/components/GBToast";
+import { AuthProvider, useAuth } from "./src/contexts/AuthContext";
+import { LoginScreen } from "./src/screens/LoginScreen";
 
 export default function App() {
-  const [snapshot, setSnapshot] = useState<DashboardSnapshot>(sampleSnapshot);
-  const [notice, setNotice] = useState<string>();
+  const [toast, setToast] = useState({
+    visible: false,
+    message: "",
+    type: "success" as "success" | "warn" | "error",
+  });
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const data = await client.getDashboardSnapshot();
-        setSnapshot(data);
-        setNotice(undefined);
-      } catch (error) {
-        console.warn("mobile: fallback to sample data", error);
-        setNotice("Offline mode · showing cached sample data.");
-      }
-    }
-    load();
-  }, []);
-
-  const primaryDevice = snapshot.top_devices[0];
+  const showToast = (message: string, type: "success" | "warn" | "error") =>
+    setToast({ visible: true, message, type });
 
   return (
-    <ThemeProvider>
-      <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
-          <Text style={{ fontSize: 24, fontWeight: "700" }}>Mode A Mobile</Text>
-          <Text>Identifiers are pseudonymous. Contact CN ops for re-identification.</Text>
-
-          {notice && (
-            <GBCard title="Status">
-              <Text>{notice}</Text>
-            </GBCard>
-          )}
-
-          <GBCard title="Latest Device">
-            {primaryDevice ? (
-              <View style={{ gap: 8 }}>
-                <Text>Pseudo ID: {primaryDevice.device_id}</Text>
-                <Text>Supply: {formatMaybe(primaryDevice.supplyC)} °C</Text>
-                <Text>Return: {formatMaybe(primaryDevice.returnC)} °C</Text>
-                <Text>COP: {formatMaybe(primaryDevice.cop)}</Text>
-                <Text>Site: {primaryDevice.site ?? "Unassigned"}</Text>
-              </View>
-            ) : (
-              <Text>No recent telemetry in scope.</Text>
-            )}
-            <GBButton label="Request Diagnostics" onPress={() => console.log("diag")} />
-          </GBCard>
-
-          <GBCard title="Alerts">
-            {snapshot.alerts.length === 0 && <Text>All clear.</Text>}
-            {snapshot.alerts.map((alert) => (
-              <View key={`${alert.lookup}-${alert.ts}`} style={{ marginBottom: 8, gap: 4 }}>
-                <GBStatusPill status={alert.fault_count > 0 ? "ALERT" : "WARN"} label={alert.device_id} />
-                <Text>{alert.faults.join(", ") || "Fault cleared"}</Text>
-                <Text>{new Date(alert.ts).toLocaleString()}</Text>
-              </View>
-            ))}
-          </GBCard>
-        </ScrollView>
-      </SafeAreaView>
-    </ThemeProvider>
+    <AuthProvider>
+      <GBThemeProvider>
+        <SafeAreaProvider>
+          <AuthGate onShowToast={showToast} />
+          <GBToast
+            visible={toast.visible}
+            message={toast.message}
+            type={toast.type}
+            onDismiss={() => setToast((prev) => ({ ...prev, visible: false }))}
+          />
+        </SafeAreaProvider>
+      </GBThemeProvider>
+    </AuthProvider>
   );
 }
 
-function formatMaybe(value: number | null | undefined) {
-  if (value == null) return "--";
-  return value.toFixed(1);
-}
+const AuthGate: React.FC<{
+  onShowToast: (message: string, type: "success" | "warn" | "error") => void;
+}> = ({ onShowToast }) => {
+  const { status, user } = useAuth();
+  const scheme = useColorScheme();
+  const { colors } = useTheme();
+
+  if (status === "loading") {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
+  if (!user) {
+    return (
+      <LoginScreen
+        onSuccess={() => onShowToast("Signed in", "success")}
+        onError={(message) => onShowToast(message, "error")}
+      />
+    );
+  }
+
+  return (
+    <>
+      <View
+        testID="theme-probe"
+        accessibilityLabel={`theme-${scheme}`}
+        style={{
+          position: "absolute",
+          width: 0,
+          height: 0,
+          opacity: 0,
+          backgroundColor: colors.surface,
+        }}
+        pointerEvents="none"
+      />
+      <NavigationContainer
+        linking={linking}
+        theme={scheme === "dark" ? DarkTheme : DefaultTheme}
+      >
+        <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+        <AppNavigator onShowToast={onShowToast} />
+      </NavigationContainer>
+    </>
+  );
+};

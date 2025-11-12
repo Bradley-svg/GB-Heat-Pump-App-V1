@@ -5,32 +5,30 @@ The repository uses the **Full CI** GitHub Actions workflow to protect the `main
 ### CI pipeline steps
 
 1. **Install dependencies with caching**  
-   - `npm ci` (root worker)  
-   - `npm ci` in `frontend/`  
-   The workflow reuses the Node.js cache provided by `actions/setup-node` for faster installs.
+   - `pnpm install` (workspace-aware)  
+   Node modules are cached via `actions/setup-node` + `pnpm/action-setup`.
 2. **Static analysis**  
-   - `npm run typecheck`  
-   - `npm run frontend:lint`
+   - `pnpm typecheck`  
+   - `pnpm --filter @greenbro/dashboard-web run lint`
 3. **Automated tests**  
-   - `npm run test:ci`
+   - `pnpm test`
 4. **Build verification**  
-   - `npm run build`
+   - `pnpm build`
 
 ### Local pre-flight checklist
 
 Run the same commands locally before opening a PR:
 
 ```bash
-npm ci
-npm ci --prefix frontend
-npm run typecheck
-npm run frontend:lint
-npm run test:ci
-npm run build
-npm run install-frontend:test
+pnpm install
+pnpm typecheck
+pnpm --filter @greenbro/dashboard-web run lint
+pnpm test
+pnpm build
+node scripts/test-install-frontend.mjs
 ```
 
-`npm run install-frontend:test` runs the new regression driver that temporarily removes `npm` from `PATH` and ensures `scripts/install-frontend.mjs` fails loudly. Run this when you make installer-related tweaks to keep the failure path covered.
+`node scripts/test-install-frontend.mjs` temporarily removes `npm` from `PATH` and ensures `scripts/install-frontend.mjs` fails loudly. Run this when you make installer-related tweaks to keep the failure path covered.
 
 ### Requiring the workflow before merges
 

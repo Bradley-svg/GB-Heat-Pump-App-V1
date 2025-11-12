@@ -6,7 +6,8 @@
     "declarationMap": true,
     "emitDeclarationOnly": true,
     "moduleDetection": "force",
-    "moduleResolution": "NodeNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "allowSyntheticDefaultImports": true,
     "jsx": "react-jsx"
   },

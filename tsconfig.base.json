@@ -10,6 +10,21 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "declaration": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@greenbro/sdk-core": ["packages/sdk-core/src/index.ts"],
+      "@greenbro/sdk-core/*": ["packages/sdk-core/src/*"],
+      "@greenbro/sdk-web": ["packages/sdk-web/src/index.ts"],
+      "@greenbro/sdk-web/*": ["packages/sdk-web/src/*"],
+      "@greenbro/sdk-rn": ["packages/sdk-rn/src/index.ts"],
+      "@greenbro/sdk-rn/*": ["packages/sdk-rn/src/*"],
+      "@greenbro/ui-react": ["packages/ui-react/src/index.ts"],
+      "@greenbro/ui-react/*": ["packages/ui-react/src/*"],
+      "@greenbro/ui-rn": ["packages/ui-rn/src/index.ts"],
+      "@greenbro/ui-rn/*": ["packages/ui-rn/src/*"],
+      "@greenbro/ui-tokens": ["packages/ui-tokens/src/index.ts"],
+      "@greenbro/ui-tokens/*": ["packages/ui-tokens/src/*"]
+    }
   }
 }

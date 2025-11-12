@@ -86,7 +86,7 @@ wrangler kv namespace create greenbro-auth-ip --env production
 wrangler kv namespace create greenbro-auth-ip --env preview
 ```
 
-Copy the IDs into `wrangler.toml` (default block + `[env.production]`). Validation now fails fast if `AUTH_IP_LIMIT_PER_MIN > 0` without this binding, so deploys will stop rather than silently disable the limiter.
+Copy the IDs into `services/overseas-api/wrangler.toml` (default block + `[env.production]`). Validation now fails fast if `AUTH_IP_LIMIT_PER_MIN > 0` without this binding, so deploys will stop rather than silently disable the limiter.
 
 ---
 

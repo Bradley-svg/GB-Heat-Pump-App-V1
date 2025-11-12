@@ -4,15 +4,15 @@ Follow this loop whenever you need to validate the Expo client against productio
 
 1. **Configure the API base**
    ```bash
-   cp mobile/.env.example mobile/.env
+   cp apps/mobile/.env.example apps/mobile/.env
    # Set EXPO_PUBLIC_API_BASE (prod or staging)
    ```
    Everyday validation must rely on the in-app login screen; do not paste server-issued cookies into env files or scripts.
 
 2. **Install and launch the Expo dev client**
    ```bash
-   npm run mobile:install
-   npm run mobile:start -- --tunnel
+   pnpm install
+   pnpm --filter @greenbro/mobile start -- --tunnel
    ```
    Scan the QR code with Expo Go or your dev build, then sign in with a real operator account. Verify that `Dashboard` and `Alerts` populate without placeholders once authenticated.
 
@@ -51,7 +51,7 @@ Windows engineers (and anyone without Xcode/Android Studio locally) must rely on
 5. Re-run `npm --prefix mobile run e2e:test:ios` / `...android` once the native projects pick up the new assets so Detox exercises the same flows.
 
 ## Test harness notes
-- `mobile/tests/__tests__/LoginScreen.test.tsx` shims `KeyboardAvoidingView` with `react-native/Libraries/Components/View/View` so Jest can render the login screen without native keyboard primitives. When upgrading React Native, confirm the internal path still exists or adjust the mock before bumping to avoid runaway recursion errors.
+- `apps/mobile/tests/__tests__/LoginScreen.test.tsx` shims `KeyboardAvoidingView` with `react-native/Libraries/Components/View/View` so Jest can render the login screen without native keyboard primitives. When upgrading React Native, confirm the internal path still exists or adjust the mock before bumping to avoid runaway recursion errors.
 
 ## Post-QA monitoring
 - After validating on-device, watch the `signup_flow.resend` funnel in Dashboard/`client.event` logs to ensure resend attempts succeed at expected rates and alert if the metric deviates (per Prompt Bible observability guidance).

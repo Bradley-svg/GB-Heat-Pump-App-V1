@@ -1,6 +1,6 @@
 # Observability Setup Checklist
 
-Use this checklist when bringing up a fresh environment or backfilling monitoring for `gb-heat-pump-app-v1`. It assumes the Worker is already deployed with persisted logs (`wrangler.toml` sets `observability.logs.persist = true`).
+Use this checklist when bringing up a fresh environment or backfilling monitoring for `gb-heat-pump-app-v1`. It assumes the Worker is already deployed with persisted logs (`services/overseas-api/wrangler.toml` sets `observability.logs.persist = true`).
 
 ## 1. Prerequisites
 

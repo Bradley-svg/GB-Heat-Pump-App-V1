@@ -1,9 +1,28 @@
-import baseConfig from "../../shared/configs/vitest.base";
-import { mergeConfig } from "vitest/config";
+import { defineConfig, configDefaults } from "vitest/config";
 
-export default mergeConfig(baseConfig, {
+const isCi = Boolean(process.env.CI ?? process.env.GITHUB_ACTIONS);
+const enableCoverage = isCi || process.env.VITEST_COVERAGE === "true";
+
+export default defineConfig({
   test: {
-    include: ["src/**/*.test.ts"],
-    environment: "node"
+    environment: "node",
+    exclude: [...configDefaults.exclude, "../apps/**"],
+    reporters: isCi
+      ? [
+          "default",
+          [
+            "junit",
+            {
+              outputFile: "coverage/vitest-junit.xml",
+              suiteName: "worker-tests",
+            },
+          ],
+        ]
+      : ["default"],
+    coverage: {
+      enabled: enableCoverage,
+      reporter: ["text", "lcov"],
+      reportsDirectory: "coverage",
+    },
   },
 });

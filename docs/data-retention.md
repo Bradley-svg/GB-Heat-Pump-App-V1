@@ -31,7 +31,7 @@
    ```
    Ensure both `greenbro-telemetry-archive` and `greenbro-telemetry-archive-dev` are present and active.
 2. Check Worker bindings before deploy:
-   - `wrangler.toml` must map `RETENTION_ARCHIVE` to `greenbro-telemetry-archive` with `preview_bucket_name = "greenbro-telemetry-archive-dev"`.
+   - `services/overseas-api/wrangler.toml` must map `RETENTION_ARCHIVE` to `greenbro-telemetry-archive` with `preview_bucket_name = "greenbro-telemetry-archive-dev"`.
    - `npx wrangler deployments status` should list the binding on the target Worker prior to destructive runs.
 3. Simulate a retention run with logging enabled:
    ```bash
@@ -52,7 +52,7 @@
   ```
 - Run locally against the Miniflare database:
   ```bash
-  npm run migrate:apply:local
+  pnpm run migrate:apply:local
   wrangler dev --test-scheduled "15 2 * * *"
   ```
 - If backups must precede deletion manually, set `RETENTION_BACKUP_BEFORE_DELETE="true"` temporarily and confirm archives before toggling back.

@@ -4,7 +4,7 @@ Reference implementation of the Mode A architecture described in the Prompt Bibl
 
 ```
 pnpm install
-pnpm test --filter ./packages/sdk-core
+pnpm --filter @greenbro/sdk-core test
 pnpm --filter @greenbro/cn-gateway dev
 ```
 
@@ -35,12 +35,14 @@ Shared tooling lives in `shared/configs` (ESLint, Vitest, tsconfig) and the work
 
 ## Documentation
 
-- `docs/mode-a-operational-guidance.md` – full brief covering legal, data inventory, APIs, observability, and SOPs
-- `docs/adr/ADR-001-mode-a-shared-sdks.md` – ADR adopting Mode A + shared SDK strategy
-- `docs/*` – existing runbooks (retention, observability, prompt bible, etc.)
-- `docs/mode-a/audit-2025-11-11` – Mode A audit package (report, guardrail checklist, SBOM, triage log, and supporting data)
+- `docs/mode-a-operational-guidance.md` - full brief covering legal, data inventory, APIs, observability, and SOPs
+- `docs/adr/ADR-001-mode-a-shared-sdks.md` - ADR adopting Mode A + shared SDK strategy
+- `docs/*` - existing runbooks (retention, observability, prompt bible, etc.)
+- `docs/mode-a/audit-2025-11-11` - Mode A audit package (report, guardrail checklist, SBOM, triage log, and supporting data)
 
 Each pull request should confirm:
 1. SAFE list / schemas updated together (`packages/sdk-core`)
 2. Relevant apps/services bumped + tests run
-3. Docs updated (Prompt Bible style — assumptions, trade-offs, next steps)
+3. Docs updated (Prompt Bible style - assumptions, trade-offs, next steps)
+
+

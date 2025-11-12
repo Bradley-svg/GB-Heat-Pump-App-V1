@@ -15,7 +15,7 @@ This document captures where the system's sensitive values live, how to provisio
 | `INGEST_FAILURE_LIMIT_PER_MIN` | Guardrail for repeated auth/validation failures per device. | Defaults to half of the success ceiling (minimum `10`). Set to `0` to disable. Raise only if firmware intentionally retries after validation errors. | Review alongside success limit; adjust when cadence or validation behavior changes. |
 | `INGEST_SIGNATURE_TOLERANCE_SECS` | Acceptable clock skew for signed ingest requests. | Default `300` seconds (5 minutes). Tighten or relax in lockstep with firmware timestamp tolerance. | Reconfirm monthly and during any device time-sync firmware update. |
 
-The Worker code reads each secret from the runtime `env` object. No secret values should live in `wrangler.toml`, GitHub, or checked-in source files.
+The Worker code reads each secret from the runtime `env` object. No secret values should live in `services/overseas-api/wrangler.toml`, GitHub, or checked-in source files.
 
 ### GitHub Actions variables & secrets (Prompt Bible #24 – Performance Test Plan)
 
@@ -25,7 +25,7 @@ The Worker code reads each secret from the runtime `env` object. No secret value
 | --- | --- | --- | --- |
 | `PERF_BASE_URL` | Repository variable **or** secret | Base URL for the k6 smoke harness. | Set this to the production Worker origin (for example `https://gb-heat-pump-app-v1.bradleyayliffl.workers.dev`). If unset, the workflow skips automatically. |
 | `PERF_ACCESS_JWT` | Repository secret | Optional Cloudflare Access JWT for authenticated smoke runs. | Issue via `cloudflared access login` or Access service token. Omit when targeting a public staging environment. Rotate whenever Access policies change. |
-| `CLOUDFLARE_ACCOUNT_ID` | Repository secret | Required by `.github/workflows/kv-fallback-monitor.yml` to tail Workers logs. | Use the same account ID referenced in `wrangler.toml`. |
+| `CLOUDFLARE_ACCOUNT_ID` | Repository secret | Required by `.github/workflows/kv-fallback-monitor.yml` to tail Workers logs. | Use the same account ID referenced in `services/overseas-api/wrangler.toml`. |
 | `CLOUDFLARE_API_TOKEN` | Repository secret | API token with Workers Tail permission so the KV fallback monitor can stream logs. | Scope minimally to `Workers Tail` + `Workers Scripts:Read`; rotate alongside other automation tokens. |
 | `CLOUDFLARE_API_TOKEN_D1` | Repository secret | Writable API token used by `worker-ci.yml` to run `wrangler d1 migrations apply` remotely. | Scope to `Workers Scripts:Edit`, `Workers KV Storage:Edit`, and `D1:Edit`. Rotate annually or immediately after incident response. |
 
@@ -69,7 +69,7 @@ Every deploy runs through a "secrets provisioning" gate:
 
 3. **Capture evidence.** After each provisioning run, execute `wrangler secret list [--env <name>]` and capture the JSON output (screenshot or artifact) in the deployment ticket. This proves the bindings exist and surfaces stale entries for cleanup.
 
-> **Heads-up:** GitHub Actions enforces the shim guard (`npm run check:prod-shim`) on CI and deploy workflows. Any `ALLOW_DEV_ACCESS_SHIM` or `DEV_ALLOW_USER` binding outside the local environment will block the pipeline, so remove them before rerunning the gate.
+> **Heads-up:** GitHub Actions enforces the shim guard (`pnpm check:prod-shim`) on CI and deploy workflows. Any `ALLOW_DEV_ACCESS_SHIM` or `DEV_ALLOW_USER` binding outside the local environment will block the pipeline, so remove them before rerunning the gate.
 
 Recommendations:
 

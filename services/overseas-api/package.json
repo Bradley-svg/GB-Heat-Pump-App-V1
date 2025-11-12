@@ -1,22 +1,32 @@
 {
   "name": "@greenbro/overseas-api",
-  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy --dry-run",
-    "test": "vitest run"
+    "dev": "wrangler dev --local",
+    "build": "wrangler deploy --dry-run --outdir ../../dist",
+    "test": "vitest run",
+    "test:integration": "vitest run tests/integration",
+    "test:smoke": "vitest run tests/smoke",
+    "test:security": "vitest run tests/security",
+    "deploy": "wrangler deploy --env production",
+    "cron:deploy": "wrangler triggers deploy --env production",
+    "publish:r2": "node ../../scripts/publish-r2-assets.mjs",
+    "migrate:apply": "wrangler d1 migrations apply GREENBRO_DB",
+    "migrate:apply:local": "wrangler d1 migrations apply GREENBRO_DB --local",
+    "migrate:list": "wrangler d1 migrations list GREENBRO_DB",
+    "seed:dev": "wrangler d1 execute GREENBRO_DB --local --file ./seeds/dev/seed.sql"
   },
   "dependencies": {
-    "@greenbro/sdk-core": "workspace:*",
-    "@noble/ed25519": "^1.7.5",
     "itty-router": "^5.0.1",
     "jose": "^5.9.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20241112.0",
+    "@miniflare/d1": "^2.14.4",
+    "@vitest/coverage-v8": "^4.0.7",
+    "better-sqlite3": "^12.4.1",
+    "cross-env": "^7.0.3",
     "typescript": "^5.9.3",
     "vitest": "^4.0.7",
     "wrangler": "^4.45.4"

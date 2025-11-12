@@ -81,13 +81,13 @@ function ensureBucket({ wranglerBin, bucketName, env, dryRun }) {
 }
 
 function runPublish({ env, dryRun }) {
-  const npmBin = process.platform === "win32" ? "npm.cmd" : "npm";
+  const pnpmBin = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
   const publishArgs = ["run", "publish:r2", "--"];
   if (env) publishArgs.push("--env", env);
   if (dryRun) publishArgs.push("--dry-run");
 
-  console.log(`[bootstrap-app-static] Seeding assets via npm run publish:r2 ${env ? `-- --env ${env}` : ""}${dryRun ? " --dry-run" : ""}`);
-  const result = spawnSync(npmBin, publishArgs, { stdio: "inherit", cwd: repoRoot, shell: process.platform === "win32" });
+  console.log(`[bootstrap-app-static] Seeding assets via pnpm run publish:r2 ${env ? `-- --env ${env}` : ""}${dryRun ? " --dry-run" : ""}`);
+  const result = spawnSync(pnpmBin, publishArgs, { stdio: "inherit", cwd: repoRoot, shell: process.platform === "win32" });
   if (result.error) {
     throw result.error;
   }

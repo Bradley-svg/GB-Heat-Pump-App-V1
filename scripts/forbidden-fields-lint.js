@@ -58,7 +58,7 @@ const ignorePatterns = [
   /^\.git\//,
   /^\.tmp\//,
   /^dist\//,
-  /^frontend\/dist\//,
+  /^apps\/dashboard-web\/dist\//,
   /^mobile\/ios\//,
   /^mobile\/android\//,
   /^docs\//,
