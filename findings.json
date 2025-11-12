@@ -1,122 +1,147 @@
 [
   {
-    "id": "P0-db-tls-disabled",
-    "title": "CN gateway Postgres client disabled TLS verification",
-    "severity": "P0",
-    "category": "Security",
-    "where": ["services/cn-gateway/src/db/pool.ts (pre-fix lines 10-18)"] ,
-    "evidence": "git show HEAD^:services/cn-gateway/src/db/pool.ts set ssl: { rejectUnauthorized: false } whenever NODE_ENV was production.",
-    "impact": "An in-path attacker could impersonate Postgres, steal mapping-table rows, or inject falsified pseudonym mappings without tripping TLS errors.",
-    "fix": "Force rejectUnauthorized=true and optionally load PGSSLROOTCERT so production connections always validate the server certificate (see fixes.patch).",
-    "tests": "npm test -- --run (services/cn-gateway)",
-    "references": ["https://www.postgresql.org/docs/current/libpq-ssl.html"]
-  },
-  {
-    "id": "P1-missing-device-signature",
-    "title": "Unsigned ingest bodies were accepted",
-    "severity": "P1",
-    "category": "Security",
-    "where": ["services/cn-gateway/src/ingest/routes.ts (pre-fix lines 70-85)"] ,
-    "evidence": "verifyDeviceSignature() immediately returned when X-Device-Signature was absent, so spoofed telemetry sailed through sanitize->persist.",
-    "impact": "Attackers could flood the exporter with bogus metrics or replay tampered payloads because authenticity was optional.",
-    "fix": "Throw DeviceSignatureError when the header is blank, require the HMAC to match, and extend vitest integration/e2e suites to cover both valid and missing signatures.",
-    "tests": "npm test -- --run (services/cn-gateway)",
-    "references": ["https://owasp.org/www-community/controls/Message_Authentication_Codes"]
-  },
-  {
-    "id": "P1-nginx-ip-logs",
-    "title": "Ingress proxy logged raw client IPs",
-    "severity": "P1",
+    "id": "P0-overseas-raw-ingest",
+    "title": "Overseas API still ingests and stores raw device_id values",
     "category": "Privacy",
-    "where": ["services/cn-gateway/docker/nginx.conf:7-14 (pre-fix)"] ,
-    "evidence": "log_format main included $remote_addr and $http_x_forwarded_for and access_log used that format.",
-    "impact": "CN gateway logs would contain real device/public IPs, violating the Mode A 'no raw IPs' mandate and widening breach scope.",
-    "fix": "Emit a privacy-focused log format with constant placeholders so neither remote_addr nor X-Forwarded-For hit disk.",
-    "tests": "Config validated via nginx -t inside docker build (implicit).",
-    "references": ["https://datatracker.ietf.org/doc/html/rfc6973"]
+    "where": [
+      "services/overseas-api/src/schemas/ingest.ts:34",
+      "services/overseas-api/src/routes/ingest.ts:342",
+      "services/overseas-api/migrations/0021_overseas_ingest_storage.sql:1"
+    ],
+    "evidence": "TelemetryPayloadSchema requires `device_id`/`ts` and the ingest handler writes those raw identifiers into D1 tables before any pseudonymization.",
+    "impact": "Raw identifiers, metrics, and replay data leave mainland China, violating Mode A DROP/SAFE guarantees and exposing overseas operators to PII.",
+    "fix": "Implement a `/api/export` path that accepts `{ didPseudo, keyVersion, SAFE_METRICS }` batches, refuse any payload containing `device_id`, and migrate D1 tables to store pseudonymous IDs only.",
+    "tests": "Add contract tests that replay CN gateway batches against the overseas worker to prove only SAFE metrics are accepted.",
+    "status": "open"
   },
   {
-    "id": "P0-export-auth-missing",
-    "title": "Exporter never authenticates to overseas worker",
-    "severity": "P0",
-    "category": "Availability",
-    "where": ["services/cn-gateway/src/ingest/exporter.ts:20-73", "services/overseas-api/src/index.ts:55-107"],
-    "evidence": "BatchExporter fetch() only sets content-type/signature headers, yet the target worker calls requireAccessJwt() and expects a Cloudflare Access assertion plus Authorization token.",
-    "impact": "Every batch post returns 401/403, so pseudonymized telemetry can never exit China even when EXPORT_ENABLED=true.",
-    "fix": "Provision an Access service token (or mTLS) and inject the required headers before calling /api/ingest; add contract/integration tests that assert 202 responses under wrangler dev.",
-    "tests": "Pending once auth plumbing exists (add exporter->worker integration suite).",
-    "references": ["https://developers.cloudflare.com/access/service-auth/service-tokens/"]
+    "id": "P0-export-signature-missing",
+    "title": "Ed25519 batch signatures are never verified downstream",
+    "category": "Security",
+    "where": [
+      "docs/mode-a/audit-2025-11-11/pr-summary.md:4",
+      "docs/mode-a/audit-2025-11-11/mode-a-guardrail-checklist.md:6",
+      "services/overseas-api/src/routes/health.ts:1",
+      "services/overseas-api/src/routes/ingest.ts:27"
+    ],
+    "evidence": "Docs claim `EXPORT_VERIFY_PUBKEY` enforcement, but the worker only looks for `X-GREENBRO-*` headers. `/health` never reports signature state.",
+    "impact": "Any actor that can reach `/api/ingest/:profile` can inject or replay telemetry without CN approval, defeating batch integrity and compliance evidence.",
+    "fix": "Introduce an Ed25519 verifier that loads `EXPORT_VERIFY_PUBKEY` from Wrangler secrets, validates `x-batch-signature`, and exposes `signatureConfigured`/`signatureVerified` on `/health`.",
+    "tests": "Add positive/negative Vitest cases covering signed vs tampered batches.",
+    "status": "open"
   },
   {
-    "id": "P0-overseas-drop",
-    "title": "Overseas API drops every sanitized batch",
-    "severity": "P0",
+    "id": "P1-logs-leak-device-id",
+    "title": "Logs and ops metrics include raw device_id outside CN",
+    "category": "Privacy",
+    "where": [
+      "services/overseas-api/src/routes/ingest.ts:247",
+      "services/overseas-api/src/routes/ingest.ts:563",
+      "services/overseas-api/src/lib/ops-metrics.ts:31"
+    ],
+    "evidence": "`logAndRecordEarlyExit` and `recordOpsMetric` call sites attach `device_id` directly to log fields and D1 rows.",
+    "impact": "Even if export data were pseudonymized, Cloudflare logs, D1 tables (`ops_metrics`), and dashboards would expose raw identifiers, breaking the \"No raw IDs outside CN\" contract.",
+    "fix": "Pseudonymize before logging (HMAC with CN key or derive from mapping) and store only `did_pseudo`/hashes in ops metrics.",
+    "tests": "Add logging unit tests that assert redaction and add integration tests verifying ops_metrics rows contain only pseudonymous IDs.",
+    "status": "open"
+  },
+  {
+    "id": "P1-allow-raw-ingest-unguarded",
+    "title": "ALLOW_RAW_INGEST flag bypassed Mode A protections globally",
+    "category": "Security",
+    "where": [
+      "services/overseas-api/src/env.ts:242",
+      "services/overseas-api/src/__tests__/env.validation.test.ts:124",
+      "scripts/ensure-prod-shim-disabled.mjs:31"
+    ],
+    "evidence": "Before this PR, `isRawIngestEnabled` only checked for a truthy string, so production deployments could flip the flag without any locality guard or CI block.",
+    "impact": "Human error or malicious config could silently re-enable direct device uploads overseas, reintroducing PII.",
+    "fix": "✅ Added explicit validation that `ALLOW_RAW_INGEST` only passes when `ENVIRONMENT` is local/test and `APP_BASE_URL` points to localhost, covered by Vitest, and included the flag in the shim CI script.",
+    "tests": "`pnpm --filter @greenbro/overseas-api exec vitest run src/__tests__/env.validation.test.ts`",
+    "status": "fixed"
+  },
+  {
+    "id": "P1-schema-drift-didPseudo",
+    "title": "CN exporter and overseas worker disagree on payload shape",
     "category": "Correctness",
-    "where": ["services/overseas-api/src/index.ts:33-76"],
-    "evidence": "After parsing records and verifying Ed25519, the handler simply returns {status:\"queued\"} and never writes to D1, R2, or another worker.",
-    "impact": "Turning on the CN exporter would black-hole all telemetry/heartbeats, leaving dashboards/mobile permanently stale.",
-    "fix": "Persist batches (e.g., enqueue to the main worker/D1) and add tests proving that a batch post results in stored rows/devices.",
-    "tests": "Add new worker integration tests once persistence is implemented.",
-    "references": ["docs/important-data-checklist.md"]
+    "where": [
+      "services/cn-gateway/src/ingest/routes.ts:82",
+      "packages/sdk-core/src/schemas.ts:46",
+      "services/overseas-api/src/schemas/ingest.ts:34"
+    ],
+    "evidence": "CN gateway exports `{ didPseudo, keyVersion, SAFE_METRICS }`, but the overseas schemas/tests still demand `{ device_id, ts, tankC, ambientC, ... }`.",
+    "impact": "Even after signature verification lands, sanitized batches would fail validation, so the exporter cannot be enabled without a breaking change.",
+    "fix": "Unify schemas (e.g., use the shared sdk-core schema on both sides) and add contract tests in CI.",
+    "tests": "Add a simulated exporter -> worker roundtrip test case that must pass before deploy.",
+    "status": "open"
   },
   {
-    "id": "P0-raw-deviceids-overseas",
-    "title": "Dashboard worker still stores and logs raw device IDs",
-    "severity": "P0",
-    "category": "Privacy",
-    "where": ["src/schemas/ingest.ts:17-48", "migrations/0001_init.sql:1-40", "src/routes/ingest.ts:246-563", "src/lib/ops-metrics.ts:20-36"],
-    "evidence": "TelemetryPayloadSchema requires device_id, tables store device_id TEXT, and log.with({ device_id }) plus ops_metrics.device_id push raw IDs into Cloudflare logs and D1.",
-    "impact": "Mode A's requirement that only pseudonymous IDs leave China is violated; any EU/US operator or log export can re-identify equipment directly.",
-    "fix": "Delete/disable the raw /api/ingest path, migrate data stores to use did_pseudo, and mask/HMAC IDs before logging; confirm via integration tests that no raw IDs cross the border.",
-    "tests": "Add regression tests once the pseudonymous pipeline replaces the legacy one.",
-    "references": ["docs/mode-a-operational-guidance.md"]
-  },
-  {
-    "id": "P1-safe-metrics-not-enforced",
-    "title": "Legacy ingest schema accepts non-SAFE metrics",
-    "severity": "P1",
+    "id": "P1-modea-doc-drift",
+    "title": "Mode A reports mark missing guardrails as Pass",
     "category": "Compliance",
-    "where": ["src/schemas/ingest.ts:17-37"],
-    "evidence": "TelemetryMetricsSchema still exposes tankC/ambientC/compCurrentA/etc rather than the SAFE_METRICS contract used by sdk-core and cn-gateway.",
-    "impact": "If ALLOW_RAW_INGEST is ever toggled (misconfig or emergency), regulated fields flow overseas without sanitization.",
-    "fix": "Rip out the raw schema or wrap it with the same SAFE_METRICS filter used in cn-gateway; add CI to flag any metric not present in packages/sdk-core SAFE_METRICS.",
-    "tests": "Add worker integration tests verifying that unknown metric keys are rejected or dropped.",
-    "references": ["packages/sdk-core/src/constants.ts"]
+    "where": [
+      "docs/mode-a/audit-2025-11-11/pr-summary.md:4",
+      "docs/mode-a/audit-2025-11-11/mode-a-guardrail-checklist.md:5"
+    ],
+    "evidence": "The published PR summary and guard checklist state that raw ingest is \"sunsetted\" and signing is verified even though the code lacks both features.",
+    "impact": "Compliance/legal stakeholders make deployment decisions based on inaccurate evidence, increasing regulatory exposure if Mode A filings are audited.",
+    "fix": "Update the guardrail docs to reflect reality, link to automated evidence (tests, health endpoints), and require doc PRs when guard status changes.",
+    "tests": "Add a doc linter that cross-checks guard status with actual automated checks.",
+    "status": "open"
   },
   {
-    "id": "P1-observability-pii",
-    "title": "Client error reports log arbitrary extras/tags",
-    "severity": "P1",
+    "id": "P2-guard-scripts-skip-dirs",
+    "title": "Forbidden-field scanners ignore docs/tests",
+    "category": "Maintainability",
+    "where": [
+      "scripts/forbidden-fields-lint.js:24",
+      "scripts/pii-regex-scan.js:12"
+    ],
+    "evidence": "Both scripts hard-code a small `watchPrefixes` list and skip `docs/**`, so privacy notices, SOPs, and wrangler configs never get scanned.",
+    "impact": "PII strings creep back into documentation and fixtures without any CI signal, undermining Mode A guardrails.",
+    "fix": "Load globs from `.modea.guard.json`, remove broad directory excludes, and support an explicit allowlist for known-good references.",
+    "tests": "Add unit tests for the scripts plus a CI job that ensures they run over sample markdown files.",
+    "status": "open"
+  },
+  {
+    "id": "P2-dev-fixtures-embed-email",
+    "title": "Dev/test fixtures and wrangler defaults embed literal email fields",
     "category": "Privacy",
-    "where": ["src/schemas/observability.ts:17-35,53", "src/routes/observability.ts:211-275"],
-    "evidence": "ClientErrorReportSchema uses .passthrough() and sanitizeExtras() returns extras verbatim when under 4KB, so `email` or GPS can be logged.",
-    "impact": "Any front-end bug or attacker can push PII into observability logs that replicate outside China.",
-    "fix": "Switch to .strict(), reject forbidden keys, and only log vetted scalar fields (counts, booleans, enums).",
-    "tests": "Add unit tests covering redaction of extras/tags before logging.",
-    "references": [".modea.guard.json"]
+    "where": [
+      "services/overseas-api/tests/integration/access-shim.integration.test.ts:22",
+      "services/overseas-api/tests/security/csp.security.test.ts:17",
+      "services/overseas-api/wrangler.toml:122"
+    ],
+    "evidence": "`DEV_ALLOW_USER` strings in tests/wrangler config include real `\"email\":\"...\"` JSON, tripping the guard script and checking PII into git.",
+    "impact": "The guard workflow fails (as seen when running `node scripts/forbidden-fields-lint.js`), so engineers ignore the signal and real leaks may be missed.",
+    "fix": "Represent shim users via hashed IDs or assemble the JSON at runtime (e.g., base64 in env) so literal forbidden keys never appear in repo.",
+    "tests": "Extend guard tests to include these fixtures so we enforce the new encoding.",
+    "status": "open"
   },
   {
-    "id": "P1-export-queue-volatile",
-    "title": "BatchExporter queue is in-memory only",
-    "severity": "P1",
-    "category": "Availability",
-    "where": ["services/cn-gateway/src/ingest/exporter.ts:20-116"],
-    "evidence": "queue/splice/backoff logic never persists pending records; a process restart loses every item not yet flushed upstream.",
-    "impact": "On any crash/deploy the CN gateway silently drops telemetry, defeating Mode A's auditability and SLA promises.",
-    "fix": "Back the queue with Postgres/Redis (or durable queue), replay on boot, and alert when backlog grows.",
-    "tests": "Add persistence tests that simulate a restart and assert queued records are re-sent.",
-    "references": ["https://queue.acm.org/detail.cfm?id=1394128"]
+    "id": "P2-dashboard-no-csp",
+    "title": "Dashboard SPA ships without CSP or Permissions-Policy",
+    "category": "Security",
+    "where": [
+      "apps/dashboard-web/index.html:1"
+    ],
+    "evidence": "The root HTML only sets charset, viewport, and title. No CSP/Permissions-Policy headers are injected server-side either, so the SPA relies on Cloudflare defaults.",
+    "impact": "XSS injection or malicious third-party scripts have no additional containment, which is risky for an admin console that handles tenant data.",
+    "fix": "Inject a strict CSP/Permissions-Policy via Worker middleware (e.g., `frame-ancestors 'none'; default-src 'self'; script-src 'self' 'sha256-...'`).",
+    "tests": "Add an integration test that fetches `/app` and asserts the headers are present.",
+    "status": "open"
   },
   {
-    "id": "P2-guard-ignores-docs",
-    "title": "Forbidden-field guard skips docs and Markdown",
-    "severity": "P2",
+    "id": "P2-guard-checklist-outdated",
+    "title": "Mode A guard checklist references nonexistent verification code",
     "category": "Compliance",
-    "where": ["SCRIPTS/forbidden-fields-lint.js:58-70"],
-    "evidence": "ignorePatterns contain /^docs\//, README*, and *.md(x), so CI never scans the very runbooks/privacy notices that often contain sensitive phrases.",
-    "impact": "PII or disallowed terms can slip into documentation unnoticed, undermining the documented 'no exceptions' control.",
-    "fix": "Stop ignoring docs/markdown, rely on allowlists for legitimate cases, and fail CI when forbidden terms show up in docs PRs.",
-    "tests": "Extend guard workflow to cover docs; manual spot-check once updated.",
-    "references": [".modea.guard.json"]
+    "where": [
+      "docs/guardrails/MODEA_GUARDS_CHECKLIST.md:6"
+    ],
+    "evidence": "The checklist cites `services/overseas-api/src/index.ts` for signature verification even though that file is gone and the Worker never checks signatures.",
+    "impact": "Audit evidence is stale; reviewers may accept the checklist at face value while guardrails regress.",
+    "fix": "Regenerate the checklist from automated checks (e.g., a script that inspects code/tests) and fail CI when cited files disappear.",
+    "tests": "Add a doc test ensuring every evidence path exists and that guard status matches automated results.",
+    "status": "open"
   }
 ]

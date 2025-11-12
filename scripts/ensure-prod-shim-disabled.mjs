@@ -21,7 +21,7 @@ const WRANGLER_OPTIONS_BASE = {
 const WRANGLER_OPTIONS = process.platform === "win32"
   ? { ...WRANGLER_OPTIONS_BASE, shell: true }
   : WRANGLER_OPTIONS_BASE;
-const WRANGLER_CONFIG_PATH = new URL("../wrangler.toml", import.meta.url);
+const WRANGLER_CONFIG_PATH = new URL("../services/overseas-api/wrangler.toml", import.meta.url);
 const PROHIBITED_ITEMS = [
   {
     name: "ALLOW_DEV_ACCESS_SHIM",
@@ -30,6 +30,10 @@ const PROHIBITED_ITEMS = [
   {
     name: "DEV_ALLOW_USER",
     description: "development shim user override",
+  },
+  {
+    name: "ALLOW_RAW_INGEST",
+    description: "raw CN bypass flag",
   },
 ];
 const LOCAL_SECTION_PREFIX = "env.local";

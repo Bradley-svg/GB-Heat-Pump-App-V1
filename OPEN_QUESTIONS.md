@@ -1,6 +1,6 @@
 # Open Questions
-1. **Overseas ingest target** – Should sanitized batches land in the existing `src` worker/D1 schema or a new data store? The answer drives how we model `records` downstream.
-2. **Pseudonymization cut-over date** – When can the raw `/api/ingest` path be permanently disabled, and who signs off on the data migration to `did_pseudo`? The plan affects dashboard/mobile timelines.
-3. **Authentication contract** – Do we standardize on Cloudflare Access service tokens for exporter->worker auth, or is mTLS preferred? Need a documented decision before implementing.
-4. **Observability payload policy** – Can client UIs still emit arbitrary `extras` once guards tighten, or should we introduce an allowlisted event schema maintained by Product?
-5. **Docs scanning** – Should compliance-owned markdown (runbooks, notices) live under a different guard profile, or do we simply remove the ignore rules and accept CI noise?
+1. **Exporter -> overseas contract** â€“ Which team owns defining the canonical `didPseudo` batch schema and rolling it out without downtime? Do we need a versioned schema or dual-write period?
+2. **Historical data cleanup** â€“ What is the approved plan for purging or re-HMACing existing D1 rows (`devices`, `latest_state`, `ops_metrics`, `telemetry`) that already contain raw `device_id`? Is data loss acceptable or do we need an irreversible hash?
+3. **Signature evidence** â€“ Where should `/health` outputs or signature verification logs live so compliance can capture them (ticketing system, log bucket, etc.)?
+4. **Guardrail automation** â€“ Should the Mode A checklist be generated automatically (e.g., via a CI job that inspects code/tests) or maintained manually with sign-offs? Who approves status flips?
+5. **Dashboard hardening ownership** â€“ Should CSP/Permissions-Policy enforcement live inside the overseas worker (platform team) or in a separate CDN layer managed by frontend?

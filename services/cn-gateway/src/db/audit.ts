@@ -1,4 +1,6 @@
+import { pseudonymizeDeviceId } from "../crypto/pseudo.js";
 import { getKmsAdapter } from "../kms/index.js";
+import { logger } from "../logging.js";
 import { getPool } from "./pool.js";
 
 export async function recordAuditLog(
@@ -30,9 +32,27 @@ export async function recordErrorEvent(params: {
   errorCode: string;
   payload?: Record<string, unknown>;
 }): Promise<void> {
+  let deviceFingerprint: string | null = null;
+  if (params.deviceIdRaw) {
+    try {
+      const result = await pseudonymizeDeviceId(params.deviceIdRaw);
+      deviceFingerprint = result.didPseudo;
+    } catch (error) {
+      logger.warn(
+        { error },
+        "Failed to pseudonymize deviceIdRaw for error record; falling back to null"
+      );
+    }
+  }
+
   await getPool().query(
     `INSERT INTO errors (device_id_raw, seq, error_code, payload)
      VALUES ($1, $2, $3, $4::jsonb)`,
-    [params.deviceIdRaw ?? null, params.seq ?? null, params.errorCode, JSON.stringify(params.payload ?? {})]
+    [
+      deviceFingerprint,
+      params.seq ?? null,
+      params.errorCode,
+      JSON.stringify(params.payload ?? {})
+    ]
   );
 }
