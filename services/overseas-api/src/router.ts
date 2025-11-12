@@ -99,10 +99,7 @@ router
     "/api/ingest/:profile",
     withParam("profile", (req, env, profile) => handleIngest(req, env, profile)),
   )
-  .post(
-    "/api/heartbeat/:profile",
-    withParam("profile", (req, env, profile) => handleHeartbeat(req, env, profile)),
-  );
+  .post("/api/heartbeat/:profile", (req, env) => handleHeartbeat(req, env));
 
 router.all("*", () => json({ error: "Not found" }, { status: 404 }));
 

@@ -44,13 +44,15 @@ const forbiddenFields = [
 ];
 
 const watchPrefixes = [
-  "packages/sdk-core/",
-  "packages/sdk-web/",
-  "packages/sdk-rn/",
-  "services/cn-gateway/",
-  "services/overseas-api/",
+  "apps/",
+  "services/",
+  "packages/",
+  "scripts/",
+  "SCRIPTS/",
   "shared/",
-  "src/",
+  "docs/",
+  "ops/",
+  "pre-commit/",
 ];
 
 const ignorePatterns = [
@@ -58,15 +60,6 @@ const ignorePatterns = [
   /^\.git\//,
   /^\.tmp\//,
   /^dist\//,
-  /^apps\/dashboard-web\/dist\//,
-  /^mobile\/ios\//,
-  /^mobile\/android\//,
-  /^docs\//,
-  /^README/i,
-  /^CHANGELOG/i,
-  /\.md$/i,
-  /\.mdx$/i,
-  /package(?:-lock)?\.json$/i,
   /\.png$/i,
   /\.jpg$/i,
   /\.jpeg$/i,

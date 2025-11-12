@@ -1,6 +1,7 @@
 # Open Questions
-1. **Exporter -> overseas contract** â€“ Which team owns defining the canonical `didPseudo` batch schema and rolling it out without downtime? Do we need a versioned schema or dual-write period?
-2. **Historical data cleanup** â€“ What is the approved plan for purging or re-HMACing existing D1 rows (`devices`, `latest_state`, `ops_metrics`, `telemetry`) that already contain raw `device_id`? Is data loss acceptable or do we need an irreversible hash?
-3. **Signature evidence** â€“ Where should `/health` outputs or signature verification logs live so compliance can capture them (ticketing system, log bucket, etc.)?
-4. **Guardrail automation** â€“ Should the Mode A checklist be generated automatically (e.g., via a CI job that inspects code/tests) or maintained manually with sign-offs? Who approves status flips?
-5. **Dashboard hardening ownership** â€“ Should CSP/Permissions-Policy enforcement live inside the overseas worker (platform team) or in a separate CDN layer managed by frontend?
+1. **Evidence pipeline** – Where should Ed25519 verification / batch-ingest health signals be published so Compliance can attach them to Mode A filings (e.g., automated /health snapshots, Datadog monitors, ticket links)?
+2. **Guardrail source of truth** – Should the Mode A checklist + PR summary be generated automatically from tests/lints? If so, which team owns the tooling and sign-off workflow?
+3. **Dual-control audit trail** – How do we capture two-person approvals for CN mapping-table access in a way that can be queried/exported quarterly?
+4. **Fixture hygiene** – What is the preferred approach for providing DEV_ALLOW_USER data (base64 env, hashed IDs, or entirely synthetic) so guard scripts pass while keeping DX reasonable?
+5. **Dashboard CSP ownership** – Should CSP/Permissions-Policy headers be enforced at the Cloudflare Worker layer or via an upstream CDN? Who will own the rollout/testing plan?
+

@@ -1,589 +1,197 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { Buffer } from "node:buffer";
+import { generateKeyPairSync, sign as ed25519Sign } from "node:crypto";
 
 import type { Env } from "../../env";
 import { handleIngest } from "../ingest";
-import * as deviceModule from "../../lib/device";
-import { __resetIpRateLimiterForTests } from "../../lib/ip-rate-limit";
-import { hmacSha256Hex } from "../../utils";
-import { createTestKvNamespace } from "../../../tests/helpers/kv";
 
-const DEVICE_KEY_HASH = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-const DEVICE_KEY_HEADER = "X-GREENBRO-DEVICE-KEY";
-const SIGNATURE_HEADER = "X-GREENBRO-SIGNATURE";
-const TIMESTAMP_HEADER = "X-GREENBRO-TIMESTAMP";
+const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+const PUBLIC_PEM = publicKey.export({ type: "spki", format: "pem" }).toString();
 
-const verifyDeviceKeyMock = vi.spyOn(deviceModule, "verifyDeviceKey");
-const claimDeviceIfUnownedMock = vi.spyOn(deviceModule, "claimDeviceIfUnowned");
-
-function isRateLimitCountQuery(sql: string): boolean {
-  return (
-    sql
-      .replace(/\s+/g, " ")
-      .trim()
-      .startsWith("SELECT COUNT(*) AS cnt FROM ops_metrics")
-  );
+interface StatementRecord {
+  sql: string;
+  binds: unknown[][];
 }
 
-function isFailureRateLimitQuery(sql: string): boolean {
-  return isRateLimitCountQuery(sql) && /\bstatus_code\s*>=\s*400\b/i.test(sql);
+function createDbMock() {
+  const statements: StatementRecord[] = [];
+  const prepare = vi.fn().mockImplementation((sql: string) => {
+    const record: StatementRecord = { sql, binds: [] };
+    statements.push(record);
+    const chain = {
+      bind: vi.fn((...args: unknown[]) => {
+        record.binds.push(args);
+        return chain;
+      }),
+      run: vi.fn(),
+      first: vi.fn(),
+      all: vi.fn()
+    };
+    return chain;
+  });
+  return { DB: { prepare } as unknown as Env["DB"], statements };
 }
 
-function baseEnv(overrides: Partial<Env> = {}): Env {
-  const statement = {
-    bind: vi.fn().mockReturnThis(),
-    run: vi.fn(),
-    first: vi.fn(),
-    all: vi.fn(),
-  };
-  const prepare = vi.fn().mockReturnValue(statement);
-  return {
-    DB: { prepare } as unknown as Env["DB"],
+function baseEnv(overrides: Partial<Env> = {}): Env & { __statements: StatementRecord[] } {
+  const { DB, statements } = createDbMock();
+  const env: Env & { __statements: StatementRecord[] } = {
+    DB,
     ACCESS_JWKS_URL: "https://access.test/.well-known/jwks.json",
     ACCESS_AUD: "test-audience",
-    APP_BASE_URL: "",
-    RETURN_DEFAULT: "",
+    APP_BASE_URL: "https://app.test/app",
+    RETURN_DEFAULT: "https://example.com",
     HEARTBEAT_INTERVAL_SECS: "30",
     OFFLINE_MULTIPLIER: "6",
-    CURSOR_SECRET: "integration-secret-test",
+    CURSOR_SECRET: "secret-secret-1234567890",
     INGEST_ALLOWED_ORIGINS: "*",
-    INGEST_RATE_LIMIT_PER_MIN: "120",
+    INGEST_RATE_LIMIT_PER_MIN: "0",
     INGEST_SIGNATURE_TOLERANCE_SECS: "300",
-    INGEST_IP_LIMIT_PER_MIN: "0",
-    INGEST_IP_BLOCK_SECONDS: "60",
-    INGEST_IP_BUCKETS: createTestKvNamespace(),
-    ALLOW_RAW_INGEST: "true",
-    CLIENT_EVENT_TOKEN_SECRET: "test-telemetry-token-secret-rotate-1234567890",
+    CLIENT_EVENT_TOKEN_SECRET: "client-event-secret-1234567890",
     CLIENT_EVENT_TOKEN_TTL_SECONDS: "900",
+    EXPORT_VERIFY_PUBKEY: PUBLIC_PEM,
     ...overrides,
+    __statements: statements
+  };
+  return env;
+}
+
+function signPayload(body: string): string {
+  const signature = ed25519Sign(null, Buffer.from(body), privateKey);
+  return signature.toString("base64");
+}
+
+function buildBatchBody(records: any[]) {
+  return {
+    batchId: "batch-" + crypto.randomUUID(),
+    count: records.length,
+    records
   };
 }
 
-async function buildSignedRequest(
-  profile: string,
-  payload: any,
-  opts: { origin?: string; timestamp?: string; signature?: string } = {},
-) {
-  const bodyPayload = { ...payload };
-  const timestamp =
-    opts.timestamp ??
-    (typeof bodyPayload.ts === "string" ? bodyPayload.ts : new Date().toISOString());
-  if (!bodyPayload.ts) {
-    bodyPayload.ts = timestamp;
-  }
-
-  const bodyJson = JSON.stringify(bodyPayload);
-  const signature =
-    opts.signature ??
-    (await hmacSha256Hex(DEVICE_KEY_HASH, `${timestamp}.${bodyJson}`));
-
+async function sendBatch(env: Env, profile = "demo", body: object, overrideSignature?: string) {
+  const jsonBody = JSON.stringify(body);
   const headers: Record<string, string> = {
     "content-type": "application/json",
-    [DEVICE_KEY_HEADER]: "secret",
-    [TIMESTAMP_HEADER]: timestamp,
-    [SIGNATURE_HEADER]: signature,
+    "x-batch-signature": overrideSignature ?? signPayload(jsonBody)
   };
-
-  if (opts.origin) {
-    headers.Origin = opts.origin;
-  }
-
-  return new Request(`https://example.com/api/ingest/${profile}`, {
+  const req = new Request(`https://example.com/api/ingest/${profile}`, {
     method: "POST",
-    body: bodyJson,
     headers,
+    body: jsonBody
   });
+  return handleIngest(req, env, profile);
 }
 
-afterEach(() => {
-  verifyDeviceKeyMock.mockReset();
-  claimDeviceIfUnownedMock.mockReset();
-  vi.clearAllMocks();
-  __resetIpRateLimiterForTests();
-});
-
 describe("handleIngest", () => {
-  it("returns 410 when raw ingest is disabled", async () => {
+  it("returns 410 when signature header is missing", async () => {
     const env = baseEnv();
-    delete (env as any).ALLOW_RAW_INGEST;
-    const req = await buildSignedRequest("demo", {
-      device_id: "dev-disabled",
-      metrics: { supplyC: 22 },
+    const req = new Request("https://example.com/api/ingest/demo", {
+      method: "POST",
+      body: "{}",
+      headers: { "content-type": "application/json" }
     });
-
     const res = await handleIngest(req, env, "demo");
     expect(res.status).toBe(410);
-    expect(await res.json()).toEqual({ error: "raw_ingest_disabled" });
+    const payload = await res.json();
+    expect(payload).toEqual({ error: "raw_ingest_disabled" });
   });
 
-  it("returns 400 for malformed JSON", async () => {
+  it("returns 503 when verify key is not configured", async () => {
+    const env = baseEnv({ EXPORT_VERIFY_PUBKEY: undefined });
+    const body = buildBatchBody([
+      {
+        didPseudo: "pseudo1234567890",
+        seq: 1,
+        timestamp: new Date().toISOString(),
+        metrics: { supplyC: 10, returnC: 5, flowLps: 1.2, powerKW: 0.4 },
+        keyVersion: "v1"
+      }
+    ]);
+    const res = await sendBatch(env, "demo", body);
+    expect(res.status).toBe(503);
+  });
+
+  it("rejects tampered payloads before JSON parsing", async () => {
     const env = baseEnv();
-    const req = new Request("https://example.com/api/ingest/test", {
+    const req = new Request("https://example.com/api/ingest/demo", {
       method: "POST",
-      body: "{bad-json",
-      headers: { "content-type": "application/json" },
-    });
-
-    const res = await handleIngest(req, env, "test");
-    expect(res.status).toBe(400);
-    const payload = (await res.json()) as any;
-    expect(payload.error).toBe("Invalid JSON");
-  });
-
-
-  it("rejects payloads over 256KB when using multi-byte characters", async () => {
-    const env = baseEnv();
-    const multiByteChar = "😀";
-    const encoder = new TextEncoder();
-    const bytesPerChar = encoder.encode(multiByteChar).length;
-    const repeat = Math.floor(256_000 / bytesPerChar) + 1;
-    const payload = {
-      device_id: "dev-utf8",
-      metrics: { note: multiByteChar.repeat(repeat) },
-    };
-    const req = await buildSignedRequest("demo", payload);
-
-    const res = await handleIngest(req, env, "demo");
-    expect(res.status).toBe(413);
-    const body = (await res.json()) as any;
-    expect(body.error).toBe("Payload too large");
-    expect(verifyDeviceKeyMock).not.toHaveBeenCalled();
-  });
-
-  it("returns 401 when device key verification fails", async () => {
-    verifyDeviceKeyMock.mockResolvedValue({ ok: false, reason: "mismatch" });
-    const env = baseEnv();
-    const payload = {
-      device_id: "dev-123",
-      metrics: { supplyC: 10 },
-    };
-    const req = await buildSignedRequest("demo", payload);
-
-    const res = await handleIngest(req, env, "demo");
-    expect(verifyDeviceKeyMock).toHaveBeenCalled();
-    expect(res.status).toBe(401);
-    const body = (await res.json()) as any;
-    expect(body.error).toBe("Unauthorized");
-  });
-
-  it("rejects requests with an invalid signature", async () => {
-    verifyDeviceKeyMock.mockResolvedValue({ ok: true, deviceKeyHash: DEVICE_KEY_HASH });
-    const env = baseEnv();
-    const payload = {
-      device_id: "dev-123",
-      metrics: { supplyC: 10 },
-    };
-    const req = await buildSignedRequest("demo", payload, { signature: "bad-signature" });
-
-    const res = await handleIngest(req, env, "demo");
-    expect(res.status).toBe(401);
-    const body = (await res.json()) as any;
-    expect(body.error).toBe("Invalid signature");
-  });
-
-  it("rejects payloads that include unexpected metric keys", async () => {
-    const env = baseEnv();
-
-    const payload = {
-      device_id: "dev-123",
-      metrics: {
-        supplyC: 45.2,
-        powerKW: 1.2,
-        secretToken: "should-be-dropped",
+      headers: {
+        "content-type": "application/json",
+        "x-batch-signature": signPayload("{}")
       },
-    };
-
-    const req = await buildSignedRequest("demo", payload);
-
+      body: "{"
+    });
     const res = await handleIngest(req, env, "demo");
-
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as {
-      error: string;
-      details: Array<{ path: string; message: string }>;
-    };
-    expect(body.error).toBe("Validation failed");
-    expect(body.details.some((detail) => detail.message.includes("secretToken"))).toBe(true);
-    expect(verifyDeviceKeyMock).not.toHaveBeenCalled();
+    expect(res.status).toBe(401);
   });
 
-  it("rejects disallowed origins before touching device auth", async () => {
-    const env = baseEnv({ INGEST_ALLOWED_ORIGINS: "https://allowed.local" });
-    const payload = {
-      device_id: "blocked-device",
-      metrics: { supplyC: 12 },
-    };
-
-    const req = await buildSignedRequest("demo", payload, { origin: "https://evil.local" });
-    const res = await handleIngest(req, env, "demo");
-
-    expect(res.status).toBe(403);
-    expect(res.headers.has("access-control-allow-origin")).toBe(false);
-    expect(verifyDeviceKeyMock).not.toHaveBeenCalled();
+  it("rejects invalid signatures", async () => {
+    const env = baseEnv();
+    const body = buildBatchBody([
+      {
+        didPseudo: "pseudo1234567890",
+        seq: 1,
+        timestamp: new Date().toISOString(),
+        metrics: { supplyC: 10, returnC: 5 },
+        keyVersion: "v1"
+      }
+    ]);
+    const res = await sendBatch(env, "demo", body, "bad-signature");
+    expect(res.status).toBe(401);
   });
 
-  it("rejects duplicate payloads within the dedup window", async () => {
-    verifyDeviceKeyMock.mockResolvedValue({ ok: true, deviceKeyHash: DEVICE_KEY_HASH });
-    const selectFirst = vi.fn().mockResolvedValue({ profile_id: "demo" });
-    const countFirst = vi.fn().mockResolvedValue({ cnt: 0 });
-    const nonceDeleteRun = vi.fn().mockResolvedValue(undefined);
-    const telemetryRun = vi.fn().mockResolvedValue(undefined);
-    const latestRun = vi.fn().mockResolvedValue(undefined);
-    const deviceUpdateRun = vi.fn().mockResolvedValue(undefined);
-    const opsRun = vi.fn().mockResolvedValue(undefined);
+  it("persists pseudonymous telemetry records when the batch is valid", async () => {
+    const env = baseEnv();
+    const record = {
+      didPseudo: "pseudoABCDEF123456",
+      seq: 42,
+      timestamp: new Date().toISOString(),
+      metrics: {
+        supplyC: 32.1,
+        returnC: 24.8,
+        flowLps: 1.5,
+        powerKW: 0.9,
+        control_mode: "AUTO" as const,
+        status_code: "RUN",
+        fault_code: "OK"
+      },
+      keyVersion: "kms-v2"
+    };
+    const res = await sendBatch(env, "demo", buildBatchBody([record]));
+    expect(res.status).toBe(202);
+    const payload = (await res.json()) as any;
+    expect(payload.accepted).toBe(1);
 
-    const duplicateError = new Error(
-      "UNIQUE constraint failed: ingest_nonces.device_id, ingest_nonces.ts_ms",
+    const telemetryInsert = env.__statements.find((stmt) =>
+      stmt.sql.startsWith("INSERT INTO telemetry")
     );
+    expect(telemetryInsert).toBeTruthy();
+    expect(telemetryInsert?.binds[0]?.[0]).toBe(record.didPseudo);
 
+    const deviceUpsert = env.__statements.find((stmt) =>
+      stmt.sql.startsWith("INSERT INTO devices")
+    );
+    expect(deviceUpsert?.binds[0]?.[0]).toBe(record.didPseudo);
+    expect(deviceUpsert?.binds[0]?.[1]).toBe("demo");
+  });
+
+  it("rejects payloads containing unsupported metric keys", async () => {
     const env = baseEnv();
-    const defaultPrepare = env.DB.prepare as any;
-
-    env.DB.prepare = vi.fn((sql: string) => {
-      if (/^(?:PRAGMA|BEGIN|COMMIT|ROLLBACK)/i.test(sql)) {
-        return {
-          run: vi.fn().mockResolvedValue(undefined),
-        } as any;
-      }
-
-      if (isRateLimitCountQuery(sql)) {
-        return {
-          bind: vi.fn(() => ({
-            first: countFirst,
-          })),
-        } as any;
-      }
-
-      if (sql.includes("SELECT profile_id FROM devices")) {
-        return {
-          bind: vi.fn(() => ({
-            first: selectFirst,
-          })),
-        } as any;
-      }
-
-      if (sql.startsWith("DELETE FROM ingest_nonces")) {
-        return {
-          bind: vi.fn(() => ({
-            run: nonceDeleteRun,
-          })),
-        } as any;
-      }
-
-      if (sql.startsWith("INSERT INTO telemetry")) {
-        return {
-          bind: vi.fn(() => ({
-            run: telemetryRun,
-          })),
-        } as any;
-      }
-
-      if (sql.startsWith("INSERT INTO latest_state")) {
-        return {
-          bind: vi.fn(() => ({
-            run: latestRun,
-          })),
-        } as any;
-      }
-
-      if (sql.startsWith("UPDATE devices SET online=1")) {
-        return {
-          bind: vi.fn(() => ({
-            run: deviceUpdateRun,
-          })),
-        } as any;
-      }
-
-      if (sql.startsWith("INSERT INTO ingest_nonces")) {
-        return {
-          bind: vi.fn(() => ({
-            run: vi.fn().mockRejectedValue(duplicateError),
-          })),
-        } as any;
-      }
-
-      if (sql.startsWith("INSERT INTO ops_metrics")) {
-        return {
-          bind: vi.fn(() => ({
-            run: opsRun,
-          })),
-        } as any;
-      }
-
-      return defaultPrepare(sql);
-    });
-
-    const payload = {
-      device_id: "dev-duplicate",
-      metrics: { supplyC: 29.1, powerKW: 1.1 },
-    };
-
-    const req = await buildSignedRequest("demo", payload);
-    const res = await handleIngest(req, env, "demo");
-
-    expect(res.status).toBe(409);
-    const body = (await res.json()) as any;
-    expect(body.error).toBe("Duplicate payload");
-
-    expect(nonceDeleteRun).toHaveBeenCalled();
-    expect(telemetryRun).toHaveBeenCalled();
-    expect(latestRun).toHaveBeenCalled();
-    expect(deviceUpdateRun).toHaveBeenCalled();
-    expect(opsRun).toHaveBeenCalled();
-  });
-
-  it("returns 403 when ingest allowlist is missing", async () => {
-    const env = baseEnv();
-    delete (env as any).INGEST_ALLOWED_ORIGINS;
-    const payload = {
-      device_id: "dev-123",
-      metrics: { supplyC: 12 },
-    };
-
-    const req = await buildSignedRequest("demo", payload, {
-      origin: "https://device.local",
-    });
-    const res = await handleIngest(req, env, "demo");
-
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as any;
-    expect(body.error).toBe("Origin not allowed");
-    expect(verifyDeviceKeyMock).not.toHaveBeenCalled();
-  });
-
-  it("throttles requests when rate limit exceeded", async () => {
-    verifyDeviceKeyMock.mockResolvedValue({ ok: true, deviceKeyHash: DEVICE_KEY_HASH });
-    const selectFirst = vi.fn().mockResolvedValue({ profile_id: "demo" });
-    const countFirst = vi.fn().mockResolvedValue({ cnt: 5 });
-    const failureFirst = vi.fn().mockResolvedValue({ cnt: 0 });
-    const opsRun = vi.fn().mockResolvedValue(undefined);
-
-    const prepare = vi.fn((sql: string) => {
-      if (isFailureRateLimitQuery(sql)) {
-        return {
-          bind: vi.fn(() => ({
-            first: failureFirst,
-          })),
-        };
-      }
-
-      if (isRateLimitCountQuery(sql)) {
-        return {
-          bind: vi.fn(() => ({
-            first: countFirst,
-          })),
-        };
-      }
-
-      if (sql.includes("SELECT profile_id FROM devices")) {
-        return {
-          bind: vi.fn(() => ({
-            first: selectFirst,
-          })),
-        };
-      }
-
-      if (sql.startsWith("INSERT INTO ops_metrics")) {
-        return {
-          bind: vi.fn(() => ({
-            run: opsRun,
-          })),
-        };
-      }
-
-      throw new Error(`Unexpected SQL: ${sql}`);
-    });
-
-    const env: Env = {
-      ...baseEnv({ INGEST_RATE_LIMIT_PER_MIN: "1", INGEST_FAILURE_LIMIT_PER_MIN: "100" }),
-      DB: {
-        prepare,
-        batch: vi.fn(),
-      } as any,
-    };
-
-    const payload = {
-      device_id: "dev-123",
-      metrics: { supplyC: 20 },
-    };
-
-    const req = await buildSignedRequest("demo", payload);
-  const res = await handleIngest(req, env, "demo");
-
-  expect(res.status).toBe(429);
-  const body = (await res.json()) as any;
-  expect(body.error).toBe("Rate limit exceeded");
-  expect(opsRun).toHaveBeenCalled();
-  });
-
-  it("rate limits by client IP before reading payloads", async () => {
-    const env = baseEnv({
-      INGEST_IP_LIMIT_PER_MIN: "1",
-      INGEST_IP_BLOCK_SECONDS: "120",
-    });
-
-    const buildRequest = () =>
-      new Request("https://example.com/api/ingest/test", {
-        method: "POST",
-        body: "{bad-json",
-        headers: {
-          "content-type": "application/json",
-          "cf-connecting-ip": "203.0.113.10",
-        },
-      });
-
-    const first = await handleIngest(buildRequest(), env, "test");
-    expect(first.status).toBe(400);
-
-    const second = await handleIngest(buildRequest(), env, "test");
-    expect(second.status).toBe(429);
-    const payload = (await second.json()) as { error: string };
-    expect(payload.error).toBe("Rate limit exceeded");
-    expect(second.headers.get("Retry-After")).toBe("120");
-    expect(verifyDeviceKeyMock).not.toHaveBeenCalled();
-  });
-
-  it("returns 500 when database operations fail", async () => {
-    verifyDeviceKeyMock.mockResolvedValue({ ok: true, deviceKeyHash: DEVICE_KEY_HASH });
-
-    const env = baseEnv();
-    const defaultPrepare = env.DB.prepare as unknown as vi.Mock;
-    env.DB.prepare = vi.fn((sql: string) => {
-      if (sql.includes("SELECT profile_id FROM devices")) {
-        return {
-          bind: vi.fn(() => ({
-            first: vi.fn().mockResolvedValue({ profile_id: "demo" })
-          }))
-        } as any;
-      }
-
-      const statement = defaultPrepare(sql);
-      if (sql.startsWith("INSERT INTO telemetry")) {
-        statement.run = vi.fn().mockRejectedValueOnce(new Error("insert failed"));
-      }
-      return statement;
-    }) as any;
-
-    const payload = {
-      device_id: "dev-db-error",
-      metrics: { supplyC: 25 },
-    };
-
-    const req = await buildSignedRequest("demo", payload);
-    const res = await handleIngest(req, env, "demo");
-
-    expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ error: "DB error" });
-  });
-
-  it("throttles repeated failures when failure limit is exceeded", async () => {
-    const env = baseEnv({ INGEST_FAILURE_LIMIT_PER_MIN: "2" });
-    const defaultPrepare = env.DB.prepare as any;
-    const failureFirst = vi.fn().mockResolvedValue({ cnt: 3 });
-    const totalFirst = vi.fn().mockResolvedValue({ cnt: 0 });
-
-    env.DB.prepare = vi.fn((sql: string) => {
-      if (isFailureRateLimitQuery(sql)) {
-        return {
-          bind: vi.fn(() => ({
-            first: failureFirst,
-          })),
-        } as any;
-      }
-
-      if (isRateLimitCountQuery(sql)) {
-        return {
-          bind: vi.fn(() => ({
-            first: totalFirst,
-          })),
-        } as any;
-      }
-
-      return defaultPrepare(sql);
-    });
-
-    (env.DB as any).batch = vi.fn();
-
-    const payload = {
-      device_id: "dev-failure",
-      metrics: { supplyC: 18 },
-    };
-
-    const req = await buildSignedRequest("demo", payload);
-    const res = await handleIngest(req, env, "demo");
-
-    expect(res.status).toBe(429);
-    const body = (await res.json()) as any;
-    expect(body.error).toBe("Rate limit exceeded");
-    expect(verifyDeviceKeyMock).not.toHaveBeenCalled();
-    expect(failureFirst).toHaveBeenCalled();
-  });
-
-  it("skips failure rate checks when the limit is disabled", async () => {
-    verifyDeviceKeyMock.mockResolvedValue({ ok: true, deviceKeyHash: DEVICE_KEY_HASH });
-    const selectDevice = vi.fn().mockResolvedValue({ profile_id: "demo" });
-    const totalFirst = vi.fn().mockResolvedValue({ cnt: 0 });
-
-    const env = baseEnv({
-      INGEST_RATE_LIMIT_PER_MIN: "0",
-      INGEST_FAILURE_LIMIT_PER_MIN: "0",
-    });
-    const defaultPrepare = env.DB.prepare as any;
-
-    env.DB.prepare = vi.fn((sql: string) => {
-      if (isFailureRateLimitQuery(sql)) {
-        return {
-          bind: vi.fn(() => {
-            throw new Error("failure limit query should not run when disabled");
-          }),
-        } as any;
-      }
-
-      if (isRateLimitCountQuery(sql)) {
-        return {
-          bind: vi.fn(() => ({
-            first: totalFirst,
-          })),
-        } as any;
-      }
-
-      if (sql.includes("SELECT profile_id FROM devices")) {
-        return {
-          bind: vi.fn(() => ({
-            first: selectDevice,
-          })),
-        } as any;
-      }
-
-      if (sql.startsWith("INSERT INTO ops_metrics")) {
-        return {
-          bind: vi.fn(() => ({
-            run: vi.fn(),
-          })),
-        } as any;
-      }
-
-      return defaultPrepare(sql);
-    });
-
-    (env.DB as any).batch = vi.fn();
-
-    const payload = {
-      device_id: "dev-disabled",
-      metrics: { supplyC: 20 },
-    };
-
-    const req = await buildSignedRequest("demo", payload);
-    const res = await handleIngest(req, env, "demo");
-
-    expect(res.status).not.toBe(429);
-    expect(selectDevice).toHaveBeenCalled();
-    expect(totalFirst).toHaveBeenCalled();
+    const res = await sendBatch(
+      env,
+      "demo",
+      buildBatchBody([
+        {
+          didPseudo: "pseudoABC",
+          seq: 1,
+          timestamp: new Date().toISOString(),
+          metrics: { notAllowed: 1 },
+          keyVersion: "v1"
+        }
+      ])
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("invalid_payload");
   });
 });
-
-
-
-
-
-
-

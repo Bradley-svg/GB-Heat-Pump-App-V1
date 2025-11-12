@@ -37,6 +37,7 @@ function createEnv(overrides: Partial<Env> = {}): Env {
     EMAIL_VERIFICATION_WEBHOOK_SECRET: "dev-email-secret",
     CLIENT_EVENT_TOKEN_SECRET: "test-telemetry-token-secret-rotate-1234567890",
     CLIENT_EVENT_TOKEN_TTL_SECONDS: "900",
+    EXPORT_VERIFY_PUBKEY: "-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAE7XZR0GpBwqsJhF5GgFMno0RvrRZtGJPD\nFd01YygSsHV+MtXg5rp7x7o7f0QRLr2xAgMBAAE=\n-----END PUBLIC KEY-----",
   } satisfies Partial<Env>;
   return { ...base, ...overrides } as Env;
 }
@@ -120,6 +121,20 @@ describe("validateEnv", () => {
       ALLOW_DEV_ACCESS_SHIM: "true",
       DEV_ALLOW_USER: JSON.stringify({ email: "local@example.com", roles: ["admin"] }),
       ENVIRONMENT: "development",
+    });
+    expect(() => validateEnv(env)).not.toThrow();
+  });
+
+  it("requires EXPORT_VERIFY_PUBKEY outside local/test environments", () => {
+    const env = createEnv({ EXPORT_VERIFY_PUBKEY: undefined });
+    expect(() => validateEnv(env)).toThrowError(/EXPORT_VERIFY_PUBKEY/);
+  });
+
+  it("allows missing EXPORT_VERIFY_PUBKEY when running locally", () => {
+    const env = createEnv({
+      APP_BASE_URL: "http://127.0.0.1:8787/app",
+      ENVIRONMENT: "development",
+      EXPORT_VERIFY_PUBKEY: undefined,
     });
     expect(() => validateEnv(env)).not.toThrow();
   });

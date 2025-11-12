@@ -10,13 +10,14 @@ import { fileURLToPath } from "node:url";
 const repoUrl = new URL("../", import.meta.url);
 const repoRoot = fileURLToPath(repoUrl);
 const watchPrefixes = [
-  "packages/sdk-core/",
-  "packages/sdk-web/",
-  "packages/sdk-rn/",
-  "services/cn-gateway/",
-  "services/overseas-api/",
+  "apps/",
+  "services/",
+  "packages/",
+  "scripts/",
+  "SCRIPTS/",
   "shared/",
-  "src/",
+  "docs/",
+  "ops/",
 ];
 
 const patterns = [
@@ -31,10 +32,6 @@ const ignorePatterns = [
   /^\.git\//,
   /^\.tmp\//,
   /^dist\//,
-  /^apps\/dashboard-web\/dist\//,
-  /^mobile\/ios\//,
-  /^mobile\/android\//,
-  /^docs\//,
   /\.png$/i,
   /\.jpg$/i,
   /\.jpeg$/i,

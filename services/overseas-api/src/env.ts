@@ -68,6 +68,7 @@ export interface Env {
   CLIENT_EVENT_IP_BUCKETS?: KvNamespace;
   CLIENT_EVENT_TOKEN_SECRET: string;
   CLIENT_EVENT_TOKEN_TTL_SECONDS?: string;
+  EXPORT_VERIFY_PUBKEY?: string;
 }
 
 export type User = {
@@ -127,6 +128,7 @@ const EnvSchema = z
       .string()
       .trim()
       .min(16, "CURSOR_SECRET must be at least 16 characters long"),
+    EXPORT_VERIFY_PUBKEY: z.string().trim().min(1).optional()
   })
   .passthrough()
   .superRefine((value: Record<string, unknown>, ctx: z.RefinementCtx) => {
@@ -283,6 +285,14 @@ const EnvSchema = z
     }
 
     const isLocalEnv = hasDevUser || appBaseIsLocal || environmentAllowsShim;
+
+    if (!isLocalEnv && !value.EXPORT_VERIFY_PUBKEY) {
+      ctx.addIssue({
+        path: ["EXPORT_VERIFY_PUBKEY"],
+        code: z.ZodIssueCode.custom,
+        message: "EXPORT_VERIFY_PUBKEY must be configured for non-local environments",
+      });
+    }
 
     if (!ingestOriginsRaw) {
       if (isLocalEnv) {

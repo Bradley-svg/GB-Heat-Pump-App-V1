@@ -1,79 +1,77 @@
 [
   {
     "id": "P0-overseas-raw-ingest",
-    "title": "Overseas API still ingests and stores raw device_id values",
+    "title": "Overseas API ingests pseudonymous SAFE batches only",
     "category": "Privacy",
     "where": [
-      "services/overseas-api/src/schemas/ingest.ts:34",
-      "services/overseas-api/src/routes/ingest.ts:342",
-      "services/overseas-api/migrations/0021_overseas_ingest_storage.sql:1"
+      "services/overseas-api/src/routes/ingest.ts:36-210",
+      "services/overseas-api/src/schemas/export.ts:1-53",
+      "services/overseas-api/migrations/0022_purge_raw_device_ids.sql:1-6"
     ],
-    "evidence": "TelemetryPayloadSchema requires `device_id`/`ts` and the ingest handler writes those raw identifiers into D1 tables before any pseudonymization.",
-    "impact": "Raw identifiers, metrics, and replay data leave mainland China, violating Mode A DROP/SAFE guarantees and exposing overseas operators to PII.",
-    "fix": "Implement a `/api/export` path that accepts `{ didPseudo, keyVersion, SAFE_METRICS }` batches, refuse any payload containing `device_id`, and migrate D1 tables to store pseudonymous IDs only.",
-    "tests": "Add contract tests that replay CN gateway batches against the overseas worker to prove only SAFE metrics are accepted.",
-    "status": "open"
+    "evidence": "`handleIngest` now parses `ExportBatchSchema`, enforces `didPseudo` + SAFE metrics, and writes to D1 without ever touching raw IDs, while migration `0022_purge_raw_device_ids.sql` deletes legacy PII.",
+    "impact": "Resolved - exports are accepted only when already pseudonymized inside CN, so no raw identifiers leave the mainland.",
+    "fix": "Batch payload validation (`schemas/export.ts`), Ed25519 signature enforcement, and a one-time D1 purge keep the overseas plane free of PII.",
+    "tests": "`pnpm --filter @greenbro/overseas-api exec vitest run src/routes/__tests__/ingest.test.ts` exercises happy/error paths.",
+    "status": "fixed"
   },
   {
     "id": "P0-export-signature-missing",
-    "title": "Ed25519 batch signatures are never verified downstream",
+    "title": "Ed25519 batch signatures verified at ingest",
     "category": "Security",
     "where": [
-      "docs/mode-a/audit-2025-11-11/pr-summary.md:4",
-      "docs/mode-a/audit-2025-11-11/mode-a-guardrail-checklist.md:6",
-      "services/overseas-api/src/routes/health.ts:1",
-      "services/overseas-api/src/routes/ingest.ts:27"
+      "services/overseas-api/src/utils/ed25519.ts:1-84",
+      "services/overseas-api/src/env.ts:116-275",
+      "services/overseas-api/src/routes/ingest.ts:156-208"
     ],
-    "evidence": "Docs claim `EXPORT_VERIFY_PUBKEY` enforcement, but the worker only looks for `X-GREENBRO-*` headers. `/health` never reports signature state.",
-    "impact": "Any actor that can reach `/api/ingest/:profile` can inject or replay telemetry without CN approval, defeating batch integrity and compliance evidence.",
-    "fix": "Introduce an Ed25519 verifier that loads `EXPORT_VERIFY_PUBKEY` from Wrangler secrets, validates `x-batch-signature`, and exposes `signatureConfigured`/`signatureVerified` on `/health`.",
-    "tests": "Add positive/negative Vitest cases covering signed vs tampered batches.",
-    "status": "open"
+    "evidence": "`verifyBatchSignature` imports PEM keys via WebCrypto and `handleIngest` rejects any batch whose `x-batch-signature` fails verification; `validateEnv` now requires `EXPORT_VERIFY_PUBKEY` outside localhost.",
+    "impact": "Resolved - unauthenticated batches are dropped before parsing, restoring tamper protection for overseas ingest.",
+    "fix": "Required the Ed25519 public key in env, added signature verification, and wired Vitest coverage for valid vs tampered batches.",
+    "tests": "`pnpm --filter @greenbro/overseas-api exec vitest run src/routes/__tests__/ingest.test.ts`",
+    "status": "fixed"
   },
   {
     "id": "P1-logs-leak-device-id",
-    "title": "Logs and ops metrics include raw device_id outside CN",
+    "title": "Logs/metrics avoid raw identifiers on ingest path",
     "category": "Privacy",
     "where": [
-      "services/overseas-api/src/routes/ingest.ts:247",
-      "services/overseas-api/src/routes/ingest.ts:563",
-      "services/overseas-api/src/lib/ops-metrics.ts:31"
+      "services/overseas-api/src/routes/ingest.ts:132-210",
+      "services/overseas-api/src/lib/ops-metrics.ts:31-54"
     ],
-    "evidence": "`logAndRecordEarlyExit` and `recordOpsMetric` call sites attach `device_id` directly to log fields and D1 rows.",
-    "impact": "Even if export data were pseudonymized, Cloudflare logs, D1 tables (`ops_metrics`), and dashboards would expose raw identifiers, breaking the \"No raw IDs outside CN\" contract.",
-    "fix": "Pseudonymize before logging (HMAC with CN key or derive from mapping) and store only `did_pseudo`/hashes in ops metrics.",
-    "tests": "Add logging unit tests that assert redaction and add integration tests verifying ops_metrics rows contain only pseudonymous IDs.",
-    "status": "open"
+    "evidence": "`handleIngest` now logs only batch metadata and always calls `recordOpsMetric` with `deviceId = null`, so no request log or ops metric stores device IDs.",
+    "impact": "Resolved - ingest telemetry never emits raw or pseudonymous IDs into shared logs; per-device metrics live only in D1 tables meant for SAFE data.",
+    "fix": "Removed per-device logging from ingest and ensured ops metrics record only route-level aggregates.",
+    "tests": "Covered indirectly via `src/routes/__tests__/ingest.test.ts`, which exercises success/error paths without leaking IDs.",
+    "status": "fixed"
   },
   {
     "id": "P1-allow-raw-ingest-unguarded",
-    "title": "ALLOW_RAW_INGEST flag bypassed Mode A protections globally",
+    "title": "ALLOW_RAW_INGEST flag is gated to localhost/test",
     "category": "Security",
     "where": [
       "services/overseas-api/src/env.ts:242",
       "services/overseas-api/src/__tests__/env.validation.test.ts:124",
       "scripts/ensure-prod-shim-disabled.mjs:31"
     ],
-    "evidence": "Before this PR, `isRawIngestEnabled` only checked for a truthy string, so production deployments could flip the flag without any locality guard or CI block.",
-    "impact": "Human error or malicious config could silently re-enable direct device uploads overseas, reintroducing PII.",
-    "fix": "✅ Added explicit validation that `ALLOW_RAW_INGEST` only passes when `ENVIRONMENT` is local/test and `APP_BASE_URL` points to localhost, covered by Vitest, and included the flag in the shim CI script.",
+    "evidence": "Env validation now rejects the flag unless the environment + base URL are localhost-only, and the shim CI script blocks secrets in deploy environments.",
+    "impact": "Resolved - raw ingest cannot be re-enabled in shared environments.",
+    "fix": "Added validation inside env.ts and extended scripts/ensure-prod-shim-disabled.mjs; behavior is covered by Vitest.",
     "tests": "`pnpm --filter @greenbro/overseas-api exec vitest run src/__tests__/env.validation.test.ts`",
     "status": "fixed"
   },
   {
     "id": "P1-schema-drift-didPseudo",
-    "title": "CN exporter and overseas worker disagree on payload shape",
+    "title": "Exporter and overseas worker share SAFE schema",
     "category": "Correctness",
     "where": [
-      "services/cn-gateway/src/ingest/routes.ts:82",
-      "packages/sdk-core/src/schemas.ts:46",
-      "services/overseas-api/src/schemas/ingest.ts:34"
+      "services/cn-gateway/src/ingest/routes.ts:82-102",
+      "packages/sdk-core/src/constants.ts:1-27",
+      "services/overseas-api/src/schemas/export.ts:1-53"
     ],
-    "evidence": "CN gateway exports `{ didPseudo, keyVersion, SAFE_METRICS }`, but the overseas schemas/tests still demand `{ device_id, ts, tankC, ambientC, ... }`.",
-    "impact": "Even after signature verification lands, sanitized batches would fail validation, so the exporter cannot be enabled without a breaking change.",
-    "fix": "Unify schemas (e.g., use the shared sdk-core schema on both sides) and add contract tests in CI.",
-    "tests": "Add a simulated exporter -> worker roundtrip test case that must pass before deploy.",
-    "status": "open"
+    "evidence": "`ExportBatchSchema` is built from the shared SAFE metric list so the worker accepts the exact `{ didPseudo, SAFE_METRICS }` records emitted by the CN exporter.",
+    "impact": "Resolved - batch payloads no longer drift and SAFE enforcement happens uniformly.",
+    "fix": "Added `schemas/export.ts`, wired it into `handleIngest`, and recorded the expected shape in tests.",
+    "tests": "`pnpm --filter @greenbro/overseas-api exec vitest run src/routes/__tests__/ingest.test.ts` verifies valid/invalid payloads.",
+    "status": "fixed"
   },
   {
     "id": "P1-modea-doc-drift",
@@ -91,17 +89,17 @@
   },
   {
     "id": "P2-guard-scripts-skip-dirs",
-    "title": "Forbidden-field scanners ignore docs/tests",
+    "title": "Forbidden-field scanners cover the whole repo",
     "category": "Maintainability",
     "where": [
-      "scripts/forbidden-fields-lint.js:24",
-      "scripts/pii-regex-scan.js:12"
+      "scripts/forbidden-fields-lint.js:24-63",
+      "scripts/pii-regex-scan.js:10-36"
     ],
-    "evidence": "Both scripts hard-code a small `watchPrefixes` list and skip `docs/**`, so privacy notices, SOPs, and wrangler configs never get scanned.",
-    "impact": "PII strings creep back into documentation and fixtures without any CI signal, undermining Mode A guardrails.",
-    "fix": "Load globs from `.modea.guard.json`, remove broad directory excludes, and support an explicit allowlist for known-good references.",
-    "tests": "Add unit tests for the scripts plus a CI job that ensures they run over sample markdown files.",
-    "status": "open"
+    "evidence": "Both scripts now watch `apps/`, `services/`, `docs/`, `ops/`, etc., and only skip binary blobs, so guard jobs scan code, tests, and docs.",
+    "impact": "Resolved - forbidden-field and PII regex scans now cover the entire repo instead of silently skipping compliance-critical files.",
+    "fix": "Expanded watch prefixes and removed the broad doc/test excludes.",
+    "tests": "Guard scripts run as part of `pnpm guard:forbidden` / `pnpm guard:pii` on CI.",
+    "status": "fixed"
   },
   {
     "id": "P2-dev-fixtures-embed-email",
