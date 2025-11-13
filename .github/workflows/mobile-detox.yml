@@ -5,6 +5,9 @@ on:
     - cron: "0 8 * * *" # 08:00 UTC daily
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   ios:
     runs-on: macos-latest
@@ -28,7 +31,7 @@ jobs:
           version: 9
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Prepare iOS native project
         run: |
@@ -72,7 +75,7 @@ jobs:
           version: 9
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Prepare Android native project
         run: |

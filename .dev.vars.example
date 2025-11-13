@@ -1,0 +1,15 @@
+# Copy this file to .dev.vars and customize the values for your developer account.
+# Secrets should be provided via `wrangler secret put` in production environments.
+ACCESS_JWKS_URL=https://example.cloudflareaccess.com/cdn-cgi/access/certs
+ACCESS_AUD=replace-me
+RETURN_DEFAULT=https://www.greenbro.co.za/
+CURSOR_SECRET=replace-with-at-least-16-characters
+INGEST_ALLOWED_ORIGINS=http://127.0.0.1:8787
+INGEST_RATE_LIMIT_PER_MIN=120
+INGEST_SIGNATURE_TOLERANCE_SECS=300
+INGEST_IP_LIMIT_PER_MIN=0
+INGEST_IP_BLOCK_SECONDS=60
+ENVIRONMENT=development
+CLIENT_EVENT_TOKEN_SECRET=replace-with-at-least-32-characters
+EMAIL_VERIFICATION_WEBHOOK_SECRET=replace-with-at-least-16-characters
+DEV_ALLOW_USER=base64:<encoded-json-payload>

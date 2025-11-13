@@ -20,3 +20,6 @@ package-lock.json
 **/.turbo/
 *.log
 apps/mobile/test-mobile.json
+.dev.vars
+dev.vars
+.env/dev.vars

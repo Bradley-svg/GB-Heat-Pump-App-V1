@@ -23,6 +23,10 @@ pnpm --filter @greenbro/cn-gateway dev
 
 Shared tooling lives in `shared/configs` (ESLint, Vitest, tsconfig) and the workspace is declared in `pnpm-workspace.yaml`.
 
+### Local secrets
+
+Copy `.dev.vars.example` to `.dev.vars` (ignored) before running `pnpm --filter @greenbro/overseas-api dev` or `wrangler dev`. Populate the copy with developer-specific secrets via `wrangler secret put` or your team vault instead of committing real values to git.
+
 ## Common Tasks
 
 | Task | Command |

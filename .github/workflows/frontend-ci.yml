@@ -16,6 +16,10 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   frontend:
     runs-on: ubuntu-latest
@@ -35,7 +39,7 @@ jobs:
           version: 9
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Verify shim flags are disabled
         run: pnpm check:prod-shim

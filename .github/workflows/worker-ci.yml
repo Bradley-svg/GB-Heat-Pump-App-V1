@@ -11,8 +11,8 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - "services/overseas-api/wrangler.toml"
-      - ".env/dev.vars"
-      - ".env/dev.vars.example"
+      - ".dev.vars"
+      - ".dev.vars.example"
       - "tsconfig.base.json"
       - "eslint.config.mjs"
       - ".github/workflows/worker-ci.yml"
@@ -26,11 +26,14 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - "services/overseas-api/wrangler.toml"
-      - ".env/dev.vars"
-      - ".env/dev.vars.example"
+      - ".dev.vars"
+      - ".dev.vars.example"
       - "tsconfig.base.json"
       - "eslint.config.mjs"
       - ".github/workflows/worker-ci.yml"
+
+permissions:
+  contents: read
 
 jobs:
   worker:
@@ -51,7 +54,7 @@ jobs:
           version: 9
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Note fork PR Cloudflare skip
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}

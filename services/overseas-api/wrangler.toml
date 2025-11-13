@@ -116,11 +116,11 @@ preview_id = "a6960d661b5f4b1fbb66a26675ed8caf"
   HEARTBEAT_INTERVAL_SECS = "30"
   OFFLINE_MULTIPLIER = "6"
   EMAIL_VERIFICATION_WEBHOOK_URL = "https://hooks.dev/email-verification"
-  EMAIL_VERIFICATION_WEBHOOK_SECRET = "dev-secret-1234567890"
+  # EMAIL_VERIFICATION_WEBHOOK_SECRET should be provided via `.dev.vars` or `wrangler secret put`.
   # Enable the Access shim for local Miniflare sessions (adjust as needed).
   ALLOW_DEV_ACCESS_SHIM = "true"
   # Generate the encoded payload via `pnpm dev-user:encode -- --email local-admin@example.com --role admin --client profile-west`
-  DEV_ALLOW_USER = "base64:eyJlbWFpbCI6ICJsb2NhbC1hZG1pbkBleGFtcGxlLmNvbSIsICJyb2xlcyI6IFsiYWRtaW4iXSwgImNsaWVudElkcyI6IFsicHJvZmlsZS13ZXN0Il19"
+  # and set DEV_ALLOW_USER via `.dev.vars` or secrets management.
 
 [[env.local.d1_databases]]
 binding = "DB"
