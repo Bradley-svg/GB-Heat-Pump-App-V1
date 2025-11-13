@@ -70,6 +70,9 @@ jobs:
         continue-on-error: true
         run: node SCRIPTS/pii-regex-scan.js --json
 
+      - name: Mode A doc lint
+        run: pnpm guard:docs
+
       - name: Prepare guard summary
         if: always()
         run: |

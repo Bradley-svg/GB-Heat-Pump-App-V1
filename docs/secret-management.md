@@ -63,7 +63,7 @@ Every deploy runs through a "secrets provisioning" gate:
    # export ASSET_SIGNING_SECRET=only-if-signed-urls-required
    # Optional development flags (local-only; CI now blocks them in shared environments)
    # export ALLOW_DEV_ACCESS_SHIM=true
-   # export DEV_ALLOW_USER='{"email":"local-admin@example.com","roles":["admin"],"clientIds":["profile-west"]}'
+   # export DEV_ALLOW_USER="$(pnpm dev-user:encode -- --email local-admin@example.com --role admin --client profile-west)"
    node scripts/bind-cloudflare-secrets.mjs --env production
    ```
 

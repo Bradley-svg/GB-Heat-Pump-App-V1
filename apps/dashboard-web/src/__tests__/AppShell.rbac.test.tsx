@@ -71,7 +71,10 @@ function renderAppShellWithState(userState: CurrentUserState, initialPath = "/ap
         element: <AppShell />,
       },
     ],
-    { initialEntries: [initialPath] },
+    {
+      initialEntries: [initialPath],
+      future: { v7_relativeSplatPath: true, v7_startTransition: true },
+    },
   );
 
   const utils = render(

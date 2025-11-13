@@ -14,6 +14,19 @@ export interface SecurityHeaderOptions {
   fontSrc?: string[];
 }
 
+const PERMISSIONS_POLICY = [
+  "accelerometer=()",
+  "camera=()",
+  "display-capture=()",
+  "fullscreen=(self)",
+  "geolocation=()",
+  "gyroscope=()",
+  "magnetometer=()",
+  "microphone=()",
+  "payment=()",
+  "usb=()",
+].join(", ");
+
 function appendUnique(target: string[], values?: string[]) {
   if (!values) return;
   for (const value of values) {
@@ -61,6 +74,7 @@ export function withSecurityHeaders(res: Response, options: SecurityHeaderOption
   h.set("Referrer-Policy", "no-referrer");
   h.set("Cross-Origin-Opener-Policy", "same-origin");
   h.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  h.set("Permissions-Policy", PERMISSIONS_POLICY);
 
   return new Response(res.body, {
     headers: h,

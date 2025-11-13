@@ -341,6 +341,251 @@
       "path": "services/cn-gateway/src/validators/common.ts",
       "pattern": "deviceId",
       "reason": "Validation schema defines canonical deviceId field"
+    },
+    {
+      "path": "services/overseas-api/src/routes/auth.ts",
+      "pattern": "email",
+      "reason": "Auth routes legitimately accept user email addresses (masked before logging)"
+    },
+    {
+      "path": "services/overseas-api/src/routes/auth.ts",
+      "pattern": "phone",
+      "reason": "Auth routes validate phone placeholders for compliance notices"
+    },
+    {
+      "path": "services/overseas-api/src/routes/auth.ts",
+      "pattern": "ip",
+      "reason": "Rate-limit messages reference IP throttles for audit logging"
+    },
+    {
+      "path": "services/overseas-api/src/env.ts",
+      "pattern": "ip",
+      "reason": "Env validation enforces IP-based rate limit settings"
+    },
+    {
+      "path": "services/overseas-api/src/env.ts",
+      "pattern": "email",
+      "reason": "Env schema configures webhook email recipients/secrets"
+    },
+    {
+      "path": "services/overseas-api/src/routes/alerts.ts",
+      "pattern": "device_id",
+      "reason": "Alerts API works with the pseudonymous devices.device_id column"
+    },
+    {
+      "path": "services/overseas-api/src/routes/alerts.ts",
+      "pattern": "deviceId",
+      "reason": "Alerts API works with the pseudonymous devices.device_id column"
+    },
+    {
+      "path": "services/overseas-api/src/routes/alerts.ts",
+      "pattern": "ip",
+      "reason": "Alert payloads include client IP metadata for audit trails"
+    },
+    {
+      "path": "services/overseas-api/src/routes/client.ts",
+      "pattern": "device_id",
+      "reason": "Client routes reference the pseudonymous device_id column"
+    },
+    {
+      "path": "services/overseas-api/src/routes/commissioning-runs.ts",
+      "pattern": "device_id",
+      "reason": "Commissioning workflows reference the pseudonymous device_id column"
+    },
+    {
+      "path": "services/overseas-api/src/routes/commissioning-runs.ts",
+      "pattern": "deviceId",
+      "reason": "Commissioning workflows reference the pseudonymous device_id column"
+    },
+    {
+      "path": "services/overseas-api/src/routes/devices.ts",
+      "pattern": "device_id",
+      "reason": "Device roster queries rely on the pseudonymous device_id column"
+    },
+    {
+      "path": "services/overseas-api/src/routes/devices.ts",
+      "pattern": "deviceId",
+      "reason": "Device roster queries rely on the pseudonymous device_id column"
+    },
+    {
+      "path": "services/overseas-api/src/routes/telemetry.legacy.ts",
+      "pattern": "device_id",
+      "reason": "Legacy telemetry endpoint still addresses the pseudonymous device_id column"
+    },
+    {
+      "path": "services/overseas-api/src/routes/admin.ts",
+      "pattern": "device_id",
+      "reason": "Admin tooling reads from the pseudonymous device_id column"
+    },
+    {
+      "path": "services/overseas-api/src/routes/admin.ts",
+      "pattern": "deviceId",
+      "reason": "Admin tooling reads from the pseudonymous device_id column"
+    },
+    {
+      "path": "services/overseas-api/src/routes/telemetry.legacy.ts",
+      "pattern": "deviceId",
+      "reason": "Legacy telemetry endpoint still addresses the pseudonymous device_id column"
+    },
+    {
+      "path": "services/overseas-api/src/lib/alerts-store.ts",
+      "pattern": "device_id",
+      "reason": "Alerts data store uses the pseudonymous device_id column"
+    },
+    {
+      "path": "services/overseas-api/src/lib/alerts-store.ts",
+      "pattern": "deviceId",
+      "reason": "Alerts data store uses the pseudonymous device_id column"
+    },
+    {
+      "path": "services/overseas-api/src/lib/alerts-store.ts",
+      "pattern": "email",
+      "reason": "Alerts store masks/administer operator emails"
+    },
+    {
+      "path": "services/overseas-api/src/lib/commissioning-store.ts",
+      "pattern": "device_id",
+      "reason": "Commissioning store uses the pseudonymous device_id column"
+    },
+    {
+      "path": "services/overseas-api/src/lib/commissioning-store.ts",
+      "pattern": "deviceId",
+      "reason": "Commissioning store uses the pseudonymous device_id column"
+    },
+    {
+      "path": "services/overseas-api/src/lib/ip-rate-limit.ts",
+      "pattern": "ip",
+      "reason": "Rate limit helper manages IP allowance state"
+    },
+    {
+      "path": "services/overseas-api/src/lib/__tests__/ip-rate-limit.test.ts",
+      "pattern": "ip",
+      "reason": "Rate limit tests exercise IP scenarios"
+    },
+    {
+      "path": "services/overseas-api/src/__tests__/env.validation.test.ts",
+      "pattern": "ip",
+      "reason": "Env validation tests exercise IP limit settings"
+    },
+    {
+      "path": "services/overseas-api/src/__tests__/env.validation.test.ts",
+      "pattern": "email",
+      "reason": "Env validation tests cover webhook email configuration"
+    },
+    {
+      "path": "services/overseas-api/src/routes/__tests__/auth.signup-verify.test.ts",
+      "pattern": "email",
+      "reason": "Signup integration tests assert email verification flow"
+    },
+    {
+      "path": "services/overseas-api/tests/integration/api-flows.integration.test.ts",
+      "pattern": "device_id",
+      "reason": "Integration tests seed device fixtures via the pseudonymous column"
+    },
+    {
+      "path": "services/overseas-api/tests/integration/worker.integration.test.ts",
+      "pattern": "device_id",
+      "reason": "Integration tests seed device fixtures via the pseudonymous column"
+    },
+    {
+      "path": "services/overseas-api/tests/security/worker.security.test.ts",
+      "pattern": "device_id",
+      "reason": "Security regression tests operate on pseudonymous device identifiers"
+    },
+    {
+      "path": "services/overseas-api/src/routes/commissioning-runs.ts",
+      "pattern": "email",
+      "reason": "Commissioning notifications include operator email metadata"
+    },
+    {
+      "path": "services/overseas-api/src/routes/auth.ts",
+      "pattern": "name",
+      "reason": "Auth routes inspect human-readable names for logging"
+    },
+    {
+      "path": "services/overseas-api/src/lib/access.ts",
+      "pattern": "email",
+      "reason": "Access shim masks admin emails during login"
+    },
+    {
+      "path": "services/overseas-api/src/lib/access.ts",
+      "pattern": "ip",
+      "reason": "Access logging redacts client IP metadata"
+    },
+    {
+      "path": "services/overseas-api/src/routes/devices.ts",
+      "pattern": "email",
+      "reason": "Device roster responses surface masked operator email metadata"
+    },
+    {
+      "path": "services/overseas-api/tests/integration/audit.integration.test.ts",
+      "pattern": "email",
+      "reason": "Audit integration tests assert email hashing"
+    },
+    {
+      "path": "services/overseas-api/tests/integration/audit.integration.test.ts",
+      "pattern": "device_id",
+      "reason": "Audit integration tests operate on pseudonymous device identifiers"
+    },
+    {
+      "path": "services/overseas-api/src/frontend/static-bundle.ts",
+      "pattern": "device_id",
+      "reason": "Embedded SPA assets still reference legacy telemetry fields"
+    },
+    {
+      "path": "services/overseas-api/migrations/0012_enforce_foreign_keys.sql",
+      "pattern": "device_id",
+      "reason": "Historic migration references the canonical column name"
+    },
+    {
+      "path": "packages/sdk-core/src/constants.ts",
+      "pattern": "mac",
+      "reason": "SAFE metric list enumerates allowed `mac`-prefixed metrics for DROP enforcement"
+    },
+    {
+      "path": "packages/sdk-core/src/constants.ts",
+      "pattern": "ssid",
+      "reason": "SAFE metric list enumerates allowed `ssid` keys for DROP enforcement"
+    },
+    {
+      "path": "packages/sdk-core/src/constants.ts",
+      "pattern": "name",
+      "reason": "SAFE metric metadata includes human-readable names"
+    },
+    {
+      "path": "packages/sdk-core/src/constants.ts",
+      "pattern": "address",
+      "reason": "SAFE metric metadata references addressable fields"
+    },
+    {
+      "path": "services/cn-gateway/src/modea/drop-safe.ts",
+      "pattern": "deviceId",
+      "reason": "CN-side sanitizer enumerates canonical device identifier keys"
+    },
+    {
+      "path": "services/cn-gateway/src/modea/drop-safe.ts",
+      "pattern": "mac",
+      "reason": "DROP sanitizer rejects MAC-prefixed fields"
+    },
+    {
+      "path": "services/cn-gateway/src/modea/drop-safe.ts",
+      "pattern": "serial",
+      "reason": "DROP sanitizer rejects serial fields"
+    },
+    {
+      "path": "services/cn-gateway/README.md",
+      "pattern": "deviceId",
+      "reason": "CN documentation references the canonical identifier terminology"
+    },
+    {
+      "path": "services/cn-gateway/README.md",
+      "pattern": "ip",
+      "reason": "CN documentation references IP-level safeguards"
+    },
+    {
+      "path": "services/cn-gateway/README.md",
+      "pattern": "mac",
+      "reason": "CN documentation references MAC-level safeguards"
     }
   ],
   "severityMap": {

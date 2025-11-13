@@ -91,6 +91,8 @@ export async function createWorkerEnv(overrides: Partial<Env> = {}): Promise<Wor
     CLIENT_EVENT_RETENTION_DAYS: "60",
     CLIENT_EVENT_TOKEN_SECRET: "integration-telemetry-token-secret-rotate-1234567890",
     CLIENT_EVENT_TOKEN_TTL_SECONDS: "900",
+    EXPORT_VERIFY_PUBKEY:
+      "-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAE7XZR0GpBwqsJhF5GgFMno0RvrRZtGJPDFd01YygSsHV+MtXg5rp7x7o7f0QRLr2xAgMBAAE=\n-----END PUBLIC KEY-----",
   };
 
   const env: Env = { ...baseEnv, ...overrides, DB };

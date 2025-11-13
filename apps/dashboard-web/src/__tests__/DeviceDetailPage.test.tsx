@@ -14,6 +14,28 @@ import type {
 import { ApiClientContext, CurrentUserContext } from "../app/contexts";
 import type { CurrentUserState } from "../app/hooks/use-current-user";
 
+vi.mock("../components/Sparkline", () => ({
+  Sparkline: ({ label }: { label?: string }) => (
+    <div data-testid="sparkline">{label ?? "sparkline"}</div>
+  ),
+}));
+
+beforeAll(() => {
+  class ResizeObserverMock {
+    observe() {
+      /* noop */
+    }
+    unobserve() {
+      /* noop */
+    }
+    disconnect() {
+      /* noop */
+    }
+  }
+  (globalThis as { ResizeObserver?: typeof ResizeObserver | undefined }).ResizeObserver ??=
+    ResizeObserverMock as unknown as typeof ResizeObserver;
+});
+
 describe("DeviceDetailPage telemetry integration", () => {
   const deviceList: DeviceListResponse = {
     items: [

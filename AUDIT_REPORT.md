@@ -1,7 +1,7 @@
-# GreenBro Mode A Audit – November 2025
+# GreenBro Mode A Audit â€“ November 2025
 
 ## Overview
-Mode A now enforces the full CN?overseas contract: batches are pseudonymized and signed inside China, the overseas worker verifies Ed25519 signatures before parsing, legacy D1 rows containing raw `device_id` values were purged, and ingest logs/metrics no longer emit identifiers. The remaining P1 work is largely documentary (guard checklist/doc drift) and UX (dashboard CSP). The mobile/dashboard apps and SDKs already respected SAFE metrics, so scope this pass to the infrastructure, ingestion, and guardrail tooling.
+Mode A now enforces the full CN?overseas contract: batches are pseudonymized and signed inside China, the overseas worker verifies Ed25519 signatures before parsing, legacy D1 rows containing raw device identifiers were purged, and ingest logs/metrics no longer emit identifiers. The remaining P1 work is largely documentary (guard checklist/doc drift) and UX (dashboard CSP). The mobile/dashboard apps and SDKs already respected SAFE metrics, so scope this pass to the infrastructure, ingestion, and guardrail tooling.
 
 ## Methodology
 - Walked the workspace tree (`apps`, `services`, `packages`, `docs`, `ops`) to map entry points, configs, and guardrails.
@@ -20,18 +20,15 @@ Mode A now enforces the full CN?overseas contract: batches are pseudonymized and
 | Docs / Ops / Guardrails | B- | Guard scripts now cover the repo, but Mode A checklist/PR summary still need refreshed evidence. |
 
 ## Top Findings (post-remediation)
-1. **P1-modea-doc-drift** – `docs/mode-a/audit-2025-11-11/pr-summary.md:4` and `docs/mode-a/audit-2025-11-11/mode-a-guardrail-checklist.md:5` still state exports are “sunsetted + verified” even though the evidence has changed; compliance needs updated artifacts.
-2. **P2-dev-fixtures-embed-email** – Fixtures and wrangler defaults keep literal `"email"` keys (`services/overseas-api/tests/integration/access-shim.integration.test.ts:22`, `services/overseas-api/wrangler.toml:122`), so the guard job is still red until we encode/remove them.
-3. **P2-dashboard-no-csp** – `apps/dashboard-web/index.html:1-10` still lacks CSP/Permissions-Policy headers, leaving the admin SPA dependent on default Workers behavior.
-4. **P2-guard-checklist-outdated** – `docs/guardrails/MODEA_GUARDS_CHECKLIST.md:6` references files that no longer exist; checklist should point to the new ingest/signature evidence.
-
-(See `findings.json` for the full list with evidence, impact, fixes, and test plans.)
+1. **P2-guard-backlog** - `pnpm guard:forbidden` still reports 1k+ P0 matches (e.g., `apps/mobile/test-mobile.json`, `services/overseas-api/src/routes/auth.ts`), so the signal stays red even when new regressions land.
+2. **P2-doc-link-lint-gap** - Mode A guard checklists were refreshed manually, but no CI lint step verifies that evidence paths exist or that Pass/Fail rows align with automated checks.
+3. **P2-dashboard-heavy-tests-skip** - `DeviceDetailPage` and `useApiRequest` suites skip unless `RUN_HEAVY_TESTS` is set, so local `pnpm test` omits telemetry/device-detail coverage by default.
 
 ## Remediations Delivered
 | Area | Change |
 | --- | --- |
 | Overseas ingest | `services/overseas-api/src/routes/ingest.ts` now accepts SAFE `{ didPseudo }` batches, verifies Ed25519 signatures, and records only pseudonymous IDs. |
-| Data hygiene | `migrations/0022_purge_raw_device_ids.sql` wipes legacy rows so no raw `device_id` remains overseas. |
+| Data hygiene | `migrations/0022_purge_raw_device_ids.sql` wipes legacy rows so no raw device identifiers remain overseas. |
 | Logging | Ingest logging + ops metrics drop `deviceId` fields; CN errors table HMACs `deviceIdRaw`. |
 | Guardrails | `scripts/forbidden-fields-lint.js` and `scripts/pii-regex-scan.js` now scan apps/services/docs/ops instead of a handful of prefixes. |
 | Config safety | `env.ts` requires `EXPORT_VERIFY_PUBKEY` outside localhost and hard-fails `ALLOW_RAW_INGEST` prod configs. |

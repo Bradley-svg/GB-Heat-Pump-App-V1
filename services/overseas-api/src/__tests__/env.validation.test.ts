@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { validateEnv, EnvValidationError, type Env } from "../env";
 import { createTestKvNamespace } from "../../tests/helpers/kv";
+import { encodeDevAllowUser } from "../../tests/helpers/dev-user";
 
 function createEnv(overrides: Partial<Env> = {}): Env {
   const preparedStatement = {
@@ -119,7 +120,7 @@ describe("validateEnv", () => {
     const env = createEnv({
       APP_BASE_URL: "http://127.0.0.1:8787/app",
       ALLOW_DEV_ACCESS_SHIM: "true",
-      DEV_ALLOW_USER: JSON.stringify({ email: "local@example.com", roles: ["admin"] }),
+      DEV_ALLOW_USER: encodeDevAllowUser({ email: "local@example.com", roles: ["admin"] }),
       ENVIRONMENT: "development",
     });
     expect(() => validateEnv(env)).not.toThrow();

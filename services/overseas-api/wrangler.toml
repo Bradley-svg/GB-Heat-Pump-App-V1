@@ -119,7 +119,8 @@ preview_id = "a6960d661b5f4b1fbb66a26675ed8caf"
   EMAIL_VERIFICATION_WEBHOOK_SECRET = "dev-secret-1234567890"
   # Enable the Access shim for local Miniflare sessions (adjust as needed).
   ALLOW_DEV_ACCESS_SHIM = "true"
-  DEV_ALLOW_USER = '{"email":"local-admin@example.com","roles":["admin"],"clientIds":["profile-west"]}'
+  # Generate the encoded payload via `pnpm dev-user:encode -- --email local-admin@example.com --role admin --client profile-west`
+  DEV_ALLOW_USER = "base64:eyJlbWFpbCI6ICJsb2NhbC1hZG1pbkBleGFtcGxlLmNvbSIsICJyb2xlcyI6IFsiYWRtaW4iXSwgImNsaWVudElkcyI6IFsicHJvZmlsZS13ZXN0Il19"
 
 [[env.local.d1_databases]]
 binding = "DB"

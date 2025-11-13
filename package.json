@@ -26,7 +26,9 @@
     "ops:db:sanity": "node ./scripts/db-sanity-check.mjs",
     "guard:forbidden": "node .github/scripts/forbidden-fields-lint.js",
     "guard:pii": "node .github/scripts/pii-regex-scan.js",
-    "guard:all": "npm-run-all -s guard:forbidden guard:pii"
+    "guard:docs": "node ./scripts/lint-modea-docs.mjs",
+    "guard:all": "npm-run-all -s guard:forbidden guard:pii guard:docs",
+    "dev-user:encode": "node ./scripts/encode-dev-user.mjs"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.1.0",

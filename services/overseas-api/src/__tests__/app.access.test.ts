@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import app from "../app";
 import type { Env } from "../env";
 import { createTestKvNamespace } from "../../tests/helpers/kv";
+import { encodeDevAllowUser } from "../../tests/helpers/dev-user";
 
 function createEnv(overrides: Partial<Env> = {}): Env {
   const statement = {
@@ -30,6 +31,8 @@ function createEnv(overrides: Partial<Env> = {}): Env {
     INGEST_IP_BUCKETS: createTestKvNamespace(),
     CLIENT_EVENT_TOKEN_SECRET: "test-telemetry-token-secret-rotate-1234567890",
     CLIENT_EVENT_TOKEN_TTL_SECONDS: "900",
+    EXPORT_VERIFY_PUBKEY:
+      "-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAE7XZR0GpBwqsJhF5GgFMno0RvrRZtGJPDFd01YygSsHV+MtXg5rp7x7o7f0QRLr2xAgMBAAE=\n-----END PUBLIC KEY-----",
     ...overrides,
   } as Env;
 }
@@ -61,7 +64,7 @@ describe("app.fetch access enforcement", () => {
   it("serves the SPA when a development user is allowed", async () => {
     const env = createEnv({
       APP_BASE_URL: "http://127.0.0.1:8787/app",
-      DEV_ALLOW_USER: JSON.stringify({ email: "dev@example.com", roles: ["admin"] }),
+      DEV_ALLOW_USER: encodeDevAllowUser({ email: "dev@example.com", roles: ["admin"] }),
       ALLOW_DEV_ACCESS_SHIM: "true",
       ENVIRONMENT: "development",
     });

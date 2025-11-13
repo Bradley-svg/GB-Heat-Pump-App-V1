@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { handleMe } from "../../src/routes/me";
 import { createWorkerEnv } from "../helpers/worker-env";
+import { encodeDevAllowUser } from "../helpers/dev-user";
 
 describe("Access dev shim", () => {
   it("returns 401 when shim is disabled and no Access headers are present", async () => {
@@ -19,7 +20,11 @@ describe("Access dev shim", () => {
   it("returns the mock user when DEV_ALLOW_USER is configured", async () => {
     const { env, dispose } = await createWorkerEnv({
       APP_BASE_URL: "http://127.0.0.1:8787/app",
-      DEV_ALLOW_USER: '{"email":"shim@example.com","roles":["admin"],"clientIds":["profile-west"]}',
+      DEV_ALLOW_USER: encodeDevAllowUser({
+        email: "shim@example.com",
+        roles: ["admin"],
+        clientIds: ["profile-west"],
+      }),
       ALLOW_DEV_ACCESS_SHIM: "true",
       ENVIRONMENT: "development",
     });
@@ -42,7 +47,10 @@ describe("Access dev shim", () => {
   it("still rejects invalid JWTs even when the shim is enabled", async () => {
     const { env, dispose } = await createWorkerEnv({
       APP_BASE_URL: "http://127.0.0.1:8787/app",
-      DEV_ALLOW_USER: '{"email":"shim@example.com","roles":["admin"]}',
+      DEV_ALLOW_USER: encodeDevAllowUser({
+        email: "shim@example.com",
+        roles: ["admin"],
+      }),
       ALLOW_DEV_ACCESS_SHIM: "true",
       ENVIRONMENT: "development",
     });

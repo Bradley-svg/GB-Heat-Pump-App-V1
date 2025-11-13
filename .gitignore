@@ -19,3 +19,4 @@ package-lock.json
 **/.next/
 **/.turbo/
 *.log
+apps/mobile/test-mobile.json

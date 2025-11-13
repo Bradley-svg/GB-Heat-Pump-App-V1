@@ -17,6 +17,7 @@ const ENABLED_TOKENS = new Set(["1", "true", "on", "yes"]);
 const ALLOWED_ROLES: ReadonlyArray<User["roles"][number]> = ["admin", "client", "contractor"];
 const DEV_SHIM_ENVIRONMENTS = new Set(["development", "dev", "local"]);
 const ACCESS_JWT_CLOCK_TOLERANCE_SECONDS = 60;
+const BASE64_PREFIX = /^base64:(.+)$/i;
 
 function cacheRequestUser(req: Request, user: User | null) {
   requestUserCache.set(req, user);
@@ -32,6 +33,45 @@ export function getJwks(env: Env) {
     jwksCache.set(url, createRemoteJWKSet(new URL(url)));
   }
   return jwksCache.get(url)!;
+}
+
+function decodeBase64ToString(value: string): string | null {
+  const normalized = value.trim();
+  if (!normalized) return "";
+  const converted = normalized.replace(/-/g, "+").replace(/_/g, "/");
+  try {
+    const nodeBuffer = (globalThis as {
+      Buffer?: { from(data: string, encoding: string): { toString(encoding: string): string } };
+    }).Buffer;
+    if (nodeBuffer) {
+      return nodeBuffer.from(converted, "base64").toString("utf-8");
+    }
+  } catch {
+    // Ignore and fall back to atob-based decoding.
+  }
+  if (typeof atob === "function") {
+    try {
+      const binary = atob(converted);
+      const len = binary.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i += 1) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return new TextDecoder().decode(bytes);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function decodeDevUserPayload(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return trimmed;
+  const match = BASE64_PREFIX.exec(trimmed);
+  if (!match) return trimmed;
+  const decoded = decodeBase64ToString(match[1] ?? "") ?? trimmed;
+  return decoded.trim();
 }
 
 function resolveDevUser(env: Env): User | null {
@@ -59,9 +99,11 @@ function resolveDevUser(env: Env): User | null {
     return null;
   }
 
-  let parsed: unknown = trimmed;
+  const normalized = decodeDevUserPayload(trimmed);
+
+  let parsed: unknown = normalized;
   try {
-    parsed = JSON.parse(trimmed);
+    parsed = JSON.parse(normalized);
   } catch {
     // treat the raw string as an email below
   }
@@ -104,7 +146,7 @@ function resolveDevUser(env: Env): User | null {
       }
     }
   } else {
-    const candidate = String(parsed).trim();
+    const candidate = String(parsed ?? normalized).trim();
     if (candidate) {
       email = candidate;
     }

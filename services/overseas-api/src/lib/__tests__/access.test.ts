@@ -3,6 +3,7 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 import type { Env, User } from "../../env";
 import { requireAccessUser } from "../access";
 import { jwtVerify } from "jose";
+import { encodeDevAllowUser } from "../../../tests/helpers/dev-user";
 
 vi.mock("jose", () => {
   const jwtVerifyMock = vi.fn(async () => ({
@@ -109,5 +110,27 @@ describe("requireAccessUser", () => {
         clockTolerance: 60,
       }),
     );
+  });
+
+  it("returns the dev shim user when encoded payloads are provided", async () => {
+    const env = createEnv({
+      APP_BASE_URL: "http://127.0.0.1:8787/app",
+      ENVIRONMENT: "development",
+      ALLOW_DEV_ACCESS_SHIM: "true",
+      DEV_ALLOW_USER: encodeDevAllowUser({
+        email: "shim@example.com",
+        roles: ["admin"],
+        clientIds: ["profile-west"],
+      }),
+    });
+    const req = new Request("https://app.example/app");
+    const user = await requireAccessUser(req, env, { allowSession: false });
+
+    expect(user).toEqual({
+      email: "shim@example.com",
+      roles: ["admin"],
+      clientIds: ["profile-west"],
+    });
+    expect(jwtVerifyMock).not.toHaveBeenCalled();
   });
 });

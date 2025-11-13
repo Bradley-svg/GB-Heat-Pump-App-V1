@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import app from "../../src/app";
 import { createWorkerEnv } from "../helpers/worker-env";
 import { createMockR2Bucket } from "../helpers/mock-r2";
+import { encodeDevAllowUser } from "../helpers/dev-user";
 
 describe("Content-Security-Policy overrides", () => {
   it("includes configured API and asset origins in CSP directives", async () => {
@@ -13,8 +14,12 @@ describe("Content-Security-Policy overrides", () => {
       APP_API_BASE: "https://api.remote.test/v1",
       APP_ASSET_BASE: "https://cdn.remote.test/app/assets?v=7#bundle",
       ALLOW_DEV_ACCESS_SHIM: "true",
-      DEV_ALLOW_USER:
-        '{"email":"admin.test@greenbro.io","roles":["admin"],"clientIds":["profile-west"]}',
+      ENVIRONMENT: "development",
+      DEV_ALLOW_USER: encodeDevAllowUser({
+        email: "admin.test@greenbro.io",
+        roles: ["admin"],
+        clientIds: ["profile-west"],
+      }),
     });
 
     try {
@@ -29,6 +34,10 @@ describe("Content-Security-Policy overrides", () => {
       expect(csp).toMatch(/img-src[^;]+https:\/\/cdn\.remote\.test/);
       expect(csp).toMatch(/style-src[^;]+https:\/\/cdn\.remote\.test/);
       expect(csp).toMatch(/font-src[^;]+https:\/\/cdn\.remote\.test/);
+      const permissionsPolicy = response.headers.get("permissions-policy");
+      expect(permissionsPolicy).toBeTypeOf("string");
+      expect(permissionsPolicy).toMatch(/camera=\(\)/);
+      expect(permissionsPolicy).toMatch(/fullscreen=\(self\)/);
 
       const html = await response.text();
       expect(html).toMatch(
@@ -80,6 +89,8 @@ describe("Content-Security-Policy overrides", () => {
         "max-age=31536000; includeSubDomains",
       );
       expect(response.headers.get("cross-origin-opener-policy")).toBe("same-origin");
+      const permissionsPolicy = response.headers.get("permissions-policy");
+      expect(permissionsPolicy).toMatch(/geolocation=\(\)/);
       expect(await response.text()).toBe("hello world");
     } finally {
       dispose();

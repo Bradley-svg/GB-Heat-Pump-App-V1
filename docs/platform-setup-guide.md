@@ -25,8 +25,16 @@ If you need non-interactive automation (for example CI seeding R2), mint a **Ser
 ### 1.3 Local development tips
 - `wrangler dev --remote` runs the Worker on Cloudflare, so Access policies apply naturally.
 - For purely local development use the dedicated configuration: `wrangler dev --local --env local`. The `env.local` block in `services/overseas-api/wrangler.toml` now sets `APP_BASE_URL=http://127.0.0.1:8787/app`, points API calls at the local worker, and enables the Access shim. `validateEnv` will refuse to start if `ALLOW_DEV_ACCESS_SHIM` is truthy while `APP_BASE_URL` is not a localhost origin.
-  - Bash: `export DEV_ALLOW_USER='{"email":"admin@example.com","roles":["admin"],"clientIds":["profile-west"]}' && wrangler dev --local --env local`
-  - PowerShell: `$env:DEV_ALLOW_USER='{"email":"admin@example.com","roles":["admin"]}' ; wrangler dev --local --env local`
+  - Bash:
+    ```bash
+    export DEV_ALLOW_USER="$(pnpm dev-user:encode -- --email admin@example.com --role admin --client profile-west)"
+    wrangler dev --local --env local
+    ```
+  - PowerShell:
+    ```powershell
+    $env:DEV_ALLOW_USER = (pnpm dev-user:encode -- --email admin@example.com --role admin)
+    wrangler dev --local --env local
+    ```
   (The shim auto-enables via `env.local`; override `APP_BASE_URL`/`APP_API_BASE` manually if you need a different loopback host.)
   The shim only activates when `Cf-Access-Jwt-Assertion` is missing; any supplied JWT is still fully verified.
 - Production deploys include a GitHub Actions guard (`pnpm check:prod-shim`) that halts the workflow if `ALLOW_DEV_ACCESS_SHIM` is still bound in the target environment. Remove or rotate the secret before re-running the deployment.

@@ -1,9 +1,9 @@
 # PR Summary
 
 ## What Changed
-- **Sunsetted raw `/api/ingest`** so overseas Worker now returns `410 raw_ingest_disabled` unless `ALLOW_RAW_INGEST` is explicitly set; CN gateway exporter/REST responses now speak `didPseudo` end-to-end and the overseas Worker requires a secret-backed `EXPORT_VERIFY_PUBKEY` (with `/health` surfacing `signatureConfigured`).
-- **Hardened auth/logging/privacy:** `requireAccessUser` now enforces issuer + 60s clock tolerance, rate-limit logs no longer include nested `client_ip`, a nightly `CLIENT_EVENT_BACKFILL_CRON` job keeps historical client events hashed, and the telemetry schema now uses `.strict()` so unexpected metrics raise 400s instead of being dropped silently.
-- **Guardrails + docs:** Mode A scanners run via the dedicated workflow and `full-ci`, the Important-Data checklist links to a new dual-control SOP plus the Ed25519 rotation runbook, and the Mode A guidance reflects the disabled raw ingest + SAFE metric reality.
+- **Signed SAFE batches only:** The CN gateway exporter (`services/cn-gateway/src/ingest/routes.ts`, `src/modea/sanitize.ts`, `src/crypto/ed25519.ts`) emits pseudonymous `didPseudo` batches and signs them with Ed25519. The overseas Worker (`services/overseas-api/src/routes/ingest.ts`, `src/utils/ed25519.ts`) rejects any request lacking `x-batch-signature`, verifies the signature before parsing, and `validateEnv` (`src/env.ts`) now hard-fails non-local deploys that omit `EXPORT_VERIFY_PUBKEY`.
+- **Hardened auth/logging/privacy:** `requireAccessUser` enforces issuer + 60 s clock tolerance, rate-limit logs no longer include nested `client_ip`, the nightly `CLIENT_EVENT_BACKFILL_CRON` job keeps historical client events hashed, and the telemetry schema uses `.strict()` so unexpected metrics raise 400s instead of being dropped silently.
+- **Guardrails + docs:** Mode A scanners run via the dedicated workflow and `full-ci`, the Important-Data checklist links to the dual-control SOP plus the Ed25519 rotation runbook, and Mode A guidance now cites the new SAFE ingest/signature evidence.
 
 ## Tests
 - `npx vitest run src/routes/__tests__/ingest.test.ts src/lib/__tests__/client-events.test.ts src/routes/__tests__/observability.test.ts src/lib/__tests__/access.test.ts src/routes/__tests__/client-events-admin.test.ts`
