@@ -83,4 +83,4 @@ const safeSummary = {
   hasRedis: Boolean(config.REDIS_URL)
 };
 
-console.info("[cn-gateway] configuration loaded", safeSummary);
+console.warn("[cn-gateway] configuration loaded", safeSummary);

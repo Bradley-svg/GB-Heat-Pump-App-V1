@@ -33,7 +33,7 @@ export const GBCard: React.FC<GBCardProps> = ({
     () => ({
       color: palette.title,
       fontSize: 18,
-      fontWeight: "600",
+      fontWeight: "600" as const,
       marginBottom: spacing.sm,
     }),
     [palette.title, spacing.sm],

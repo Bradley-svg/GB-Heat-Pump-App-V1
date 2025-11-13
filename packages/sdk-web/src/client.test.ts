@@ -54,16 +54,17 @@ const snapshotResponse = {
 
 describe("ModeAWebClient", () => {
   it("parses dashboard snapshot responses", async () => {
-    const fetchMock = async () => new Response(JSON.stringify(snapshotResponse), { status: 200 });
-    const client = new ModeAWebClient({ apiBase: "https://example.com/api" }, fetchMock as any);
+    const fetchMock: typeof fetch = async () =>
+      new Response(JSON.stringify(snapshotResponse), { status: 200 });
+    const client = new ModeAWebClient({ apiBase: "https://example.com/api" }, fetchMock);
     const snapshot = await client.getDashboardSnapshot();
     expect(snapshot.kpis.devices_total).toBe(2);
     expect(snapshot.alerts[0]?.faults[0]).toBe("LOW_PRESSURE");
   });
 
   it("throws on non-200 responses", async () => {
-    const fetchMock = async () => new Response("nope", { status: 500 });
-    const client = new ModeAWebClient({ apiBase: "https://example.com/api" }, fetchMock as any);
+    const fetchMock: typeof fetch = async () => new Response("nope", { status: 500 });
+    const client = new ModeAWebClient({ apiBase: "https://example.com/api" }, fetchMock);
     await expect(client.getDashboardSnapshot()).rejects.toThrow(/500/);
   });
 });

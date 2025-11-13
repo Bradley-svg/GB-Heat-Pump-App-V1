@@ -1,4 +1,4 @@
-﻿import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
+import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -211,7 +211,7 @@ const createStyles = (spacing: ThemeSpacing, colors: ThemeColors) =>
       borderColor: colors.border,
       backgroundColor: "transparent",
     },
-    chipLabel: { color: colors.textMuted, fontWeight: "600" },
+    chipLabel: { color: colors.textMuted, fontWeight: "600" as const },
     chipLabelSelected: { color: colors.primary },
     errorText: { color: colors.textMuted },
     spacerSm: { height: spacing.sm },
@@ -228,7 +228,7 @@ const createStyles = (spacing: ThemeSpacing, colors: ThemeColors) =>
     },
     modalTitle: {
       fontSize: 20,
-      fontWeight: "700",
+      fontWeight: "700" as const,
       color: colors.text,
     },
     modalSubtitle: {

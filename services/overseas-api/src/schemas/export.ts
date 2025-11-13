@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SAFE_METRICS } from "@greenbro/sdk-core/src/constants";
+import { SAFE_METRICS } from "../../../../packages/sdk-core/src/constants";
 
 const numberMetric = z.number().finite();
 const optionalNumber = numberMetric.optional();

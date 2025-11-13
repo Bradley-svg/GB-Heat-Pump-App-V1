@@ -12,32 +12,46 @@ import {
 import { useTheme, elevation } from "../theme/GBThemeProvider";
 
 type Variant = "primary" | "ghost" | "danger";
+type ButtonTone = "primary" | "secondary" | "danger";
 
 export interface GBButtonProps {
   label: string;
   variant?: Variant;
+  tone?: ButtonTone;
   loading?: boolean;
   disabled?: boolean;
   onPress?: (event: GestureResponderEvent) => void;
   leadingIcon?: React.ReactNode;
   testID?: string;
   accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 export const GBButton: React.FC<GBButtonProps> = ({
   label,
   variant = "primary",
+  tone,
   loading = false,
   disabled = false,
   onPress,
   leadingIcon,
   testID,
   accessibilityLabel,
+  accessibilityHint,
 }) => {
   const { colors, spacing, radii } = useTheme();
   const isDisabled = disabled || loading;
 
-  const palette = getPalette(variant, colors);
+  const resolvedVariant: Variant =
+    tone === "secondary"
+      ? "ghost"
+      : tone === "danger"
+        ? "danger"
+        : tone === "primary"
+          ? "primary"
+          : variant;
+
+  const palette = getPalette(resolvedVariant, colors);
   const rippleColor = palette.ripple;
   const containerStyle = useMemo(
     () => ({
@@ -45,8 +59,8 @@ export const GBButton: React.FC<GBButtonProps> = ({
       paddingHorizontal: spacing.lg,
       borderRadius: radii.md,
       backgroundColor: isDisabled ? palette.disabledBg : palette.bg,
-      borderWidth: variant === "ghost" ? 1 : 0,
-      borderColor: variant === "ghost" ? colors.primary : "transparent",
+      borderWidth: resolvedVariant === "ghost" ? 1 : 0,
+      borderColor: resolvedVariant === "ghost" ? colors.primary : "transparent",
     }),
     [
       colors.primary,
@@ -56,14 +70,14 @@ export const GBButton: React.FC<GBButtonProps> = ({
       radii.md,
       spacing.lg,
       spacing.sm,
-      variant,
+      resolvedVariant,
     ],
   );
   const textStyle = useMemo(
     () => ({
       color: isDisabled ? palette.disabledText : palette.text,
       fontSize: 16,
-      fontWeight: "600",
+      fontWeight: "600" as const,
       letterSpacing: 0.2,
     }),
     [isDisabled, palette.disabledText, palette.text],
@@ -81,6 +95,7 @@ export const GBButton: React.FC<GBButtonProps> = ({
       accessibilityRole="button"
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityHint={accessibilityHint}
       onPress={onPress}
       disabled={isDisabled}
       android_ripple={{ color: rippleColor, borderless: false }}
@@ -88,7 +103,7 @@ export const GBButton: React.FC<GBButtonProps> = ({
         styles.base,
         containerStyle,
         pressed && Platform.OS === "ios" ? styles.iosPressed : null,
-        variant !== "ghost" ? elevation(1) : null,
+        resolvedVariant !== "ghost" ? elevation(1) : null,
       ]}
     >
       <View style={styles.content}>

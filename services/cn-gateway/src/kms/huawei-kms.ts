@@ -41,8 +41,8 @@ export class HuaweiKmsAdapter implements KmsAdapter {
     const request = new SignRequest().withBody(body);
     const response = await this.client.sign(request);
     const signature =
-      (response as unknown as { signatureValue?: string }).signatureValue ??
-      (response as Record<string, unknown>)["signature_value"];
+      (response as { signatureValue?: string }).signatureValue ??
+      ((response as unknown as Record<string, unknown>)["signature_value"] as string | undefined);
     if (!signature || typeof signature !== "string") {
       throw new Error("Huawei KMS returned empty signature");
     }

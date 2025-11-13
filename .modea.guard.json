@@ -266,6 +266,81 @@
       "path": "services/cn-gateway/src/validators/telemetry.schema.json",
       "pattern": "deviceid",
       "reason": "Telemetry JSON schema references the canonical device identifier field"
+    },
+    {
+      "path": "apps/dashboard-web/eslint.config.js",
+      "pattern": "location",
+      "reason": "ESLint config defines browser globals"
+    },
+    {
+      "path": "apps/dashboard-web/eslint.config.js",
+      "pattern": "image",
+      "reason": "ESLint config enumerates DOM globals"
+    },
+    {
+      "path": "apps/dashboard-web/src/app/hooks/use-api-request.ts",
+      "pattern": "name",
+      "reason": "DOMException.name comparisons for abort handling"
+    },
+    {
+      "path": "apps/dashboard-web/src/pages/alerts/__tests__/ActionDialog.test.tsx",
+      "pattern": "device_id",
+      "reason": "Fixture data requires canonical device_id field"
+    },
+    {
+      "path": "apps/dashboard-web/src/pages/alerts/__tests__/ActionDialog.test.tsx",
+      "pattern": "name",
+      "reason": "Testing-library selectors reference accessible names"
+    },
+    {
+      "path": "apps/mobile/src/components/GBListItem.tsx",
+      "pattern": "name",
+      "reason": "Icon props pass through the name attribute"
+    },
+    {
+      "path": "apps/mobile/src/screens/AlertsScreen.tsx",
+      "pattern": "device_id",
+      "reason": "Alert detail UI displays the canonical device_id field"
+    },
+    {
+      "path": "apps/mobile/src/screens/DashboardScreen.tsx",
+      "pattern": "name",
+      "reason": "Icon props pass through the name attribute"
+    },
+    {
+      "path": "apps/mobile/src/types/expo-vector-icons.d.ts",
+      "pattern": "name",
+      "reason": "Type declarations for icon name unions"
+    },
+    {
+      "path": "packages/sdk-web/src/client.test.ts",
+      "pattern": "device_id",
+      "reason": "SDK fixtures validate canonical device_id handling"
+    },
+    {
+      "path": "services/overseas-api/src/utils/ed25519.ts",
+      "pattern": "name",
+      "reason": "WebCrypto algorithm identifiers require name fields"
+    },
+    {
+      "path": "services/overseas-api/tests/integration/client-events.integration.test.ts",
+      "pattern": "email",
+      "reason": "Integration tests assert user_email hashing behaviour"
+    },
+    {
+      "path": "services/overseas-api/tests/integration/ingest.integration.test.ts",
+      "pattern": "device_id",
+      "reason": "Integration tests seed telemetry rows with device_id prefixes"
+    },
+    {
+      "path": "services/cn-gateway/types/external-shims/index.d.ts",
+      "pattern": "mac",
+      "reason": "Third-party SDK shape includes MAC field names"
+    },
+    {
+      "path": "services/cn-gateway/src/validators/common.ts",
+      "pattern": "deviceId",
+      "reason": "Validation schema defines canonical deviceId field"
     }
   ],
   "severityMap": {

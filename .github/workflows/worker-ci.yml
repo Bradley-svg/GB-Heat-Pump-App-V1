@@ -35,9 +35,6 @@ on:
 jobs:
   worker:
     runs-on: ubuntu-latest
-    env:
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_D1 }}
 
     steps:
       - name: Checkout
@@ -60,7 +57,7 @@ jobs:
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
         run: echo "Skipping Cloudflare-dependent steps for forked pull request."
 
-      - name: Typecheck worker
+      - name: Typecheck workspace
         run: pnpm typecheck
 
       - name: Run lint
@@ -70,7 +67,10 @@ jobs:
         run: pnpm check:prod-shim
 
       - name: Validate D1 migrations remotely
-        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork != true }}
+        if: ${{ github.event_name == 'push' }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_D1 }}
         run: pnpm run migrate:apply
 
       - name: Run unit tests
@@ -86,5 +86,8 @@ jobs:
         run: pnpm --filter @greenbro/overseas-api run test:security
 
       - name: Build worker bundle
-        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork != true }}
+        if: ${{ github.event_name == 'push' }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_D1 }}
         run: pnpm --filter @greenbro/overseas-api run build

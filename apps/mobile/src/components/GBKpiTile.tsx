@@ -34,7 +34,7 @@ export const GBKpiTile: React.FC<GBKpiTileProps> = ({
     () => ({
       color: colors.textMuted,
       fontSize: typeScale.label.size,
-      fontWeight: "500",
+      fontWeight: "500" as const,
     }),
     [colors.textMuted, typeScale.label.size],
   );
@@ -42,7 +42,7 @@ export const GBKpiTile: React.FC<GBKpiTileProps> = ({
     () => ({
       color: colors.text,
       fontSize: typeScale.title.size,
-      fontWeight: "700",
+      fontWeight: "700" as const,
     }),
     [colors.text, typeScale.title.size],
   );

@@ -392,6 +392,7 @@ export function useApiRequest<T>(
   }, [stopRetrySchedule]);
 
   useEffect(() => {
+    mountedRef.current = true;
     startRequest();
     return () => {
       mountedRef.current = false;

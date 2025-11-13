@@ -26,7 +26,9 @@ function normalizeApiBase(raw: string | undefined): string | null {
 }
 
 export function getApiBase(): string {
-  const envBase = normalizeApiBase(process.env.EXPO_PUBLIC_API_BASE);
+  const envBase = normalizeApiBase(
+    globalThis.process?.env?.EXPO_PUBLIC_API_BASE,
+  );
   const configApiBase = Constants.expoConfig?.extra?.apiBase;
   const extraBase =
     typeof configApiBase === "string" ? normalizeApiBase(configApiBase) : null;

@@ -28,7 +28,8 @@ function decodeBase64(base64: string): Uint8Array {
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
   const binary = decodeBase64(base64);
-  return binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength);
+  return binary.buffer
+    .slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
 }
 
 async function importVerifyKey(pem: string): Promise<CryptoKey> {

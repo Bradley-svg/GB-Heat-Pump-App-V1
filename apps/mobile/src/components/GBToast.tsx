@@ -40,7 +40,7 @@ export const GBToast: React.FC<GBToastProps> = ({
     () => ({
       color: palette.text,
       fontSize: 15,
-      fontWeight: "600",
+      fontWeight: "600" as const,
     }),
     [palette.text],
   );

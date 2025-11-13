@@ -32,7 +32,7 @@ export const GBStatusPill: React.FC<GBStatusPillProps> = ({
   const textStyle = useMemo(
     () => ({
       color: tone.text,
-      fontWeight: "600",
+      fontWeight: "600" as const,
       fontSize: 13,
     }),
     [tone.text],

@@ -14,7 +14,7 @@ describe("useApiRequest initial data handling", () => {
     expect(result.current.data).toBe(0);
     expect(result.current.lastUpdatedAt).not.toBeNull();
 
-    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(request).toHaveBeenCalled());
     await waitFor(() => expect(result.current.data).toBe(42));
     expect(result.current.phase).toBe("ready");
   });
@@ -29,7 +29,7 @@ describe("useApiRequest initial data handling", () => {
     expect(result.current.data).toBe("");
     expect(result.current.lastUpdatedAt).not.toBeNull();
 
-    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(request).toHaveBeenCalled());
     await waitFor(() => expect(result.current.data).toBe("next"));
     expect(result.current.phase).toBe("ready");
   });

@@ -99,7 +99,6 @@ export const GBStepper: React.FC<GBStepperProps> = ({
         return (
           <View
             key={step.id}
-            accessibilityRole="listitem"
             style={[
               dynamicStyles.stepWrapper,
               index < steps.length - 1
@@ -109,14 +108,7 @@ export const GBStepper: React.FC<GBStepperProps> = ({
                 : null,
             ]}
           >
-            <View
-              style={[
-                dynamicStyles.badge,
-                paletteStyles[step.state]?.circle ?? {
-                  backgroundColor: palette.fill,
-                },
-              ]}
-            >
+            <View style={[dynamicStyles.badge, palette.circle]}>
               <Text style={palette.number}>{index + 1}</Text>
             </View>
             <Text style={[dynamicStyles.label, palette.label]}>

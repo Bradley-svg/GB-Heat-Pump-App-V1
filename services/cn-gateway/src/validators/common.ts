@@ -1,6 +1,6 @@
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
-import telemetrySchema from "./telemetry.schema.json" assert { type: "json" };
+import telemetrySchema from "./telemetry.schema.json" with { type: "json" };
 
 export interface TelemetryMetrics {
   supplyC?: number;

@@ -1,25 +1,47 @@
 import React from "react";
-import { render, fireEvent } from "@testing-library/react-native";
+import { fireEvent, render } from "@testing-library/react-native";
+import { Text } from "react-native";
+
 import { GBButton } from "../../src/components/GBButton";
 import { GBThemeProvider } from "../../src/theme/GBThemeProvider";
 
-const renderWithTheme = (ui: React.ReactNode) =>
-  render(<GBThemeProvider>{ui}</GBThemeProvider>);
-
-test("GBButton triggers onPress when enabled", () => {
-  const onPress = jest.fn();
-  const { getByRole } = renderWithTheme(
-    <GBButton label="Tap me" onPress={onPress} />,
+function renderButton(props: Partial<React.ComponentProps<typeof GBButton>>) {
+  return render(
+    <GBThemeProvider>
+      <GBButton label="Submit" {...props} />
+    </GBThemeProvider>
   );
-  fireEvent.press(getByRole("button"));
-  expect(onPress).toHaveBeenCalled();
-});
+}
 
-test("GBButton disables interaction when disabled", () => {
-  const onPress = jest.fn();
-  const { getByRole } = renderWithTheme(
-    <GBButton label="Disabled" disabled onPress={onPress} />,
-  );
-  fireEvent.press(getByRole("button"));
-  expect(onPress).not.toHaveBeenCalled();
+describe("GBButton", () => {
+  it("invokes onPress while enabled", () => {
+    const onPress = jest.fn();
+    const { getByRole } = renderButton({ onPress });
+
+    fireEvent.press(getByRole("button"));
+
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows leading icon content", () => {
+    const { getByText } = renderButton({
+      leadingIcon: <Text accessibilityRole="text">icon</Text>,
+    });
+
+    expect(getByText("icon")).toBeTruthy();
+  });
+
+  it("disables interaction while loading", () => {
+    const onPress = jest.fn();
+    const { getByRole } = renderButton({ loading: true, onPress });
+
+    const button = getByRole("button");
+    expect(button.props.accessibilityState).toMatchObject({
+      disabled: true,
+      busy: true,
+    });
+
+    fireEvent.press(button);
+    expect(onPress).not.toHaveBeenCalled();
+  });
 });

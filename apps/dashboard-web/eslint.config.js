@@ -91,7 +91,7 @@ export default defineConfig([
     languageOptions: {
       globals: browserGlobals,
       parserOptions: {
-        projectService: true,
+        project: "./tsconfig.eslint.json",
         tsconfigRootDir: projectDir,
       },
     },

@@ -75,13 +75,16 @@ const AuthGate: React.FC<{
         }}
         pointerEvents="none"
       />
-      <NavigationContainer
+      <TypedNavigationContainer
         linking={linking}
         theme={scheme === "dark" ? DarkTheme : DefaultTheme}
       >
         <StatusBar style={scheme === "dark" ? "light" : "dark"} />
         <AppNavigator onShowToast={onShowToast} />
-      </NavigationContainer>
+      </TypedNavigationContainer>
     </>
   );
 };
+
+const TypedNavigationContainer: React.ComponentType<any> =
+  NavigationContainer as React.ComponentType<any>;

@@ -1,12 +1,13 @@
-import React, { createContext, useContext, useMemo } from "react";
-import {
-  ColorSchemeName,
-  Platform,
-  ViewStyle,
-  useColorScheme as useNativeColorScheme,
-} from "react-native";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { Appearance, ColorSchemeName, Platform, ViewStyle } from "react-native";
 
-import tokens from "../../../shared/theme/greenbro.tokens.json";
+import tokens from "../../../../shared/theme/greenbro.tokens.json";
 
 type Palette = typeof tokens.colors.light;
 
@@ -24,10 +25,31 @@ const ThemeContext = createContext<Theme | null>(null);
 const mapScheme = (scheme: ColorSchemeName): Palette =>
   scheme === "dark" ? tokens.colors.dark : tokens.colors.light;
 
+const useAppearanceScheme = (): ColorSchemeName => {
+  const initial = Appearance?.getColorScheme?.() ?? "light";
+  const [scheme, setScheme] = useState<ColorSchemeName>(initial);
+
+  useEffect(() => {
+    if (!Appearance?.addChangeListener) {
+      return;
+    }
+    const subscription = Appearance.addChangeListener(({ colorScheme }) => {
+      setScheme(colorScheme ?? "light");
+    });
+    return () => {
+      if (subscription && typeof subscription.remove === "function") {
+        subscription.remove();
+      }
+    };
+  }, []);
+
+  return scheme ?? "light";
+};
+
 export const GBThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const scheme = useNativeColorScheme() ?? "light";
+  const scheme = useAppearanceScheme();
 
   const value = useMemo<Theme>(
     () => ({

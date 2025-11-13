@@ -1,4 +1,4 @@
-﻿import { MaterialIcons } from "@expo/vector-icons";
+﻿import { MaterialIcons as MaterialIconsBase } from "@expo/vector-icons";
 import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import React, { useCallback, useMemo, useState } from "react";
 import {
@@ -156,7 +156,7 @@ export const DashboardScreen: React.FC<DashboardProps> = ({
           label="View Alerts"
           variant="ghost"
           leadingIcon={
-            <MaterialIcons
+            <MaterialIcon
               name="notifications-active"
               size={20}
               color={colors.primary}
@@ -249,7 +249,7 @@ const createStyles = (spacing: ThemeSpacing, colors: ThemeColors) =>
     header: { marginBottom: spacing.lg },
     greeting: {
       fontSize: 28,
-      fontWeight: "700",
+      fontWeight: "700" as const,
       color: colors.text,
       marginTop: spacing.md,
     },
@@ -262,7 +262,11 @@ const createStyles = (spacing: ThemeSpacing, colors: ThemeColors) =>
     quickLinks: { marginTop: spacing.xl },
     quickLinksLabel: {
       color: colors.textMuted,
-      fontWeight: "600",
+      fontWeight: "600" as const,
       marginBottom: spacing.sm,
     },
   });
+
+const MaterialIcon = MaterialIconsBase as unknown as React.ComponentType<
+  React.ComponentProps<typeof MaterialIconsBase>
+>;

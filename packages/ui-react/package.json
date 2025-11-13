@@ -8,8 +8,9 @@
   "types": "./src/index.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "lint": "eslint src --config ../../shared/configs/eslint.react.mjs"
+    "lint": "eslint src"
   },
   "dependencies": {
     "@greenbro/ui-tokens": "workspace:*"

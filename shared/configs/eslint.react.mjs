@@ -1,11 +1,12 @@
 import { FlatCompat } from "@eslint/eslintrc";
+import { fileURLToPath } from "node:url";
 import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 import baseConfig from "./eslint.base.mjs";
 
 const compat = new FlatCompat({
-  baseDirectory: new URL(".", import.meta.url).pathname,
+  baseDirectory: fileURLToPath(new URL(".", import.meta.url)),
 });
 
 export default [

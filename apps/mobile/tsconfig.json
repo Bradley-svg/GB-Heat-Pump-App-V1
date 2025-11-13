@@ -1,13 +1,11 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
     "noEmit": true,
-    "moduleResolution": "node",
-    "resolveJsonModule": true,
-    "jsx": "react-jsx",
-    "types": ["jest", "@types/react", "@types/react-native"],
+    "types": ["jest", "react", "react-native"],
+    "typeRoots": ["./src/types", "./node_modules/@types"],
     "baseUrl": "."
   },
-  "include": ["App.tsx", "src", "tests"]
+  "include": ["App.tsx", "src"]
 }

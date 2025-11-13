@@ -1,11 +1,26 @@
-import type { FastifyInstance } from "fastify";
+import type {
+  FastifyInstance,
+  FastifyBaseLogger,
+  FastifyTypeProvider,
+  FastifyTypeProviderDefault,
+  RawServerBase,
+  RawServerDefault,
+  RawRequestDefaultExpression,
+  RawReplyDefaultExpression
+} from "fastify";
 import { logger } from "../logging.js";
 import { SanitizationError } from "../modea/sanitize.js";
 import { RateLimitError } from "./ratelimit.js";
 import { ReplayError } from "../db/replay.js";
 import { DeviceSignatureError } from "../ingest/routes.js";
 
-export function registerErrorHandler(app: FastifyInstance) {
+export function registerErrorHandler<
+  RawServer extends RawServerBase = RawServerDefault,
+  RawRequest extends RawRequestDefaultExpression<RawServer> = RawRequestDefaultExpression<RawServer>,
+  RawReply extends RawReplyDefaultExpression<RawServer> = RawReplyDefaultExpression<RawServer>,
+  Logger extends FastifyBaseLogger = FastifyBaseLogger,
+  TypeProvider extends FastifyTypeProvider = FastifyTypeProviderDefault
+>(app: FastifyInstance<RawServer, RawRequest, RawReply, Logger, TypeProvider>) {
   app.setErrorHandler((err, request, reply) => {
     const safeDetails = {
       url: request.routerPath,

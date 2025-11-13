@@ -39,7 +39,7 @@ function renderDialog(
   const onChangeAssignee = vi.fn();
   const onConfirm = vi.fn();
 
-  render(
+  const utils = render(
     <ActionDialog
       dialog={dialog}
       alert={alert}
@@ -52,7 +52,22 @@ function renderDialog(
     />,
   );
 
-  return { onCancel, onChangeComment, onChangeAssignee, onConfirm };
+  const rerender = (nextDialog: ActionDialogState) => {
+    utils.rerender(
+      <ActionDialog
+        dialog={nextDialog}
+        alert={alert}
+        pending={false}
+        onCancel={onCancel}
+        onChangeComment={onChangeComment}
+        onChangeAssignee={onChangeAssignee}
+        onConfirm={onConfirm}
+        {...props}
+      />,
+    );
+  };
+
+  return { onCancel, onChangeComment, onChangeAssignee, onConfirm, rerender };
 }
 
 describe("ActionDialog", () => {
@@ -62,11 +77,12 @@ describe("ActionDialog", () => {
   });
 
   it("disables confirm for empty comments when required", () => {
-    renderDialog({ action: "comment", alertId: "alert-1", comment: "" });
+    const { rerender } = renderDialog({ action: "comment", alertId: "alert-1", comment: "" });
     const confirmButton = screen.getByRole("button", { name: "Confirm" });
     expect(confirmButton).toBeDisabled();
 
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Looks good" } });
+    rerender({ action: "comment", alertId: "alert-1", comment: "Looks good" });
     expect(confirmButton).toBeEnabled();
   });
 

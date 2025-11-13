@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { GBCard } from "../components/GBCard";
@@ -101,12 +101,12 @@ const createStyles = (spacing: ThemeSpacing, colors: ThemeColors) =>
       backgroundColor: colors.surfaceMuted,
       borderColor: colors.surfaceMuted,
     },
-    tabLabel: { fontWeight: "600", color: colors.text },
+    tabLabel: { fontWeight: "600" as const, color: colors.text },
     tabLabelSelected: { color: colors.onPrimary },
     bodyCopy: { color: colors.textMuted, marginTop: spacing.sm },
     sectionLabel: {
       color: colors.textMuted,
-      fontWeight: "600",
+      fontWeight: "600" as const,
       marginBottom: spacing.sm,
     },
   });

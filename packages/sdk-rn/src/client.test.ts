@@ -22,14 +22,15 @@ const snapshotResponse = {
 
 describe("ModeARNClient", () => {
   it("persists snapshot to storage", async () => {
-    const storage: any = {
-      setItem: vi.fn(),
+    const storage = {
+      setItem: vi.fn<(key: string, value: string) => Promise<void>>(),
     };
-    const fetchMock = async () => new Response(JSON.stringify(snapshotResponse), { status: 200 });
+    const fetchMock: typeof fetch = async () =>
+      new Response(JSON.stringify(snapshotResponse), { status: 200 });
     const client = new ModeARNClient({
       apiBase: "https://example.com/api",
       storage,
-      fetchImpl: fetchMock as any,
+      fetchImpl: fetchMock,
     });
     const snapshot = await client.getDashboardSnapshot();
     expect(snapshot.kpis.devices_total).toBe(4);
@@ -37,10 +38,10 @@ describe("ModeARNClient", () => {
   });
 
   it("throws on HTTP failure", async () => {
-    const fetchMock = async () => new Response("nope", { status: 403 });
+    const fetchMock: typeof fetch = async () => new Response("nope", { status: 403 });
     const client = new ModeARNClient({
       apiBase: "https://example.com/api",
-      fetchImpl: fetchMock as any,
+      fetchImpl: fetchMock,
     });
     await expect(client.getDashboardSnapshot()).rejects.toThrow(/403/);
   });

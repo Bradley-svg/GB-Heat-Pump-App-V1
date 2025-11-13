@@ -95,8 +95,11 @@ jobs:
       - name: Test mobile app
         run: pnpm --filter @greenbro/mobile run test
 
-      - name: Typecheck worker
+      - name: Typecheck workspace
         run: pnpm typecheck
+
+      - name: Typecheck cn-gateway service (full project)
+        run: pnpm --filter @greenbro/cn-gateway typecheck
 
       - name: Run lint
         run: pnpm lint
@@ -123,6 +126,9 @@ jobs:
           name: worker-vitest-coverage
           path: coverage
           if-no-files-found: warn
+
+      - name: Build cn-gateway service (src emit)
+        run: pnpm --filter @greenbro/cn-gateway build
 
       - name: Build artifacts
         run: pnpm build

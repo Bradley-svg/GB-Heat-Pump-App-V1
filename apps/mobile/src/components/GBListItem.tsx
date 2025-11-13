@@ -1,4 +1,4 @@
-import { MaterialIcons } from "@expo/vector-icons";
+import { MaterialIcons as MaterialIconsBase } from "@expo/vector-icons";
 import React, { useMemo } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -36,7 +36,7 @@ export const GBListItem: React.FC<GBListItemProps> = ({
     () => ({
       color: colors.text,
       fontSize: 16,
-      fontWeight: "600",
+      fontWeight: "600" as const,
     }),
     [colors.text],
   );
@@ -61,7 +61,7 @@ export const GBListItem: React.FC<GBListItemProps> = ({
     () => ({
       color: colors.text,
       fontSize: 12,
-      fontWeight: "600",
+      fontWeight: "600" as const,
     }),
     [colors.text],
   );
@@ -100,7 +100,7 @@ export const GBListItem: React.FC<GBListItemProps> = ({
         </View>
       ) : null}
       {rightAccessory === "chevron" ? (
-        <MaterialIcons
+        <MaterialIcon
           name={Platform.OS === "ios" ? "chevron-right" : "arrow-forward-ios"}
           size={20}
           color={colors.textMuted}
@@ -116,3 +116,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   iosPressed: { backgroundColor: "rgba(57,181,74,0.08)" },
 });
+
+const MaterialIcon = MaterialIconsBase as unknown as React.FC<
+  React.ComponentProps<typeof MaterialIconsBase>
+>;
