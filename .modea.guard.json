@@ -293,6 +293,16 @@
       "reason": "Testing-library selectors reference accessible names"
     },
     {
+      "path": "apps/dashboard-web/src/__tests__/config.test.ts",
+      "pattern": "location",
+      "reason": "Config tests stub window.location to validate sanitized return handling"
+    },
+    {
+      "path": "apps/dashboard-web/src/__tests__/config.test.ts",
+      "pattern": "hostname",
+      "reason": "Config tests inspect URL.hostname when mocking window.location"
+    },
+    {
       "path": "apps/mobile/src/components/GBListItem.tsx",
       "pattern": "name",
       "reason": "Icon props pass through the name attribute"

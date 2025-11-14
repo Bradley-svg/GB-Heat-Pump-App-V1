@@ -10,15 +10,16 @@ declare global {
 
 const originalConfig = window.__APP_CONFIG__;
 const originalLocation = window.location;
+const emptyAncestorOrigins: DOMStringList = {
+  length: 0,
+  contains: () => false,
+  item: () => null,
+};
 
 function mockLocation(href: string) {
   const url = new URL(href);
   const locationMock: Location = {
-    ancestorOrigins: (url as any).ancestorOrigins ?? {
-      length: 0,
-      item: () => null,
-      contains: () => false,
-    },
+    ancestorOrigins: originalLocation.ancestorOrigins ?? emptyAncestorOrigins,
     assign: vi.fn(),
     reload: vi.fn(),
     replace: vi.fn(),
