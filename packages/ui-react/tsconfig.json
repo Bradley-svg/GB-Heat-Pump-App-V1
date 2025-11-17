@@ -3,7 +3,8 @@
   "compilerOptions": {
     "outDir": "dist",
     "jsx": "react-jsx",
-    "types": ["react"]
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["react", "vitest/globals"]
   },
   "include": ["src"],
   "references": [{ "path": "../ui-tokens" }]

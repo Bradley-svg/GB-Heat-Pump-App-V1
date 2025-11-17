@@ -3,7 +3,9 @@
   "compilerOptions": {
     "outDir": "dist",
     "resolveJsonModule": true,
-    "allowJs": true
+    "allowJs": true,
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["vitest/globals"]
   },
   "include": ["src", "greenbro.tokens.json"]
 }
