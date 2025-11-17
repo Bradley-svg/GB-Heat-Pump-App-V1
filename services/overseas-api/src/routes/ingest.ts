@@ -138,13 +138,18 @@ async function persistBatch(
   parsed: ExportBatch,
 ) {
   const statementBuffer: BoundStatement[] = [];
+  const db = env.DB;
+
+  if (typeof db.exec !== "function") {
+    throw new Error("D1 database binding is missing exec support");
+  }
 
   const flush = async () => {
     if (!statementBuffer.length) {
       return;
     }
     const chunk = statementBuffer.splice(0, statementBuffer.length);
-    await env.DB.batch(chunk);
+    await db.batch(chunk);
   };
 
   const enqueue = async (statement: BoundStatement) => {
@@ -154,10 +159,10 @@ async function persistBatch(
     }
   };
 
-  await env.DB.exec("BEGIN TRANSACTION");
+  await db.exec("BEGIN TRANSACTION");
   try {
     await enqueue(
-      env.DB
+      db
         .prepare(
           `INSERT INTO ingest_batches (id, batch_id, profile_id, record_count, payload_json, received_at)
            VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
@@ -180,10 +185,10 @@ async function persistBatch(
     }
 
     await flush();
-    await env.DB.exec("COMMIT");
+    await db.exec("COMMIT");
   } catch (error) {
     try {
-      await env.DB.exec("ROLLBACK");
+      await db.exec("ROLLBACK");
     } catch {
       // ignore rollback failures
     }

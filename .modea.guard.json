@@ -596,6 +596,36 @@
       "path": "services/cn-gateway/README.md",
       "pattern": "mac",
       "reason": "CN documentation references MAC-level safeguards"
+    },
+    {
+      "path": "services/cn-gateway/src/ingest/routes.ts",
+      "pattern": "deviceId",
+      "reason": "Ingest handler accepts device identifiers prior to pseudonymization and audit logging"
+    },
+    {
+      "path": "services/cn-gateway/src/ingest/routes.ts",
+      "pattern": "deviceIdRaw",
+      "reason": "Audit logging records the provided device identifier for validation failure tracing"
+    },
+    {
+      "path": "services/cn-gateway/src/ingest/routes.ts",
+      "pattern": "ip",
+      "reason": "Audit log captures requester IP for rate limiting and abuse detection"
+    },
+    {
+      "path": "services/overseas-api/src/routes/ingest.ts",
+      "pattern": "device_id",
+      "reason": "Worker persists telemetry using the canonical device_id column name"
+    },
+    {
+      "path": "services/node-red/bridge.flow.json",
+      "pattern": "device_id",
+      "reason": "MQTT bridge forwards telemetry with canonical device_id keys for downstream validation"
+    },
+    {
+      "path": "services/node-red/bridge.flow.json",
+      "pattern": "deviceId",
+      "reason": "Bridge topic parsing accepts device identifiers before pseudonymization"
     }
   ],
   "severityMap": {

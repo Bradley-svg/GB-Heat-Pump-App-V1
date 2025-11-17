@@ -13,7 +13,8 @@
     "broker": "mqtt.example.com",
     "port": "8883",
     "clientid": "greenbro-bridge",
-    "usetls": false,
+    "usetls": true,
+    "tls": "mqtt-broker-tls",
     "compatmode": false,
     "keepalive": "60",
     "cleansession": true,
@@ -25,6 +26,17 @@
     "closeQos": "0",
     "closeRetain": "false",
     "closePayload": ""
+  },
+  {
+    "id": "mqtt-broker-tls",
+    "type": "tls-config",
+    "name": "Factory MQTT TLS (set cert/key/ca paths)",
+    "cert": "/data/certs/client.crt",
+    "key": "/data/certs/client.key",
+    "ca": "/data/certs/ca.crt",
+    "alpnprotocol": "",
+    "servername": "mqtt.example.com",
+    "verifyservercert": true
   },
   {
     "id": "telemetry-mqtt",

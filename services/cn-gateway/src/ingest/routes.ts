@@ -72,9 +72,11 @@ async function ingestHandler(
     await verifyDeviceSignature(request.body, request.headers["x-device-signature"] as string | undefined);
 
     if (!validateTelemetry(request.body)) {
-      const err = new Error("validation_failed");
-      (err as Record<string, unknown>).validation = validateTelemetry.errors;
-      throw err;
+      const validationError = new Error("validation_failed") as Error & {
+        validation?: typeof validateTelemetry.errors;
+      };
+      validationError.validation = validateTelemetry.errors;
+      throw validationError;
     }
 
     const telemetry = request.body as TelemetryPayload;
@@ -145,7 +147,11 @@ async function rotateKeyHandler(request: FastifyRequest, reply: FastifyReply) {
     reply.status(403).send({ error: "unauthorized" });
     return;
   }
-  const tokenValid = totp.verify({ token: totpHeader, secret: config.ADMIN_TOTP_SECRET, window: 1 });
+  const tokenValid = totp.verify({
+    token: totpHeader,
+    secret: config.ADMIN_TOTP_SECRET,
+    window: 1
+  } as unknown as Parameters<(typeof totp)["verify"]>[0]);
   if (!tokenValid) {
     reply.status(403).send({ error: "invalid_totp" });
     return;
